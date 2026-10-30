@@ -49,27 +49,14 @@
             <div v-else-if="worlds.languageQuestions?.error" class="text-caption text-error mt-2">{{ worlds.languageQuestions.error }}</div>
 
             <!-- this run's route and how much it makes (the agent's are the defaults) -->
-            <div class="d-flex flex-wrap align-center ga-2 mt-3" data-testid="make-route">
-                <span class="text-caption text-muted">Make it with</span>
-                <v-btn-toggle :model-value="route" mandatory density="compact" variant="outlined" divided color="primary" :disabled="running" @update:model-value="draft.route = $event">
-                    <v-btn v-for="choice in ROUTE_CHOICES" :key="choice.value" :value="choice.value" size="small" :aria-pressed="String(route === choice.value)" :data-testid="'make-route-' + choice.value">
-                        {{ choice.label }}<span v-if="choice.value === 'in_app'" class="text-muted ml-1">(API tokens)</span>
-                    </v-btn>
-                </v-btn-toggle>
-                <v-text-field
-                    v-if="route === 'claude_code'"
-                    :model-value="claudeModel"
-                    placeholder="its default"
-                    label="model"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    class="model-field"
-                    :disabled="running"
-                    data-testid="make-model"
-                    @update:model-value="draft.claudeModel = $event"
-                ></v-text-field>
-            </div>
+            <LanguageRouteChoice
+                class="mt-3"
+                :route="route"
+                :claude-model="claudeModel"
+                :disabled="running"
+                @update:route="draft.route = $event"
+                @update:claude-model="draft.claudeModel = $event"
+            />
             <div class="d-flex flex-wrap align-center ga-2 mt-2">
                 <span class="text-caption text-muted">How much</span>
                 <v-btn-toggle :model-value="size" mandatory density="compact" variant="outlined" divided color="primary" :disabled="running" @update:model-value="draft.size = $event">
@@ -88,6 +75,10 @@
                 <v-btn size="small" :variant="briefOnly ? 'tonal' : 'text'" :color="briefOnly ? 'primary' : undefined" :disabled="!text.trim()" prepend-icon="mdi-content-copy" data-testid="make-copy-brief" @click="copyBrief">Copy the brief</v-btn>
                 <v-btn v-if="hasDraft && !running" size="small" variant="text" color="delete" data-testid="make-discard" @click="again">Discard</v-btn>
                 <span v-if="copied" class="text-caption text-success" data-testid="make-copied">Copied</span>
+            </div>
+            <div v-if="otherBusy" class="d-flex align-center ga-2 text-caption text-muted mt-1" data-testid="make-busy">
+                Something else is being made or changed; wait for it or cancel it.
+                <v-btn size="x-small" variant="text" color="delete" data-testid="make-busy-cancel" @click="worlds.cancelLanguageMake()">Cancel it</v-btn>
             </div>
             <div v-if="briefOnly" class="text-caption text-muted mt-1">Paste what your assistant returns into Import a language below.</div>
             <v-textarea
@@ -127,12 +118,8 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import LanguageRouteChoice, { inAppClientOf, inAppName } from './LanguageRouteChoice.vue';
 
-const ROUTE_CHOICES = [
-    { value: 'claude_code', label: 'Claude Code' },
-    { value: 'in_app', label: "the agent's model" },
-    { value: 'brief', label: 'Copy the brief' },
-];
 
 // what a run makes, by route and how much (shown under the choices)
 const SIZE_NOTES = {
@@ -140,9 +127,10 @@ const SIZE_NOTES = {
         full: 'About 300 words, phrases in every category, all the grammar topics. Runs on your subscription and takes about 10–15 minutes.',
         quick: 'A core: the structural words, about 40 everyday ones, a few phrases and short grammar. Runs on your subscription; fill in the rest later.',
     },
+    // its client's cost is added below (hosted APIs spend tokens)
     in_app: {
-        full: 'Everything in one long reply: needs a model that can write a long answer, and spends API tokens.',
-        quick: 'A core in one reply, then fill in the rest later. Spends API tokens.',
+        full: 'Everything in one long reply: needs a model that can write a long answer.',
+        quick: 'A core in one reply, then fill in the rest later.',
     },
     brief: {
         full: 'The brief asks for everything: about 300 words, phrases in every category, all the grammar topics.',
@@ -152,7 +140,6 @@ const SIZE_NOTES = {
 
 const ROUTES = {
     claude_code: 'Claude Code',
-    in_app: "the Language agent's model",
     brief: 'the brief',
 };
 
@@ -162,8 +149,9 @@ const ROUTES = {
 // always there. The result goes to the import review below it.
 export default {
     name: 'LanguageMake',
+    components: { LanguageRouteChoice },
     setup() {
-        return { worlds: useWorldsStore(), ROUTE_CHOICES };
+        return { worlds: useWorldsStore() };
     },
     data() {
         return { copyWanted: false, copied: false, briefFallback: '' };
@@ -180,8 +168,14 @@ export default {
         hasDraft() {
             return !!this.text.trim() || this.draft.contextIds.length > 0 || this.questions.length > 0 || !!this.job?.error;
         },
+        // Make's own job; a change or fill running elsewhere only blocks it
         job() {
-            return this.worlds.languageMake;
+            const job = this.worlds.languageMake;
+            return job && (job.kind || 'new') === 'new' ? job : null;
+        },
+        otherBusy() {
+            const job = this.worlds.languageMake;
+            return !!job && (job.kind || 'new') !== 'new' && job.running;
         },
         running() {
             return !!this.job?.running;
@@ -212,19 +206,23 @@ export default {
             return this.draft.size || (this.defaults.sizes || {})[this.route] || (this.route === 'in_app' ? 'quick' : 'full');
         },
         sizeNote() {
-            return (SIZE_NOTES[this.route] || {})[this.size] || '';
+            const note = (SIZE_NOTES[this.route] || {})[this.size] || '';
+            if (this.route !== 'in_app') return note;
+            const client = inAppClientOf(this.worlds);
+            if (!client) return `${note} The Language agent has no client: pick one under Agents first.`;
+            return client.hosted ? `${note} Spends API tokens on ${client.name}.` : `${note} Runs on ${client.name}.`;
         },
         briefOnly() {
             return this.route === 'brief';
         },
         routeLabel() {
-            return ROUTES[this.job?.route || this.route] || '';
+            return this.routeName(this.job?.route || this.route) || '';
         },
         doneLabel() {
-            return ROUTES[this.job?.route] || 'the assistant';
+            return this.routeName(this.job?.route) || 'the assistant';
         },
         canStart() {
-            return !!this.text.trim() && !this.running && !this.asking;
+            return !!this.text.trim() && !this.running && !this.asking && !this.otherBusy;
         },
         entries() {
             return Object.values(this.worlds.things || {})
@@ -245,6 +243,9 @@ export default {
         this.worlds.loadLanguageMakeRoute();
     },
     methods: {
+        routeName(route) {
+            return route === 'in_app' ? inAppName(inAppClientOf(this.worlds)) : ROUTES[route];
+        },
         request(decideForMe) {
             return {
                 text: this.text.trim(),
@@ -293,9 +294,6 @@ export default {
 </script>
 
 <style scoped>
-.model-field {
-    max-width: 180px;
-}
 .progress-lines {
     list-style: none;
     padding-left: 24px;

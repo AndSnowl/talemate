@@ -1,5 +1,6 @@
 <template>
-    <div class="language-book" data-testid="language-book">
+    <!-- the Names chapter has two columns: it takes the page's full width -->
+    <div class="language-book" :class="{ wide: chapter === 'names' }" data-testid="language-book">
         <!-- the chapters: the language, its names, then its grammar, one at a time -->
         <nav class="chapters" data-testid="language-chapters">
             <div class="text-overline text-muted">The language</div>
@@ -110,6 +111,9 @@ export default {
     grid-template-columns: 220px 1fr;
     gap: 28px;
     max-width: 1240px;
+}
+.language-book.wide {
+    max-width: none;
 }
 .chapters {
     position: sticky;

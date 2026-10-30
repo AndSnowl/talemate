@@ -56,7 +56,9 @@ async def test_in_app_returns_a_checked_file():
 async def test_a_blocking_problem_is_sent_back_once_then_fixed():
     client = MockClient("test")
     lines = []
-    text = await _make(client, [_reply(_broken()), _reply(SAMPLE.read_text())], lines=lines)
+    text = await _make(
+        client, [_reply(_broken()), _reply(SAMPLE.read_text())], lines=lines
+    )
     assert len(client.prompt_history) == 2
     repair_prompt = str(client.prompt_history[1]["prompt"])
     assert "These must be fixed before the language can be imported" in repair_prompt

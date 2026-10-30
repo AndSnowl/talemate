@@ -146,7 +146,48 @@ def test_choosing_the_agents_model_switches_to_quick(app, page):
         "aria-pressed", "true", timeout=TIMEOUT_MS
     )
     expect(box.get_by_test_id("make-model")).to_have_count(0)
-    expect(box.get_by_test_id("make-size-note")).to_contain_text("API tokens")
+    # the test app has no clients: beside the buttons and the note say so
+    expect(box.get_by_test_id("make-route-in_app")).to_contain_text("Language agent")
+    expect(box.get_by_test_id("make-client")).to_contain_text("no client set")
+    expect(box.get_by_test_id("make-size-note")).to_contain_text("pick one under Agents")
+
+
+def _route_reply(page, client):
+    """The server's route reply, as if the Language agent had `client`."""
+
+    page.evaluate(
+        """(client) => {
+            const pinia = document.querySelector('#app').__vue_app__.config.globalProperties.$pinia;
+            const worlds = pinia._s.get('worlds');
+            worlds.languageMakeRoute = { ...worlds.languageMakeRoute, in_app_client: client };
+        }""",
+        client,
+    )
+
+
+def test_the_agents_model_is_named_and_a_hosted_one_spends_tokens(app, page):
+    box = _make_box(app, page, "Make named hosted")
+    expect(box.get_by_test_id("make-route-in_app")).to_be_visible(timeout=TIMEOUT_MS)
+    _route_reply(page, {"agent": "Language", "name": "Anthropic", "model": "claude-sonnet-5", "hosted": True})
+    button = box.get_by_test_id("make-route-in_app")
+    expect(button).to_contain_text("Language agent")
+    expect(button).to_contain_text("(API tokens)")
+    button.click()
+    expect(box.get_by_test_id("make-client")).to_have_text("Anthropic · claude-sonnet-5")
+    expect(box.get_by_test_id("make-size-note")).to_contain_text("Spends API tokens")
+
+
+def test_a_self_hosted_model_spends_no_tokens(app, page):
+    box = _make_box(app, page, "Make named local")
+    expect(box.get_by_test_id("make-route-in_app")).to_be_visible(timeout=TIMEOUT_MS)
+    _route_reply(page, {"agent": "Creator", "name": "KoboldCpp", "model": "Mistral-Small-24B", "hosted": False})
+    button = box.get_by_test_id("make-route-in_app")
+    # the Language agent has none: the Creator's stands in, and says so
+    expect(button).to_contain_text("Creator agent")
+    expect(button).not_to_contain_text("API tokens")
+    button.click()
+    expect(box.get_by_test_id("make-client")).to_have_text("KoboldCpp · Mistral-Small-24B")
+    expect(box.get_by_test_id("make-size-note")).not_to_contain_text("API tokens")
 
 
 def test_a_chosen_route_is_used_for_the_run(app, page, fixed_language):
@@ -156,7 +197,7 @@ def test_a_chosen_route_is_used_for_the_run(app, page, fixed_language):
     box.get_by_test_id("make-route-in_app").click()
     box.get_by_test_id("make-start").click()
     expect(page.get_by_test_id("language-preview")).to_contain_text("Velskar", timeout=TIMEOUT_MS)
-    expect(box.get_by_test_id("make-done")).to_contain_text("Language agent's model")
+    expect(box.get_by_test_id("make-done")).to_contain_text("the Language agent's model")
 
 
 def test_copy_the_brief_route_makes_copy_the_main_button(app, page):

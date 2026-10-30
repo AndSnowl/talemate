@@ -8,7 +8,9 @@ FAKE_CLAUDE_MODE, else "ok":
 - reply-only: writes no file; the language is in the final reply;
 - error: finishes with an error result and exit 1;
 - not-logged-in: finishes as Claude Code does when nobody's signed in;
-- slow: prints its first event, then sleeps (for cancelling).
+- slow: prints its first event, then sleeps (for cancelling);
+- change[:seconds]: edits the language file already in its folder (a
+  change: a meaning, the word "torg", a new curse), after an optional wait.
 """
 
 import json
@@ -53,6 +55,8 @@ def result(text: str, *, error: bool = False) -> None:
 
 
 def main() -> int:
+    # what was in the folder when it started (a change's current file)
+    Path("seen.json").write_text(json.dumps(sorted(p.name for p in Path(".").iterdir())))
     Path("pid").write_text(str(os.getpid()))
     Path("args.json").write_text(json.dumps(sys.argv[1:]))
     how = mode()
@@ -60,6 +64,27 @@ def main() -> int:
     tool("Skill", skill="language-design")
     if how == "slow":
         time.sleep(60)
+    if how.startswith("change"):
+        # a change: edit the language file already in the folder, after an
+        # optional wait ("change:10"), adding a meaning to its first word
+        # and the word "torg", and redoing the curses
+        if ":" in how:
+            time.sleep(float(how.split(":", 1)[1]))
+        current = next(p for p in sorted(Path(".").glob("*.language.json")))
+        data = json.loads(current.read_text())
+        words = data["language"]["dictionary"]
+        first = words[0]
+        meanings = first.get("meanings") or ([first["meaning"]] if first.get("meaning") else [])
+        first["meanings"] = [*meanings, "road"]
+        first.pop("meaning", None)
+        words.append({"word": "torg", "meanings": ["trade"], "part": "noun"})
+        phrases = data["language"].setdefault("phrases", [])
+        phrases[:] = [p for p in phrases if p.get("category") != "curse"]
+        phrases.append({"id": "torg-curse", "category": "curse", "original": "Torg vel!", "translation": "A bad bargain!"})
+        tool("Edit", file_path=str(current.resolve()))
+        current.write_text(json.dumps(data, indent=2))
+        result(f"DONE {current.name}")
+        return 0
     if how == "error":
         result("You've hit your usage limit.", error=True)
         return 1

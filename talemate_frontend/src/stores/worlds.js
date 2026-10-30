@@ -701,6 +701,16 @@ export const useWorldsStore = defineStore('worlds', {
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
+        // languages 3b-2b: the Change it… panel, open on a language page
+        // (`targetId`) or an entry's (`originId`): the request, the entries
+        // to fit, and the route; kept while it runs and after a Drop
+        languageChange: null,
+        // the entries a change should fit (`language_related`)
+        languageRelated: null,
+        // bumped each time the panel is opened or aimed (it focuses then)
+        languageChangeFocus: 0,
+        // an Accept of a change is on its way: stay on the page
+        acceptingChange: false,
         languageMake: null,
         languageQuestions: null,
         languageBrief: null,
@@ -868,7 +878,11 @@ export const useWorldsStore = defineStore('worlds', {
         // a world switch cancels the backend's preview without a reply, so
         // nothing of the old world may wait for one
         resetWorld() {
+            // a language still being made or changed carries on (the server
+            // keeps running it): keep it, so it can be cancelled
+            const job = this.languageMake?.running ? this.languageMake : null;
             Object.assign(this, worldState());
+            if (job) this.languageMake = job;
         },
 
         // `get_present` along with them: a scene that started, continued or
@@ -1921,15 +1935,17 @@ export const useWorldsStore = defineStore('worlds', {
 
         // --- languages (languages 3a) -------------------------------------
 
-        previewLanguage(text, targetId = null) {
+        // `base`: for a change, the version it was briefed on
+        previewLanguage(text, targetId = null, base = null) {
             this.languagePreview = null;
             this.pending = { ...this.pending, language_preview: true };
-            this.request('language_preview', { text, target_id: targetId });
+            this.request('language_preview', { text, target_id: targetId, base });
         },
 
-        importLanguage(text, targetId = null) {
+        importLanguage(text, targetId = null, base = null) {
             this.pending = { ...this.pending, language_import: true };
-            this.request('language_import', { text, target_id: targetId, at: this.thingAt });
+            this.acceptingChange = !!base;
+            this.request('language_import', { text, target_id: targetId, base, at: this.thingAt });
         },
 
         clearLanguagePreview() {
@@ -1953,16 +1969,51 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         startLanguageMake(request) {
-            this.languageMake = { running: true, route: null, lines: [], text: null, error: null };
+            this.languageMake = {
+                running: true,
+                route: null,
+                lines: [],
+                text: null,
+                error: null,
+                kind: request.kind || 'new',
+                targetId: request.target_id || null,
+                base: null,
+            };
             this.request('language_make_start', request);
+        },
+
+        // the Change it… panel, on a language's page or an entry's; `prefill`
+        // starts the request ("Change the Verbs section: ")
+        openLanguageChange({ targetId = null, originId = null, prefill = '' } = {}) {
+            const same = this.languageChange && this.languageChange.targetId === targetId && this.languageChange.originId === originId;
+            this.languageChange = same
+                ? { ...this.languageChange, text: prefill || this.languageChange.text }
+                : { targetId, originId, text: prefill, contextIds: originId ? [originId] : null, route: null, claudeModel: null };
+            if (targetId) this.loadLanguageRelated(targetId);
+            // the panel puts the cursor at the end of its request
+            this.languageChangeFocus += 1;
+        },
+
+        // closing the panel drops its own finished change, no other
+        closeLanguageChange() {
+            const target = this.languageChange?.targetId;
+            this.languageChange = null;
+            const job = this.languageMake;
+            if (job && job.kind !== 'new' && !job.running && job.targetId === target) this.languageMake = null;
+        },
+
+        loadLanguageRelated(languageId) {
+            this.languageRelated = null;
+            this.request('language_related', { language_id: languageId });
         },
 
         cancelLanguageMake() {
             this.request('language_make_cancel', {});
         },
 
+        // Make's Discard: only Make's own job goes (a change runs on)
         clearLanguageMake() {
-            this.languageMake = null;
+            if (this.languageMake && (this.languageMake.kind || 'new') === 'new') this.languageMake = null;
             this.languageQuestions = null;
             this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
         },
@@ -2274,13 +2325,16 @@ export const useWorldsStore = defineStore('worlds', {
                     this.languageBrief = data.text;
                     break;
                 case 'language_make_started':
-                    if (this.languageMake) this.languageMake = { ...this.languageMake, route: data.route };
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, route: data.route, kind: data.kind || 'new', targetId: data.target_id || null };
+                    break;
+                case 'language_related':
+                    this.languageRelated = data;
                     break;
                 case 'language_make_progress':
                     if (this.languageMake) this.languageMake = { ...this.languageMake, lines: [...this.languageMake.lines, data.line] };
                     break;
                 case 'language_make_done':
-                    if (this.languageMake) this.languageMake = { ...this.languageMake, running: false, text: data.text };
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, running: false, text: data.text, base: data.base || null };
                     break;
                 case 'language_make_failed':
                     // (the page never starts a second job while one runs)
@@ -2291,7 +2345,16 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'language_import':
                     this.languagePreview = null;
-                    this.languageMake = null;
+                    if (this.acceptingChange) {
+                        // a change accepted: the panel closes, the page stays
+                        this.acceptingChange = false;
+                        this.languageMake = null;
+                        this.languageChange = null;
+                        this.refreshThing();
+                        break;
+                    }
+                    // an import ends Make's job, never a change's
+                    if (this.languageMake && (this.languageMake.kind || 'new') === 'new') this.languageMake = null;
                     this.languageQuestions = null;
                     this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
                     this.listThings('language');

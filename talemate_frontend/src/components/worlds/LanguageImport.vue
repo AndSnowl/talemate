@@ -1,8 +1,8 @@
 <template>
     <v-card variant="flat" class="language-import pa-3 mb-4" data-testid="language-import">
         <div class="d-flex align-center ga-2 mb-2">
-            <span class="text-subtitle-2">{{ targetId ? 'Import a new version' : 'Import a language' }}</span>
-            <span class="text-caption text-muted">paste what the assistant made, or choose its file</span>
+            <span class="text-subtitle-2">{{ base ? 'The change' : targetId ? 'Import a new version' : 'Import a language' }}</span>
+            <span v-if="!base" class="text-caption text-muted">paste what the assistant made, or choose its file</span>
         </div>
         <!-- a file made for the owner folds away: the review below is what matters -->
         <div v-if="fileFolded" class="text-caption text-muted">
@@ -48,17 +48,35 @@
                 <div v-if="preview.diff.words_changed.length"><span class="text-caption text-muted">Changed meaning:</span> {{ preview.diff.words_changed.join(', ') }}</div>
                 <div v-if="preview.diff.words_removed.length"><span class="text-caption text-muted">Removed:</span> {{ preview.diff.words_removed.join(', ') }}</div>
                 <div v-if="phrasesChanged"><span class="text-caption text-muted">Phrases:</span> {{ phrasesChanged }}</div>
+                <!-- each changed category whole: as it was, and as it will be -->
+                <div v-for="change in preview.diff.phrase_changes || []" :key="change.category" class="phrase-change" data-testid="change-diff-phrases">
+                    <div class="text-caption text-muted">{{ change.category.charAt(0).toUpperCase() + change.category.slice(1) }}, before and after</div>
+                    <div class="ba">
+                        <div v-for="side in [change.before, change.after]" :key="side === change.before ? 'before' : 'after'">
+                            <div v-for="(line, i) in side" :key="i"><span class="foreign">{{ line.original }}</span> {{ line.translation }}</div>
+                            <span v-if="!side.length" class="text-muted">none</span>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="grammarChanged" data-testid="change-diff-grammar"><span class="text-caption text-muted">Grammar:</span> {{ grammarChanged }}</div>
+                <div v-if="(preview.diff.rules_removed || []).length"><span class="text-caption text-muted">Name rules removed:</span> {{ preview.diff.rules_removed.join(', ') }}</div>
                 <div v-if="preview.diff.generators_changed" class="text-caption text-muted">The name rules change: compare the sample names above.</div>
-                <div v-if="preview.diff.kept_used.length" class="text-warning">
-                    {{ preview.diff.kept_used.join(', ') }}: kept because the world uses {{ preview.diff.kept_used.length === 1 ? 'it' : 'them' }} as a name
+                <div v-if="preview.diff.sound_after != null" class="sound-change" data-testid="change-diff-sound">
+                    <div class="text-caption text-muted">How it sounds, before and after</div>
+                    <div class="ba"><div>{{ preview.diff.sound_before }}</div><div>{{ preview.diff.sound_after }}</div></div>
+                </div>
+                <!-- what stayed as it was, and why -->
+                <div v-if="preview.diff.kept_used.length || (preview.diff.kept_edits || []).length" class="kept mt-2" data-testid="change-kept">
+                    <div v-if="preview.diff.kept_used.length"><b>Kept as they are:</b> {{ preview.diff.kept_used.join(', ') }} (the world uses {{ preview.diff.kept_used.length === 1 ? 'it' : 'them' }} as a name)</div>
+                    <div v-if="(preview.diff.kept_edits || []).length"><b>Kept your edit:</b> {{ preview.diff.kept_edits.join(', ') }} (you changed {{ preview.diff.kept_edits.length === 1 ? 'it' : 'them' }} while this ran; your version stays)</div>
                 </div>
             </div>
 
             <LanguageCheckReport class="mt-2" :report="preview.report" :repair-note="preview.repair_note" />
 
             <div class="d-flex align-center ga-2 mt-3">
-                <v-btn size="small" color="primary" :disabled="!preview.ok || busy" :loading="importing" @click="doImport">{{ targetId ? 'Import this version' : 'Import' }}</v-btn>
-                <v-btn size="small" variant="text" :disabled="busy" @click="$emit('cancel'); worlds.clearLanguagePreview()">Cancel</v-btn>
+                <v-btn size="small" color="primary" :disabled="!preview.ok || busy" :loading="importing" data-testid="language-accept" @click="doImport">{{ base ? 'Accept the change' : targetId ? 'Import this version' : 'Import' }}</v-btn>
+                <v-btn size="small" variant="text" :disabled="busy" data-testid="language-drop" @click="$emit('cancel'); worlds.clearLanguagePreview()">{{ base ? 'Drop it' : 'Cancel' }}</v-btn>
             </div>
         </div>
     </v-card>
@@ -81,6 +99,9 @@ export default {
         targetId: { type: String, default: null },
         // a file made for the owner (languages 3b): filled in and checked
         initialText: { type: String, default: null },
+        // for a change: the version it was briefed on (the review merges it
+        // onto the language as it is now)
+        base: { type: String, default: null },
     },
     emits: ['cancel'],
     setup() {
@@ -102,6 +123,14 @@ export default {
         },
         depthLabel() {
             return DEPTHS[this.language.level] || this.language.level;
+        },
+        grammarChanged() {
+            const diff = this.preview.diff;
+            const parts = [];
+            if ((diff.grammar_added || []).length) parts.push(`new: ${diff.grammar_added.join(', ')}`);
+            if ((diff.grammar_changed || []).length) parts.push(`changed: ${diff.grammar_changed.join(', ')}`);
+            if ((diff.grammar_removed || []).length) parts.push(`removed: ${diff.grammar_removed.join(', ')}`);
+            return parts.join(' · ');
         },
         phrasesChanged() {
             const diff = this.preview.diff;
@@ -142,10 +171,10 @@ export default {
     },
     methods: {
         check() {
-            this.worlds.previewLanguage(this.text, this.targetId);
+            this.worlds.previewLanguage(this.text, this.targetId, this.base);
         },
         doImport() {
-            this.worlds.importLanguage(this.text, this.targetId);
+            this.worlds.importLanguage(this.text, this.targetId, this.base);
             this.$emit('cancel');
         },
         generatorLabel(id) {
@@ -164,6 +193,29 @@ export default {
 </script>
 
 <style scoped>
+.ba {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+.ba > div {
+    background: rgba(var(--v-theme-on-surface), 0.05);
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+.phrase-change {
+    margin-top: 6px;
+}
+/* the language's own words, as in the Lexicon */
+.foreign {
+    font-style: italic;
+    color: rgb(var(--v-theme-foreign));
+}
+.kept {
+    background: rgba(var(--v-theme-warning), 0.12);
+    border-radius: 4px;
+    padding: 8px 12px;
+}
 .language-import {
     border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }

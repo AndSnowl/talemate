@@ -9,6 +9,14 @@
                     <div class="d-flex align-center ga-2">
                         <span class="text-subtitle-1">{{ entry.section.title }}</span>
                         <span v-if="!isPlain(entry.section)" class="topic-chip">{{ topicLabel(entry.section.topic) }}</span>
+                        <!-- a change aimed at this section -->
+                        <v-btn
+                            size="x-small"
+                            variant="text"
+                            color="accent"
+                            data-testid="grammar-change"
+                            @click="worlds.openLanguageChange({ targetId: thing.id, prefill: `Change the ${entry.section.title} section: ` })"
+                        >Change…</v-btn>
                         <v-btn
                             v-if="editing !== entry.index"
                             icon="mdi-pencil"

@@ -130,7 +130,9 @@ def test_the_quick_core_has_the_basics():
 
 
 def test_a_note_in_brackets_is_ignored():
-    got = completeness(_language(words=[("ty", ["you (singular)"]), ("ogn", ["fire (n.)"])]))
+    got = completeness(
+        _language(words=[("ty", ["you (singular)"]), ("ogn", ["fire (n.)"])])
+    )
     assert "you" not in got.meanings_missing and "fire" not in got.meanings_missing
 
 
@@ -142,7 +144,9 @@ def test_forms_of_be_and_have_are_not_words_of_their_own():
 
 def test_the_and_a_are_covered_by_a_nouns_section():
     # "the" as an ending on the noun: the nouns section says how
-    got = completeness(_language(grammar=[GrammarSection(title="Nouns", topic="nouns")]))
+    got = completeness(
+        _language(grammar=[GrammarSection(title="Nouns", topic="nouns")])
+    )
     assert "the" not in got.meanings_missing and "a" not in got.meanings_missing
     assert "the" in completeness(_language()).meanings_missing
 

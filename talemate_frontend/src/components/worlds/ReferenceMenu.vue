@@ -31,6 +31,14 @@
                 <v-list-item v-if="references" prepend-icon="mdi-link-variant" title="Add reference…" @click="searching = true"></v-list-item>
                 <template v-if="languageNaming">
                     <v-divider></v-divider>
+                    <!-- rework a language to fit the entry this box is on -->
+                    <v-list-item
+                        v-if="contextThingId && contextKind !== 'language'"
+                        prepend-icon="mdi-auto-fix"
+                        title="Change a language to fit this…"
+                        data-testid="menu-change-language"
+                        @click="changeLanguage"
+                    ></v-list-item>
                     <v-list-item v-if="!hasSelection" prepend-icon="mdi-alphabetical-variant" title="Make a name…" data-testid="menu-make-name" @click="mode = 'name'"></v-list-item>
                     <v-list-item prepend-icon="mdi-format-quote-open" title="Make a phrase…" data-testid="menu-make-phrase" @click="mode = 'phrase'"></v-list-item>
                     <template v-if="hasSelection && selectedText.trim()">
@@ -129,6 +137,10 @@ export default {
         },
     },
     methods: {
+        changeLanguage() {
+            this.worlds.openLanguageChange({ originId: this.contextThingId });
+            this.$emit('update:modelValue', false);
+        },
         act(action) {
             this.$emit(action);
             this.$emit('update:modelValue', false);

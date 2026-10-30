@@ -60,7 +60,10 @@ class MakeRequest(BaseModel):
     questions (or "decide for me"), and the entries to take into
     account."""
 
-    kind: Literal["new"] = "new"
+    # a new language; a change to one; or filling in what one lacks
+    kind: Literal["new", "change", "fill"] = "new"
+    # the language a change or fill is for
+    target_id: str | None = None
     text: str
     answers: list[QuestionAnswer] = []
     decide_for_me: bool = False
@@ -110,6 +113,15 @@ async def ask_questions(
             )
         reply = extracted["response"]
     return _questions(reply)
+
+
+def current_file_name(current) -> str:
+    """The file a change's language sits in, in Claude Code's folder."""
+
+    slug = (
+        "".join(c for c in current.language.name.lower() if c.isalnum()) or "language"
+    )
+    return f"{slug}.language.json"
 
 
 class MakeError(Exception):
@@ -183,6 +195,8 @@ async def make_language(
     on_progress: Callable[[str], None],
     *,
     fixed: dict | None = None,
+    current=None,
+    used: list[str] = (),
 ) -> str:
     """Make the language `request` asks for on the route `settings` names,
     sending the check's note back at most twice, and return the file's
@@ -196,7 +210,7 @@ async def make_language(
     size = effective_size(request, settings.route)
 
     if settings.route == "in_app":
-        brief = write_brief(view, request, size=size)
+        brief = write_brief(view, request, size=size, current=current, used=used)
         fixed_reply = (fixed or {}).get("language_file")
 
         async def in_app_again(problems: str, previous: str) -> str:
@@ -210,8 +224,20 @@ async def make_language(
 
     scratch = claude_code.prepare_scratch()
     scratch.write_brief(
-        write_brief(view, request, check_command=str(scratch.check), size=size)
+        write_brief(
+            view,
+            request,
+            check_command=str(scratch.check),
+            size=size,
+            current=current,
+            used=used,
+        )
     )
+    if current is not None:
+        # a change edits the language in place, in its own file
+        (scratch.folder / current_file_name(current)).write_text(
+            current.model_dump_json(indent=2), encoding="utf-8"
+        )
 
     async def claude_again(problems: str, previous: str) -> str:
         prompt = REPAIR_PROMPT + problems

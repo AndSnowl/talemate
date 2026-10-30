@@ -434,7 +434,7 @@ from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
-from talemate.languages.entry import language_of, word_uses
+from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
     default_language,
@@ -442,6 +442,7 @@ from talemate.languages.lookup import (
     languages_for_scene,
 )
 from talemate.languages.brief import write_brief
+from talemate.languages.related import related_entries
 from talemate.languages.completeness import completeness as completeness_of
 from talemate.languages.making import (
     MakeError,
@@ -619,6 +620,9 @@ FIXED_GROUP_ADD_ENV = "TALEMATE_TEST_FIXED_GROUP_ADD"
 # browser tests: the model's reply to every language naming call
 # (definitions and picks, `languages.naming`)
 FIXED_LANGUAGE_ENV = "TALEMATE_TEST_FIXED_LANGUAGE"
+# one language job at a time (a make, a change or a fill)
+BUSY = "Something else is being made or changed; wait for it or cancel it"
+LANGUAGE_GONE = "The language this was for is gone"
 # the browser tests' stand-in for Claude Code (a fake `claude` script)
 CLAUDE_COMMAND_ENV = "TALEMATE_TEST_CLAUDE_COMMAND"
 
@@ -929,6 +933,9 @@ class LanguageTextPayload(pydantic.BaseModel):
     text: str
     target_id: str | None = None
     at: dict | None = None
+    # for a change: the version it was briefed on (merged onto the
+    # language as it is now, keeping the owner's edits)
+    base: str | None = None
 
 
 class LanguageSamplesPayload(pydantic.BaseModel):
@@ -1236,6 +1243,13 @@ def _languages_page(view: WorldView, state: ThingState) -> dict:
         ],
         "languages_source_name": view.name_of(source) if source else None,
     }
+
+
+def _same_language(old: Language, new: Language) -> bool:
+    """Whether importing `new` onto `old` would change nothing it stores
+    (the name stays the entry's own either way)."""
+
+    return fields_of(old) == fields_of(new)
 
 
 def _fixed_file(env: str) -> Path | None:
@@ -2221,6 +2235,38 @@ class WorldsPlugin(Plugin):
         except KeyError:
             client = None
         return client if client is not None else self._client()
+
+    def _in_app_client(self) -> dict | None:
+        """Who "the agent's model" is, for the route buttons: the Language
+        agent's client (the Creator's when it has none), its model, and
+        whether it's a hosted API (that spends tokens) or self-hosted.
+        `None` when neither agent has a client."""
+
+        try:
+            client = instance.get_agent("language").client
+        except KeyError:
+            client = None
+        agent = "Language"
+        if client is None:
+            try:
+                client, agent = self._client(), "Creator"
+            except KeyError:
+                return None
+        if client is None:
+            return None
+        self_hosted = client.Meta().self_hosted
+        if self_hosted is None:
+            # an OpenAI-compatible endpoint: hosted unless it's this
+            # computer or the local network
+            hosted = bool(client.api_url) and client.host_is_remote(client.api_url)
+        else:
+            hosted = not self_hosted
+        return {
+            "agent": agent,
+            "name": client.name,
+            "model": client.model_name or "",
+            "hosted": hosted,
+        }
 
     def _fixed_setup(self) -> dict | None:
         """The browser tests' fixed scene-setup reply, or `None` normally."""
@@ -5552,9 +5598,9 @@ class WorldsPlugin(Plugin):
         and its repair note, and, for a new version, what changes."""
 
         payload = LanguageTextPayload(**data)
-        preview = preview_import(
-            self._require_world().view(), payload.text, payload.target_id
-        )
+        view = self._require_world().view()
+        self._require_target(view, payload)
+        preview = preview_import(view, payload.text, payload.target_id, payload.base)
         self._reply(
             "language_preview",
             {
@@ -5571,10 +5617,27 @@ class WorldsPlugin(Plugin):
 
         payload = LanguageTextPayload(**data)
         world = self._require_world()
-        preview = preview_import(world.view(), payload.text, payload.target_id)
-        with world.revision(Source.manual(note="import language")) as rev:
-            thing_id = apply_import(rev, world.view(), preview, payload.target_id)
+        view = world.view()
+        self._require_target(view, payload)
+        preview = preview_import(view, payload.text, payload.target_id, payload.base)
+        if payload.target_id is not None and _same_language(
+            language_of(view.thing(payload.target_id), view), preview.file.language
+        ):
+            # nothing would change (a second Accept): write nothing
+            thing_id = payload.target_id
+        else:
+            with world.revision(Source.manual(note="import language")) as rev:
+                thing_id = apply_import(rev, world.view(), preview, payload.target_id)
         self._edited("language_import", thing_id, _date_in(payload.at), prose=False)
+
+    def _require_target(self, view: WorldView, payload: LanguageTextPayload) -> None:
+        """A new version or change needs its language still there."""
+
+        if payload.target_id is None:
+            return
+        state = view.thing(payload.target_id)
+        if state is None or state.kind != "language":
+            raise ValueError(LANGUAGE_GONE)
 
     async def handle_language_export(self, data: dict):
         """The language entry as a file's text."""
@@ -5775,9 +5838,21 @@ class WorldsPlugin(Plugin):
             settings = settings.model_copy(update={"claude_command": command})
         return settings
 
+    async def handle_language_related(self, data: dict):
+        """Entries a change to a language should fit, each with why:
+        answers `language_related {language_id, entries}`."""
+
+        language_id = str(data.get("language_id") or "")
+        entries = related_entries(self._require_world().view(), language_id)
+        self._reply(
+            "language_related",
+            {"language_id": language_id, "entries": [e.model_dump() for e in entries]},
+        )
+
     async def handle_language_make_route(self, data: dict):
         """How languages are made now, so the page offers the right
-        button: answers `language_make_route {route}`."""
+        button: answers `language_make_route {route, claude_model, sizes,
+        in_app_client}`."""
 
         settings = self._make_settings()
         self._reply(
@@ -5789,6 +5864,7 @@ class WorldsPlugin(Plugin):
                     route: effective_size(MakeRequest(text=""), route)
                     for route in ("claude_code", "in_app", "brief")
                 },
+                "in_app_client": self._in_app_client(),
             },
         )
 
@@ -5811,7 +5887,9 @@ class WorldsPlugin(Plugin):
         request = MakeRequest(**data)
         view = self.world.view() if self.world is not None else None
         size = effective_size(request, self._settings_for(request).route)
-        self._reply("language_brief", {"text": write_brief(view, request, size=size)})
+        current, used = self._change_inputs(request)
+        text = write_brief(view, request, size=size, current=current, used=used)
+        self._reply("language_brief", {"text": text})
 
     async def handle_language_make_start(self, data: dict):
         """Make a language on the language agent's route, in the
@@ -5821,15 +5899,18 @@ class WorldsPlugin(Plugin):
         `language_make_failed {error}`. One job at a time."""
 
         if self._make_task is not None and not self._make_task.done():
-            self._reply(
-                "language_make_failed", {"error": "A language is already being made"}
-            )
+            self._reply("language_make_failed", {"error": BUSY})
             return
         if self.world is None:
             self._reply("language_make_failed", {"error": "Open a world first"})
             return
         request = MakeRequest(**data)
         settings = self._settings_for(request)
+        current, used = self._change_inputs(request)
+        if request.kind != "new" and current is None:
+            self._reply("language_make_failed", {"error": LANGUAGE_GONE})
+            return
+        base = current.model_dump_json() if current is not None else None
         fixed_path = _fixed_file(FIXED_LANGUAGE_ENV)
         fixed = (
             json.loads(fixed_path.read_text(encoding="utf-8")) if fixed_path else None
@@ -5847,7 +5928,16 @@ class WorldsPlugin(Plugin):
                 return
             exc = task.exception()
             if exc is None:
-                self._reply("language_make_done", {"text": task.result()})
+                self._reply(
+                    "language_make_done",
+                    {
+                        "text": task.result(),
+                        "kind": request.kind,
+                        "target_id": request.target_id,
+                        # what the change was briefed on, for the review's merge
+                        "base": base,
+                    },
+                )
             elif isinstance(exc, MakeError):
                 self._reply("language_make_failed", {"error": str(exc)})
             else:
@@ -5857,12 +5947,41 @@ class WorldsPlugin(Plugin):
                     {"error": f"Something went wrong making the language: {exc}"},
                 )
 
-        self._reply("language_make_started", {"route": settings.route})
+        self._reply(
+            "language_make_started",
+            {
+                "route": settings.route,
+                "kind": request.kind,
+                "target_id": request.target_id,
+            },
+        )
         self._make_task = self._spawn(
             make_language(
-                self.world.view(), request, settings, client, progress, fixed=fixed
+                self.world.view(),
+                request,
+                settings,
+                client,
+                progress,
+                fixed=fixed,
+                current=current,
+                used=used,
             ),
             done,
+        )
+
+    def _change_inputs(self, request: MakeRequest):
+        """For a change or fill: the language as it is now (as a file) and
+        the words the world uses from it; (None, []) when it's gone, or for
+        a new language."""
+
+        if request.kind == "new" or not request.target_id or self.world is None:
+            return None, []
+        view = self.world.view()
+        state = view.thing(request.target_id)
+        if state is None or state.kind != "language":
+            return None, []
+        return export_language(view, request.target_id), sorted(
+            used_words(view, request.target_id)
         )
 
     async def handle_language_make_cancel(self, data: dict):

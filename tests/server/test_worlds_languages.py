@@ -418,3 +418,80 @@ async def test_a_language_page_carries_its_completeness(plugin):
     page = _last(plugin, "get_thing")["data"]
     assert page["completeness"]["meanings_total"] > 200
     assert "water" in page["completeness"]["meanings_missing"]
+
+
+# --- 3b-2b: reviewing and accepting a change -------------------------------
+
+
+async def _change_setup(plugin):
+    from talemate.languages.entry import fields_of, language_of
+    from talemate.languages.models import LanguageFile
+
+    world = await _open(plugin)
+    await _act(plugin, "language_import", text=_file_text())
+    lid = _last(plugin, "language_import")["data"]["id"]
+    base = language_of(world.view().thing(lid))
+    word = base.dictionary[0].word
+
+    def with_meanings(extra):
+        lang = base.model_copy(deep=True)
+        lang.dictionary[0].meanings = [*lang.dictionary[0].meanings, extra]
+        return lang
+
+    base_text = LanguageFile(language=base).model_dump_json()
+    change_text = LanguageFile(language=with_meanings("road")).model_dump_json()
+    return world, lid, word, base_text, change_text, with_meanings, fields_of
+
+
+async def test_a_change_preview_keeps_the_owners_edit(plugin):
+    (
+        world,
+        lid,
+        word,
+        base_text,
+        change_text,
+        with_meanings,
+        fields_of,
+    ) = await _change_setup(plugin)
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(lid, "words", fields_of(with_meanings("stream"))["words"], None)
+    await _act(
+        plugin, "language_preview", text=change_text, target_id=lid, base=base_text
+    )
+    preview = _last(plugin, "language_preview")["data"]
+    assert preview["diff"]["kept_edits"] == [f"word {word.lower()}"]
+
+
+async def test_accepting_a_change_is_one_undoable_revision(plugin):
+    from talemate.languages.entry import language_of
+
+    world, lid, word, base_text, change_text, *_ = await _change_setup(plugin)
+    before = len(world.revisions())
+    await _act(
+        plugin, "language_import", text=change_text, target_id=lid, base=base_text
+    )
+    assert len(world.revisions()) == before + 1
+    assert "road" in language_of(world.view().thing(lid)).dictionary[0].meanings
+    world.undo([world.revisions()[-1].rev])
+    assert "road" not in language_of(world.view().thing(lid)).dictionary[0].meanings
+
+
+async def test_accepting_twice_writes_once(plugin):
+    world, lid, word, base_text, change_text, *_ = await _change_setup(plugin)
+    before = len(world.revisions())
+    for _ in range(2):
+        await _act(
+            plugin, "language_import", text=change_text, target_id=lid, base=base_text
+        )
+    assert len(world.revisions()) == before + 1
+    assert _last(plugin, "language_import")["data"]["id"] == lid
+
+
+async def test_a_change_for_a_deleted_language_is_refused(plugin):
+    world, lid, word, base_text, change_text, *_ = await _change_setup(plugin)
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(lid)
+    await _act(
+        plugin, "language_preview", text=change_text, target_id=lid, base=base_text
+    )
+    assert any("The language this was for is gone" in str(e) for e in _errors(plugin))

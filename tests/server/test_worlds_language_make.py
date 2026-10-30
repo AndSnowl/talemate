@@ -106,7 +106,9 @@ async def test_a_second_make_is_refused_while_one_runs(plugin, monkeypatch):
     await asyncio.sleep(0.5)
     await _act(plugin, "language_make_start", text=REQUEST)
     failed = _replies(plugin, "language_make_failed")
-    assert failed and failed[-1]["error"] == "A language is already being made"
+    assert failed and failed[-1]["error"] == (
+        "Something else is being made or changed; wait for it or cancel it"
+    )
     assert plugin._make_task is not None and not plugin._make_task.done()
     await _act(plugin, "language_make_cancel")
     await _drain(plugin)
@@ -186,11 +188,16 @@ async def test_a_run_can_choose_its_route(plugin, tmp_path, monkeypatch):
     assert _replies(plugin, "language_make_progress")[0]["line"] == "Asking the model"
 
 
-def _keep_scratch(monkeypatch):
+@pytest.fixture
+def kept_scratch(monkeypatch):
+    """The scratch folders a run made, kept for the test to read, and
+    removed after it (they live in the system temp folder)."""
+
     import talemate.languages.claude_code as claude_code
 
     made = []
     real = claude_code.prepare_scratch
+    remove = claude_code.Scratch.remove
 
     def spy():
         made.append(real())
@@ -198,13 +205,15 @@ def _keep_scratch(monkeypatch):
 
     monkeypatch.setattr(claude_code, "prepare_scratch", spy)
     monkeypatch.setattr(claude_code.Scratch, "remove", lambda self: None)
-    return made
+    yield made
+    for scratch in made:
+        remove(scratch)
 
 
-async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch):
+async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch, kept_scratch):
     import json
 
-    made = _keep_scratch(monkeypatch)
+    made = kept_scratch
     await _open(plugin)
     await _act(plugin, "language_make_start", text=REQUEST, claude_model="opus")
     await _drain(plugin)
@@ -212,8 +221,8 @@ async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch):
     assert args[args.index("--model") + 1] == "opus"
 
 
-async def test_a_run_writes_the_brief_at_its_size(plugin, monkeypatch):
-    made = _keep_scratch(monkeypatch)
+async def test_a_run_writes_the_brief_at_its_size(plugin, monkeypatch, kept_scratch):
+    made = kept_scratch
     await _open(plugin)
     await _act(plugin, "language_make_start", text=REQUEST, size="quick")
     await _drain(plugin)
@@ -241,7 +250,68 @@ async def test_the_route_reply_gives_the_default_sizes(plugin):
         "route": "claude_code",
         "claude_model": "",
         "sizes": {"claude_code": "full", "in_app": "quick", "brief": "full"},
+        # no Language agent client: the Creator's (a hosted API) stands in
+        "in_app_client": {
+            "agent": "Creator",
+            "name": "test",
+            "model": "test-model",
+            "hosted": True,
+        },
     }
+
+
+class _LocalClient(MockClient):
+    class Meta(MockClient.Meta):
+        self_hosted: bool | None = True
+
+
+class _EitherClient(MockClient):
+    """Self-hosted or not, by where it points (an OpenAI-compatible one)."""
+
+    class Meta(MockClient.Meta):
+        self_hosted: bool | None = None
+
+    def __init__(self, name: str, url: str):
+        super().__init__(name)
+        self.url = url
+
+    @property
+    def api_url(self):
+        return self.url
+
+
+def _route_client(plugin):
+    return _replies(plugin, "language_make_route")[-1]["in_app_client"]
+
+
+async def test_the_route_reply_names_the_language_agents_own_client(plugin):
+    instance.AGENTS["language"].client = _LocalClient("KoboldCpp")
+    await _act(plugin, "language_make_route")
+    assert _route_client(plugin) == {
+        "agent": "Language",
+        "name": "KoboldCpp",
+        "model": "test-model",
+        "hosted": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("url", "hosted"),
+    [("http://localhost:5001/v1", False), ("http://192.168.1.4:5001/v1", False),
+     ("https://api.example.com/v1", True)],
+)  # fmt: skip
+async def test_a_client_that_can_be_either_is_hosted_by_its_address(
+    plugin, url, hosted
+):
+    instance.AGENTS["language"].client = _EitherClient("Compat", url)
+    await _act(plugin, "language_make_route")
+    assert _route_client(plugin)["hosted"] is hosted
+
+
+async def test_no_client_at_all_says_so(plugin):
+    instance.AGENTS["creator"].client = None
+    await _act(plugin, "language_make_route")
+    assert _route_client(plugin) is None
 
 
 async def test_the_copied_brief_follows_its_size(plugin):
@@ -251,12 +321,91 @@ async def test_the_copied_brief_follows_its_size(plugin):
     assert "fill in the rest later" in _replies(plugin, "language_brief")[-1]["text"]
 
 
-async def test_a_model_name_is_trimmed(plugin, monkeypatch):
+async def test_a_model_name_is_trimmed(plugin, monkeypatch, kept_scratch):
     import json
 
-    made = _keep_scratch(monkeypatch)
+    made = kept_scratch
     await _open(plugin)
     await _act(plugin, "language_make_start", text=REQUEST, claude_model=" opus ")
     await _drain(plugin)
     args = json.loads((made[0].folder / "args.json").read_text())
     assert args[args.index("--model") + 1] == "opus"
+
+
+async def test_language_related_replies_with_entries(plugin):
+    from talemate.languages.importer import parse_language_text  # noqa: F401
+
+    await _open(plugin)
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    await _act(plugin, "language_import", text=sample)
+    lid = _replies(plugin, "language_import")[-1]["id"]
+    from talemate.world.store import Source
+
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.create_thing(
+            "place",
+            {"name": "Sorau", "languages": [{"language": lid, "role": "spoken"}]},
+        )
+    await _act(plugin, "language_related", language_id=lid)
+    data = _replies(plugin, "language_related")[-1]
+    assert data["language_id"] == lid
+    assert (
+        data["entries"][0]["name"] == "Sorau"
+        and data["entries"][0]["why"] == "speaks it (spoken)"
+    )
+
+
+# --- 3b-2b: changing and filling in ------------------------------------------
+
+
+async def _imported(plugin):
+    await _open(plugin)
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    await _act(plugin, "language_import", text=sample)
+    return _replies(plugin, "language_import")[-1]["id"]
+
+
+async def test_a_change_job_returns_its_base(plugin, tmp_path, monkeypatch):
+    import json
+
+    lid = await _imported(plugin)
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    fixed = tmp_path / "fixed-language.json"
+    fixed.write_text(json.dumps({"language_file": sample}))
+    monkeypatch.setenv(FIXED_LANGUAGE_ENV, str(fixed))
+    await _act(
+        plugin,
+        "language_make_start",
+        kind="change",
+        target_id=lid,
+        text="more",
+        route="in_app",
+    )
+    await _drain(plugin)
+    started = _replies(plugin, "language_make_started")[-1]
+    assert (started["kind"], started["target_id"]) == ("change", lid)
+    done = _replies(plugin, "language_make_done")[-1]
+    assert (done["kind"], done["target_id"]) == ("change", lid)
+    assert json.loads(done["base"])["language"]["name"] == "Velskar"
+
+
+async def test_a_change_for_a_gone_language_fails_plainly(plugin):
+    await _open(plugin)
+    await _act(
+        plugin, "language_make_start", kind="change", target_id="nope", text="more"
+    )
+    error = _replies(plugin, "language_make_failed")[-1]["error"]
+    assert error == "The language this was for is gone"
+
+
+async def test_a_change_with_claude_code_edits_the_file_in_place(
+    plugin, monkeypatch, kept_scratch
+):
+    import json
+
+    made = kept_scratch
+    lid = await _imported(plugin)
+    await _act(plugin, "language_make_start", kind="change", target_id=lid, text="more")
+    await _drain(plugin)
+    seen = json.loads((made[0].folder / "seen.json").read_text())
+    assert "velskar.language.json" in seen

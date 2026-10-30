@@ -117,7 +117,9 @@ def test_the_check_reads_only_files_in_its_folder(scratch):
     assert _check(scratch, "../outside.language.json").returncode == 2
 
 
-async def test_settings_left_in_the_folder_are_removed_before_a_run(scratch, monkeypatch):
+async def test_settings_left_in_the_folder_are_removed_before_a_run(
+    scratch, monkeypatch
+):
     # a run may write .claude/settings.json; the next run must not load it
     settings = scratch.folder / ".claude" / "settings.local.json"
     settings.write_text('{"permissions": {"allow": ["Bash"]}}')
@@ -128,18 +130,28 @@ async def test_settings_left_in_the_folder_are_removed_before_a_run(scratch, mon
 def _tool(name, **tool_input):
     return {
         "type": "assistant",
-        "message": {"content": [{"type": "tool_use", "name": name, "input": tool_input}]},
+        "message": {
+            "content": [{"type": "tool_use", "name": name, "input": tool_input}]
+        },
     }
 
 
 def test_progress_lines_are_plain():
-    assert progress_line(_tool("Skill", skill="language-design")) == "Reading the language guide"
+    assert (
+        progress_line(_tool("Skill", skill="language-design"))
+        == "Reading the language guide"
+    )
     assert (
         progress_line(_tool("Write", file_path="/tmp/x/moscavian.language.json"))
         == "Writing moscavian.language.json"
     )
-    assert progress_line(_tool("Read", file_path="/tmp/x/brief.md")) == "Reading brief.md"
-    assert progress_line(_tool("Bash", command=f"{CHECK} m.language.json")) == "Running the check"
+    assert (
+        progress_line(_tool("Read", file_path="/tmp/x/brief.md")) == "Reading brief.md"
+    )
+    assert (
+        progress_line(_tool("Bash", command=f"{CHECK} m.language.json"))
+        == "Running the check"
+    )
     assert progress_line(_tool("Bash", command="ls")) is None
     assert progress_line({"type": "system", "subtype": "init"}) is None
 
@@ -147,7 +159,11 @@ def test_progress_lines_are_plain():
 async def test_a_run_returns_the_file(scratch, folder, monkeypatch):
     result, lines = await _run(scratch, monkeypatch)
     assert parse_language_text(result.text).language.name
-    assert lines == ["Reading the language guide", "Writing moscavian.language.json", "Running the check"]
+    assert lines == [
+        "Reading the language guide",
+        "Writing moscavian.language.json",
+        "Running the check",
+    ]
     args = json.loads((folder / "args.json").read_text())
     assert args[args.index("--permission-mode") + 1] == "acceptEdits"
     assert result.cost_usd == 0.01
@@ -178,7 +194,9 @@ async def test_a_missing_command_says_claude_code_isnt_installed(scratch):
 
 
 async def test_an_error_result_is_reported(scratch, monkeypatch):
-    with pytest.raises(ClaudeCodeError, match="Claude Code stopped: You've hit your usage limit."):
+    with pytest.raises(
+        ClaudeCodeError, match="Claude Code stopped: You've hit your usage limit."
+    ):
         await _run(scratch, monkeypatch, "error")
 
 

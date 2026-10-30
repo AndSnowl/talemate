@@ -112,7 +112,9 @@ from talemate.languages.importer import parse_language_text  # noqa: E402
 
 
 def test_the_briefs_example_uses_grammar_sections():
-    example = json.loads(Path("src/talemate/languages/data/example.language.json").read_text())
+    example = json.loads(
+        Path("src/talemate/languages/data/example.language.json").read_text()
+    )
     grammar = example["language"]["grammar"]
     assert isinstance(grammar, list) and len(grammar) >= 2
     assert any(section.get("tables") for section in grammar)
@@ -122,8 +124,16 @@ def test_the_briefs_example_uses_grammar_sections():
 def test_loosely_typed_grammar_still_loads():
     section = {
         "topic": "numbers",
-        "tables": [{"caption": "counting", "columns": ["", "word"], "rows": [[1, "un"], [2, None]]}],
-        "examples": [{"original": "Un dov", "breakdown": [["un", "one"]], "translation": None}],
+        "tables": [
+            {
+                "caption": "counting",
+                "columns": ["", "word"],
+                "rows": [[1, "un"], [2, None]],
+            }
+        ],
+        "examples": [
+            {"original": "Un dov", "breakdown": [["un", "one"]], "translation": None}
+        ],
     }
     lang = _language(grammar=[section])
     assert lang.grammar[0].title == "Numbers"
@@ -133,7 +143,13 @@ def test_loosely_typed_grammar_still_loads():
 
 def test_a_bad_file_says_where_it_went_wrong():
     text = json.dumps(
-        {"language": {"name": "X", "level": "full", "grammar": [{"title": "N", "tables": "oops"}]}}
+        {
+            "language": {
+                "name": "X",
+                "level": "full",
+                "grammar": [{"title": "N", "tables": "oops"}],
+            }
+        }
     )
     try:
         parse_language_text(text)

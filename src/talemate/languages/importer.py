@@ -17,6 +17,7 @@ import json
 
 from pydantic import BaseModel, ValidationError
 
+from talemate.languages.changes import merge_change
 from talemate.languages.check import CheckReport, check_language
 from talemate.languages.entry import fields_of, language_of, languages, used_words
 from talemate.languages.models import DictionaryEntry, Language, LanguageFile
@@ -38,6 +39,19 @@ class LanguageParseError(ValueError):
     """The text holds no language the app can read."""
 
 
+class PhraseLine(BaseModel):
+    original: str
+    translation: str
+
+
+class PhraseChange(BaseModel):
+    """One category of phrases that changed: all of it, before and after."""
+
+    category: str
+    before: list[PhraseLine] = []
+    after: list[PhraseLine] = []
+
+
 class LanguageDiff(BaseModel):
     words_added: list[str] = []
     words_removed: list[str] = []
@@ -45,8 +59,20 @@ class LanguageDiff(BaseModel):
     phrases_added: list[str] = []
     phrases_removed: list[str] = []
     phrases_changed: list[str] = []
+    phrase_changes: list[PhraseChange] = []
     generators_changed: bool = False
+    # name rules the new version doesn't have (by name), never dropped
+    # silently
+    rules_removed: list[str] = []
+    grammar_added: list[str] = []
+    grammar_changed: list[str] = []
+    grammar_removed: list[str] = []
+    # how it sounds, before and after, when it changed
+    sound_before: str | None = None
+    sound_after: str | None = None
     kept_used: list[str] = []
+    # a change's parts the owner had also edited meanwhile: theirs stayed
+    kept_edits: list[str] = []
     samples_before: dict[str, list[str]] = {}
     samples_after: dict[str, list[str]] = {}
 
@@ -135,10 +161,30 @@ def _meaning_keys(entry: DictionaryEntry) -> set[str]:
     return {m.lower() for m in entry.meanings}
 
 
-def _diff(old: Language, new: Language, kept: list[str]) -> LanguageDiff:
+def _diff(
+    old: Language, new: Language, kept: list[str], kept_edits: list[str] = ()
+) -> LanguageDiff:
     old_words, new_words = _by_word(old), _by_word(new)
+    old_sections = {s.title.lower(): s for s in old.grammar}
+    new_sections = {s.title.lower(): s for s in new.grammar}
+    new_rules = {g.id for g in new.generators}
     old_phrases = {p.id: p for p in old.phrases}
     new_phrases = {p.id: p for p in new.phrases}
+
+    def lines(lang: Language, category: str) -> list[PhraseLine]:
+        return [
+            PhraseLine(original=p.original, translation=p.translation)
+            for p in lang.phrases
+            if p.category == category
+        ]
+
+    touched = {
+        p.category
+        for p in [*old.phrases, *new.phrases]
+        if old_phrases.get(p.id) != new_phrases.get(p.id)
+    }
+    # in the order the language lists them, the new version's first
+    categories = list(dict.fromkeys(p.category for p in [*new.phrases, *old.phrases]))
 
     def rules(lang: Language) -> str:
         return json.dumps(
@@ -161,8 +207,28 @@ def _diff(old: Language, new: Language, kept: list[str]) -> LanguageDiff:
             for i in new_phrases
             if i in old_phrases and new_phrases[i] != old_phrases[i]
         ],
+        phrase_changes=[
+            PhraseChange(category=c, before=lines(old, c), after=lines(new, c))
+            for c in categories
+            if c in touched
+        ],
         generators_changed=rules(old) != rules(new),
+        rules_removed=[g.name for g in old.generators if g.id not in new_rules],
+        grammar_added=[
+            s.title for k, s in new_sections.items() if k not in old_sections
+        ],
+        grammar_changed=[
+            s.title
+            for k, s in new_sections.items()
+            if k in old_sections and s != old_sections[k]
+        ],
+        grammar_removed=[
+            s.title for k, s in old_sections.items() if k not in new_sections
+        ],
+        sound_before=old.sound if old.sound != new.sound else None,
+        sound_after=new.sound if old.sound != new.sound else None,
         kept_used=kept,
+        kept_edits=list(kept_edits),
         samples_before=check_language(old).samples,
         samples_after=check_language(new).samples,
     )
@@ -209,10 +275,15 @@ def _keep_used(
 
 
 def preview_import(
-    view: WorldView, text: str, target_id: str | None = None
+    view: WorldView,
+    text: str,
+    target_id: str | None = None,
+    base_text: str | None = None,
 ) -> ImportPreview:
     """What importing `text` would give: the file, its check and, onto
-    `target_id`, the diff."""
+    `target_id`, the diff. With `base_text` (the version a change was
+    briefed on), `text` is a change: it's merged onto the language as it is
+    now, keeping the owner's edits made meanwhile (`merge_change`)."""
 
     file = parse_language_text(text)
     diff = None
@@ -221,9 +292,13 @@ def preview_import(
         if state is None or state.kind != "language":
             raise ValueError("there's no language to update")
         old = language_of(state, view)
-        new, kept = _keep_used(old, file.language, used_words(view, target_id))
+        changed, kept_edits = file.language, []
+        if base_text is not None:
+            merged = merge_change(parse_language_text(base_text).language, changed, old)
+            changed, kept_edits = merged.language, merged.kept_edits
+        new, kept = _keep_used(old, changed, used_words(view, target_id))
         file = file.model_copy(update={"language": new})
-        diff = _diff(old, new, kept)
+        diff = _diff(old, new, kept, kept_edits)
     return ImportPreview(file=file, report=check_language(file.language), diff=diff)
 
 

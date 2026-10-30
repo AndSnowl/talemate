@@ -11,7 +11,13 @@ from pydantic import BaseModel
 
 from talemate.languages.models import GRAMMAR_TOPICS, Language
 
-__all__ = ["CORE_MEANINGS", "PHRASE_CATEGORIES", "Completeness", "completeness"]
+__all__ = [
+    "CORE_MEANINGS",
+    "PHRASE_CATEGORIES",
+    "Completeness",
+    "completeness",
+    "fill_step",
+]
 
 PHRASE_CATEGORIES: tuple[str, ...] = (
     "greeting",
@@ -88,3 +94,20 @@ def completeness(language: Language) -> Completeness:
             title for topic, title in GRAMMAR_TOPICS if topic not in topics
         ],
     )
+
+
+def fill_step(language: Language) -> str | None:
+    """What "Fill in next" adds: "words", "phrases" or "grammar", the first
+    with something missing; None when nothing is (or for a language that
+    isn't full)."""
+
+    if language.level != "full":
+        return None
+    found = completeness(language)
+    if found.meanings_missing:
+        return "words"
+    if found.phrase_categories_missing:
+        return "phrases"
+    if found.grammar_topics_missing:
+        return "grammar"
+    return None

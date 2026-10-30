@@ -16,6 +16,7 @@ from talemate.languages.models import (
     GeneratorDef,
     Language,
     LanguageFile,
+    Phrase,
 )
 from talemate.world.store import Source
 
@@ -119,6 +120,41 @@ def test_diff_lists_changes(world):
     assert diff.words_changed == ["vel"]
     assert not diff.generators_changed
     assert set(diff.samples_before) == set(diff.samples_after) == {"w", "p"}
+
+
+def test_diff_shows_changed_phrases_before_and_after_by_category(world):
+    def phrase(pid, category, original, translation):
+        return Phrase(
+            id=pid, category=category, original=original, translation=translation
+        )
+
+    old = _moscavian()
+    old.phrases = [
+        phrase("c1", "curse", "Zelgor nirosh te!", "Fierce shadow upon you!"),
+        phrase("c2", "curse", "Kol ye zor!", "Frost and star!"),
+        phrase("g1", "greeting", "Vel sorau.", "Great land."),
+    ]
+    lid = _stored(world, old)
+    new = _moscavian()
+    new.phrases = [
+        phrase("c2", "curse", "Kol ye zor!", "Frost and stars!"),
+        phrase("c3", "curse", "Dolg tvoi v reke!", "Your debt in the river!"),
+        phrase("g1", "greeting", "Vel sorau.", "Great land."),
+        phrase("o1", "oath", "Pon rukva.", "By hand."),
+    ]
+    diff = preview_import(world.view(), _text(new), target_id=lid).diff
+    # only the categories that changed, each whole, before and after
+    assert [c.category for c in diff.phrase_changes] == ["curse", "oath"]
+    curse, oath = diff.phrase_changes
+    assert [(p.original, p.translation) for p in curse.before] == [
+        ("Zelgor nirosh te!", "Fierce shadow upon you!"),
+        ("Kol ye zor!", "Frost and star!"),
+    ]
+    assert [p.translation for p in curse.after] == [
+        "Frost and stars!",
+        "Your debt in the river!",
+    ]
+    assert oath.before == [] and [p.original for p in oath.after] == ["Pon rukva."]
 
 
 def test_export_round_trips(world):

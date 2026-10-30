@@ -103,6 +103,12 @@ from `talemate.languages.models.LanguageFile`). The shape:
   forms, and name rules for characters, places, items, groups and a
   demonym. A quick core keeps to what the brief lists. The app's check
   says what's "still to fill in".
+- **A change** (the brief starts "# Change a language"): the language's
+  file is already in your folder; edit it in place and keep the whole
+  file. Change only what the request asks, keep the language's name, and
+  keep every word the brief says names something in the world exactly as
+  it is. The app merges your change with any edits the owner made
+  meanwhile and shows them what changed.
 - **Every word has a `part`:** `noun`, `verb`, `adjective`, `adverb`,
   `pronoun`, `article`, `preposition`, `conjunction`, `number`,
   `question`, `particle`, `exclamation` or `ending`. Small words have
