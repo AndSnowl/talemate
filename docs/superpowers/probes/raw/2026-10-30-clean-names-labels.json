@@ -1,0 +1,422 @@
+{
+ "about": "Probe 4 labels (languages part 4), written 2026-10-30 before any model call. 'ok' Moscavian names were rolled offline from the saved Moscavian (seed 4).",
+ "language_file": ".superpowers/saved/2026-10-29-moscavian/moscavian.language.json",
+ "baseline_prompts_from": "docs/superpowers/probes/raw/2026-10-28-name-flags-labels.json",
+ "baseline_runs": 3,
+ "names": [
+  {
+   "name": "Moscow",
+   "kind": "place",
+   "label": "real",
+   "context": "The tsars hold court in Moscow."
+  },
+  {
+   "name": "Novgorod",
+   "kind": "place",
+   "label": "real",
+   "context": "Fur caravans trade south with Novgorod."
+  },
+  {
+   "name": "Smolensk",
+   "kind": "place",
+   "label": "real",
+   "context": "The western march is ruled from Smolensk."
+  },
+  {
+   "name": "Kiev",
+   "kind": "place",
+   "label": "real",
+   "context": "Envoys from Kiev bring amber each spring."
+  },
+  {
+   "name": "Tver",
+   "kind": "place",
+   "label": "real",
+   "context": "Tver's bell-founders cast the cathedral bells."
+  },
+  {
+   "name": "the Volga",
+   "kind": "place",
+   "label": "real",
+   "context": "Barges carry grain down the Volga."
+  },
+  {
+   "name": "the Dnieper",
+   "kind": "place",
+   "label": "real",
+   "context": "The Dnieper floods every spring."
+  },
+  {
+   "name": "Kholodnaya",
+   "kind": "place",
+   "label": "real",
+   "context": "The monks of Kholodnaya keep the owl shrines."
+  },
+  {
+   "name": "Kholodnoye",
+   "kind": "place",
+   "label": "real",
+   "context": "Kholodnoye is a frozen lake in the north."
+  },
+  {
+   "name": "Snegovaya Krepost",
+   "kind": "place",
+   "label": "real",
+   "context": "Snegovaya Krepost guards the mountain pass."
+  },
+  {
+   "name": "Velikograd",
+   "kind": "place",
+   "label": "real",
+   "context": "Velikograd is the oldest walled city."
+  },
+  {
+   "name": "Novgrad",
+   "kind": "place",
+   "label": "real",
+   "context": "Novgrad was founded after the great fire."
+  },
+  {
+   "name": "Vostokgrad",
+   "kind": "place",
+   "label": "real",
+   "context": "Vostokgrad watches the eastern steppe."
+  },
+  {
+   "name": "Morozsk",
+   "kind": "place",
+   "label": "real",
+   "context": "Morozsk is a fort on the frozen river."
+  },
+  {
+   "name": "Koldunya",
+   "kind": "character",
+   "label": "real",
+   "context": "Koldunya is a hedge-witch of the forest."
+  },
+  {
+   "name": "Strazh",
+   "kind": "character",
+   "label": "real",
+   "context": "Strazh commands the palace guard."
+  },
+  {
+   "name": "Zakonnik",
+   "kind": "character",
+   "label": "real",
+   "context": "Zakonnik judges disputes in the market."
+  },
+  {
+   "name": "Snezhana",
+   "kind": "character",
+   "label": "real",
+   "context": "Snezhana is the tsar's youngest daughter."
+  },
+  {
+   "name": "Dmitri",
+   "kind": "character",
+   "label": "real",
+   "context": "Tsar Dmitri took the throne after the long winter."
+  },
+  {
+   "name": "Yelena",
+   "kind": "character",
+   "label": "real",
+   "context": "Yelena keeps the treasury."
+  },
+  {
+   "name": "Aleksandr",
+   "kind": "character",
+   "label": "real",
+   "context": "Aleksandr leads the river fleet."
+  },
+  {
+   "name": "Irina",
+   "kind": "character",
+   "label": "real",
+   "context": "Irina is the high priestess of the owl."
+  },
+  {
+   "name": "Voronov",
+   "kind": "lore",
+   "label": "real",
+   "context": "The House of Voronov has served the tsars for generations."
+  },
+  {
+   "name": "Solovyov",
+   "kind": "lore",
+   "label": "real",
+   "context": "The Solovyov family breeds the tsar's horses."
+  },
+  {
+   "name": "Chernyavsky",
+   "kind": "lore",
+   "label": "real",
+   "context": "The Chernyavsky clan holds the salt mines."
+  },
+  {
+   "name": "Volodymyr II",
+   "kind": "character",
+   "label": "real",
+   "context": "Volodymyr II built the first stone church."
+  },
+  {
+   "name": "Tivamon",
+   "kind": "character",
+   "label": "ok",
+   "context": "Tivamon is a fur trader."
+  },
+  {
+   "name": "Zizheva Zyebevskaya",
+   "kind": "character",
+   "label": "ok",
+   "context": "Zizheva Zyebevskaya keeps the archive."
+  },
+  {
+   "name": "Skorisha Spusevskaya",
+   "kind": "character",
+   "label": "ok",
+   "context": "Skorisha Spusevskaya is a river pilot."
+  },
+  {
+   "name": "Plabudey",
+   "kind": "character",
+   "label": "ok",
+   "context": "Plabudey is the court's falconer."
+  },
+  {
+   "name": "Shichisha Lumova",
+   "kind": "character",
+   "label": "ok",
+   "context": "Shichisha Lumova sings at the owl rites."
+  },
+  {
+   "name": "Zizhigrad",
+   "kind": "place",
+   "label": "ok",
+   "context": "Zizhigrad sits on the river bend."
+  },
+  {
+   "name": "Slyetsograd",
+   "kind": "place",
+   "label": "ok",
+   "context": "Slyetsograd is a salt town."
+  },
+  {
+   "name": "Dochograd",
+   "kind": "place",
+   "label": "ok",
+   "context": "Dochograd guards the ford."
+  },
+  {
+   "name": "Tivavets",
+   "kind": "place",
+   "label": "ok",
+   "context": "Tivavets is a fishing village."
+  },
+  {
+   "name": "Gdotograd",
+   "kind": "place",
+   "label": "ok",
+   "context": "Gdotograd is a mining town."
+  },
+  {
+   "name": "Spyechinets",
+   "kind": "item",
+   "label": "ok",
+   "context": "The Spyechinets is the tsar's ceremonial mace."
+  },
+  {
+   "name": "Tsyotsonets",
+   "kind": "item",
+   "label": "ok",
+   "context": "A tsyotsonets is a fur-lined winter cloak."
+  },
+  {
+   "name": "Aldric Moonshadow",
+   "kind": "character",
+   "label": "ok",
+   "context": "Aldric Moonshadow is a wandering knight."
+  },
+  {
+   "name": "Oshen",
+   "kind": "character",
+   "label": "ok",
+   "context": "Oshen is the court astrologer."
+  },
+  {
+   "name": "Dorovan",
+   "kind": "character",
+   "label": "ok",
+   "context": "Dorovan is a captain of the guard."
+  }
+ ],
+ "swaps": [
+  {
+   "sentence": "Fur caravans trade south with Novgorod and the salt marshes beyond.",
+   "name": "Novgorod",
+   "kind": "place"
+  },
+  {
+   "sentence": "The tsars hold court in Moscow, behind three rings of timber walls.",
+   "name": "Moscow",
+   "kind": "place"
+  },
+  {
+   "sentence": "Barges carry grain down the Volga to the southern markets.",
+   "name": "Volga",
+   "kind": "place"
+  },
+  {
+   "sentence": "Prince Aleksei Voronov commands the frontier forts.",
+   "name": "Aleksei Voronov",
+   "kind": "character"
+  },
+  {
+   "sentence": "Tsar Dmitri II took the throne after the winter of the three claimants.",
+   "name": "Dmitri",
+   "kind": "character"
+  },
+  {
+   "sentence": "The monks of Kholodnaya keep the old owl shrines.",
+   "name": "Kholodnaya",
+   "kind": "place"
+  },
+  {
+   "sentence": "The eastern march is ruled from Smolensk by a council of boyars.",
+   "name": "Smolensk",
+   "kind": "place"
+  },
+  {
+   "sentence": "Envoys from Kiev bring amber and wax each spring.",
+   "name": "Kiev",
+   "kind": "place"
+  },
+  {
+   "sentence": "The House of Solovyov has served the tsars for six generations.",
+   "name": "Solovyov",
+   "kind": "character"
+  },
+  {
+   "sentence": "Snegovaya Krepost guards the mountain pass to the north.",
+   "name": "Snegovaya Krepost",
+   "kind": "place"
+  }
+ ],
+ "world_languages": [
+  {
+   "name": "Moscavian",
+   "about": "the tongue of the Tsardom of Moscavia"
+  },
+  {
+   "name": "Sorauan",
+   "about": "the tongue of the Free Provinces of Sorau"
+  },
+  {
+   "name": "Brelovan",
+   "about": "an old learned tongue, used in temples and by scholars"
+  },
+  {
+   "name": "Kostrevin",
+   "about": "the tongue of the northern forest clans"
+  }
+ ],
+ "language_prompts": [
+  {
+   "prompt": "Tsardom of Moscavia, a cold northern tsardom of owl-folk",
+   "expected": [
+    {
+     "language": "Moscavian",
+     "role": "official"
+    }
+   ]
+  },
+  {
+   "prompt": "the Moscavian capital, a walled river city",
+   "expected": [
+    {
+     "language": "Moscavian",
+     "role": "official"
+    }
+   ]
+  },
+  {
+   "prompt": "a Sorauan trading town on the Moscavian border, where both tongues are heard",
+   "expected": [
+    {
+     "language": "Sorauan",
+     "role": "spoken"
+    },
+    {
+     "language": "Moscavian",
+     "role": "spoken"
+    }
+   ]
+  },
+  {
+   "prompt": "the Free Provinces of Sorau, where Sorauan is spoken but contracts are written in Moscavian",
+   "expected": [
+    {
+     "language": "Sorauan",
+     "role": "official"
+    },
+    {
+     "language": "Moscavian",
+     "role": "trade"
+    }
+   ]
+  },
+  {
+   "prompt": "a monastery where the liturgy is sung in old Brelovan",
+   "expected": [
+    {
+     "language": "Brelovan",
+     "role": "liturgical"
+    }
+   ]
+  },
+  {
+   "prompt": "a mountain village of herders",
+   "expected": []
+  },
+  {
+   "prompt": "a port city in the far south",
+   "expected": []
+  },
+  {
+   "prompt": "a Kostrevin-speaking clan in the northern forests",
+   "expected": [
+    {
+     "language": "Kostrevin",
+     "role": "spoken"
+    }
+   ]
+  },
+  {
+   "prompt": "a merchant guild that does business in Moscavian and Sorauan",
+   "expected": [
+    {
+     "language": "Moscavian",
+     "role": "trade"
+    },
+    {
+     "language": "Sorauan",
+     "role": "trade"
+    }
+   ]
+  },
+  {
+   "prompt": "the court of Moscavia, where nobles affect Brelovan as a mark of learning",
+   "expected": [
+    {
+     "language": "Moscavian",
+     "role": "official"
+    },
+    {
+     "language": "Brelovan",
+     "role": "scholarly"
+    }
+   ]
+  }
+ ]
+}
