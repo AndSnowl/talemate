@@ -81,4 +81,4 @@
 6. **A person's pick must suit the person** (man or woman). In 4a the model's pick should be told the person's sex from the facts; 4b's forms make this structural.
 7. **One call per draft is enough for flagging:** a draft has 10–17 names plus a few from the text, within one V2 batch.
 
-**The owner's verdict:** *(pending)*
+**The owner's verdict (2026-10-30):** the results match the owner's own runs; go ahead with the 4a plan.
