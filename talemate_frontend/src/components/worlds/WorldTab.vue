@@ -134,7 +134,15 @@
             <ThingPage v-if="worlds.selectedThingId" />
             <StubsTab v-else-if="kind === stubsTab.kind" />
             <TagsTab v-else-if="kind === tagsTab.kind" />
-            <CurationSettings v-else-if="kind === settingsTab.kind" />
+            <div v-else-if="kind === settingsTab.kind">
+                <!-- General (curation) and Names (languages 4a) -->
+                <v-tabs v-model="settingsPage" density="compact" color="accent" class="mb-2">
+                    <v-tab value="general" data-testid="general-tab">General</v-tab>
+                    <v-tab value="names" data-testid="names-tab">Names</v-tab>
+                </v-tabs>
+                <CurationSettings v-if="settingsPage === 'general'" />
+                <NamesSettings v-else />
+            </div>
             <template v-else-if="info">
                 <!-- a language is made (outside, or by a strong model) or
                      imported, never written from a prompt; what's made
@@ -158,6 +166,7 @@ import CreateBox from './CreateBox.vue';
 import LanguageImport from './LanguageImport.vue';
 import LanguageMake from './LanguageMake.vue';
 import CurationSettings from './CurationSettings.vue';
+import NamesSettings from './NamesSettings.vue';
 import ExpandAskDialog from './ExpandAskDialog.vue';
 import KindList from './KindList.vue';
 import StubsTab from './StubsTab.vue';
@@ -177,7 +186,7 @@ import ThingPage from './ThingPage.vue';
 // dimmed as context. Stubs, Tags and Settings sit at the bottom.
 export default {
     name: 'WorldTab',
-    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, LanguageImport, LanguageMake, StubsTab, TagsTab, ThingPage },
+    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, LanguageImport, LanguageMake, NamesSettings, StubsTab, TagsTab, ThingPage },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -187,6 +196,8 @@ export default {
             stubsTab: STUBS_TAB,
             tagsTab: TAGS_TAB,
             settingsTab: SETTINGS_TAB,
+            // the Settings tab's page: General or Names
+            settingsPage: 'general',
             tabs: [STUBS_TAB, TAGS_TAB, SETTINGS_TAB],
             query: '',
             searchFocused: false,

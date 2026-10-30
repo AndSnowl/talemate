@@ -66,3 +66,10 @@ async def test_an_unknown_kind_is_refused(plugin):
         if m.get("action") == "operation_done" and "error" in m
     ]
     assert errors, plugin.websocket_handler.messages
+
+
+async def test_turn_off_here_marks_the_app_row_off(plugin):
+    await _act(plugin, "create_world", name="Vael")
+    await _edit(plugin, edit="turn_off", kind="real", name="Moscow")
+    rows = _last(plugin, "name_list_edit")["data"]["rows"]
+    assert {"name": "Moscow", "kind": "real", "scope": "app", "off": True} in rows
