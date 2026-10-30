@@ -80,7 +80,10 @@ export function markEdit(edited, markId, action) {
         return null;
     }
     const others = marks.filter((m) => m.id !== markId);
-    const spares = mark.spares || [];
+    // never a name another mark has (final review I2: two places would
+    // merge)
+    const taken = new Set(others.map((m) => m.name.toLowerCase()));
+    const spares = (mark.spares || []).filter((name) => !taken.has(name.toLowerCase()));
     if (action === 'reroll' || action === 'replace') {
         if (!spares.length) {
             return null;

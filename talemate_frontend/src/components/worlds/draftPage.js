@@ -167,6 +167,9 @@ const ROW_KEYS = {
     new_names: (row) => nameKey(row.name),
     file_into: (row) => row.thing_id,
     move_here: (row) => `${row.fact_id}|${row.repeat ? 'repeat' : 'near'}`,
+    // cleaned names' marks (languages 4a): by id, so a nested draft's
+    // join the page's and the owner's choices on the others stay
+    marks: (row) => row.id,
 };
 
 function rebaseRows(oldBase, oldEdited, newBase, key, fresh) {

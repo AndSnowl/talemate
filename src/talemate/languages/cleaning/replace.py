@@ -117,6 +117,13 @@ def _candidates(language: Language, spot: Spot, exclude: set[str]) -> list[str]:
     return found[:CANDIDATES]
 
 
+def _whole(spot: Spot) -> str:
+    """A stock title as written, without a leading "the": a title is
+    rewritten whole, frame words and all."""
+
+    return re.sub(r"^the\s+", "", spot.full, flags=re.I)
+
+
 def _new_id() -> str:
     return uuid.uuid4().hex[:12]
 
@@ -168,6 +175,7 @@ async def clean_texts(
     prompt: str,
     rows: list,
     lists: NameLists,
+    keep: set[str] = frozenset(),
 ) -> Cleaned:
     """Clean `texts`: find the bad names, replace those a language can,
     mark the rest suspect. `listed` is the draft's own name and new names
@@ -185,8 +193,17 @@ async def clean_texts(
             langs[lid] = language_of(state)
     main_id = _main([r for r in rows if _row(r)[0] in langs])
     main = langs.get(main_id)
-    protected = protected_names(view, prompt, main, lists.keep)
-    found = spots(view, texts, listed, protected)
+    # `keep`: names the owner kept or wrote on this draft (final review I4)
+    protected = protected_names(view, prompt, main, lists.keep) | {
+        k.lower() for k in keep
+    }
+    found = spots(view, texts, listed, protected, lists)
+    # every name the draft already uses: never rolled for another (final
+    # review I1: two places would merge)
+    in_use = set(protected)
+    in_use.update(full.lower() for full, _kind in listed)
+    for text in texts:
+        in_use.update(w.lower() for w in re.findall(r"[A-Z][\w'’-]*", text))
     if not found:
         return Cleaned(texts=texts, marks=[])
     verdicts = await judge(client, found, lists, main, texts)
@@ -217,7 +234,7 @@ async def clean_texts(
             suspect(v, v.why)
             continue
         try:
-            candidates = _candidates(language, v.spot, protected)
+            candidates = _candidates(language, v.spot, in_use)
         except ValueError:
             suspect(v, f"{language.name} has no name rules for this", lid)
             continue
@@ -275,7 +292,7 @@ async def clean_texts(
 
     if to_rewrite:
         items = [
-            {"n": n + 1, "title": v.spot.name}
+            {"n": n + 1, "title": _whole(v.spot)}
             for n, (v, _l, _g) in enumerate(to_rewrite)
         ]
         titles = await _titles(client, items)
@@ -284,7 +301,7 @@ async def clean_texts(
             # the slot takes a place's name ("Free Provinces of Sorau")
             slot = v.spot.model_copy(update={"kind": "place", "part": "whole"})
             try:
-                rolled = _candidates(language, slot, protected)
+                rolled = _candidates(language, slot, in_use)
             except ValueError:
                 rolled = []
             fillers = [c for c in rolled if c.lower() not in picked]
@@ -294,23 +311,27 @@ async def clean_texts(
             filler = fillers[0]
             picked.add(filler.lower())
             name = " ".join(_SLOT.sub(filler, title).split())
-            if name.lower().startswith("the ") and not v.spot.name.lower().startswith(
-                "the "
-            ):
+            if name.lower().startswith("the "):
                 name = name[4:]
-            texts = _swap(texts, v.spot.name, name)
+            texts = _swap(texts, _whole(v.spot), name)
             marks.append(
                 Mark(
                     id=_new_id(),
                     kind="replaced",
                     name=name,
-                    was=v.spot.name,
+                    was=_whole(v.spot),
                     why=v.why,
                     language_id=lid,
                     spares=[],
                     entry_kind=v.spot.kind,
                 )  # fmt: skip
             )
+    # no mark's spares hold a name another mark took (final review I2)
+    taken = {m.name.lower() for m in marks}
+    marks = [
+        m.model_copy(update={"spares": [x for x in m.spares if x.lower() not in taken]})
+        for m in marks
+    ]
     return Cleaned(texts=texts, marks=marks)
 
 

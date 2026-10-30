@@ -6,6 +6,8 @@ languages."""
 
 from __future__ import annotations
 
+import re
+
 from talemate.languages.cleaning import model as clean_model
 from talemate.languages.cleaning.languages import language_rows, named_languages
 from talemate.languages.cleaning.lists import effective
@@ -23,6 +25,7 @@ __all__ = [
     "clean_group_draft",
     "clean_preview",
     "inherited_rows",
+    "owner_kept",
     "unclean_preview",
 ]
 
@@ -101,7 +104,11 @@ def _renamed(new_names: list, marks: list, own_name: str, make) -> list:
 
 
 async def clean_preview(
-    world: World, preview: CreatePreview, client, rows: list[dict] | None = None
+    world: World,
+    preview: CreatePreview,
+    client,
+    rows: list[dict] | None = None,
+    keep: set[str] = frozenset(),
 ) -> CreatePreview:
     """`preview` cleaned. `rows` are the draft's Languages rows when the
     owner set them; else they're found from the owner's words (marked
@@ -120,7 +127,14 @@ async def clean_preview(
         (n.name, n.kind) for n in preview.new_names
     ]
     cleaned = await clean_texts(
-        client, view, _texts(preview), listed, preview.prompt, used, effective(world)
+        client,
+        view,
+        _texts(preview),
+        listed,
+        preview.prompt,
+        used,
+        effective(world),
+        keep,
     )
     new_names = _renamed(
         preview.new_names,
@@ -143,6 +157,25 @@ async def clean_preview(
             "languages": shown,
         }
     )
+
+
+def owner_kept(held: CreatePreview, copy: CreatePreview) -> set[str]:
+    """The names the owner chose or wrote on `copy` since the server's
+    `held` version: a replaced name put back ("Keep it here"), a suspect
+    one kept, and every capitalised word of a fact they rewrote. A
+    re-clean leaves them be (final review I4)."""
+
+    marks = {m.id for m in copy.marks}
+    kept = {
+        m.was if m.kind == "replaced" else m.name
+        for m in held.marks
+        if m.id not in marks
+    }
+    held_texts = {f.text for f in held.facts}
+    for fact in copy.facts:
+        if fact.text not in held_texts:
+            kept.update(re.findall(r"[A-Z][\w'’-]*", fact.text))
+    return kept
 
 
 def unclean_preview(preview: CreatePreview) -> CreatePreview:

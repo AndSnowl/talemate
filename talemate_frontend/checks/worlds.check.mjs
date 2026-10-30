@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
+import { markEdit } from '../src/components/worlds/nameMarks.js';
 import {
     akaAdded,
     akaChanged,
@@ -3936,6 +3937,32 @@ check('the same error again is a new event (final review M5)', () => {
     assert.ok(store.errorSeq > first);
 });
 
+// --- languages 4a: cleaned names' marks (final review) -----------------------
+
+check('a nested draft written in keeps its marks beside the owner-changed ones (final I6)', () => {
+    const mark = (id, name) => ({ id, kind: 'replaced', name, was: 'X' + id, spares: [] });
+    const base = { name: 'Moscavia', facts: [], marks: [mark('a', 'Sovyetsk')] };
+    // the owner kept one mark's old name: their marks differ from the base's
+    const edited = { ...base, marks: [] };
+    // the server's new version: the page's mark, and the nested draft's
+    const next = { ...base, marks: [mark('a', 'Sovyetsk'), mark('b', 'Lezhograd')] };
+    const out = rebaseDraft(base, edited, next);
+    assert.deepEqual(out.marks.map((m) => m.id), ['b']);
+});
+
+check("reroll never lands on another mark's name (final I2)", () => {
+    const edited = {
+        name: 'T',
+        facts: [{ text: 'From Zizhigrad to Lezhograd.' }],
+        marks: [
+            { id: 'a', kind: 'replaced', name: 'Zizhigrad', was: 'Kiev', spares: ['Lezhograd', 'Sovyetsk'] },
+            { id: 'b', kind: 'replaced', name: 'Lezhograd', was: 'Pskov', spares: [] },
+        ],
+    };
+    const { changes } = markEdit(edited, 'a', 'reroll');
+    assert.equal(changes.facts[0].text, 'From Sovyetsk to Lezhograd.');
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);
@@ -3944,3 +3971,4 @@ if (failures.length) {
     process.exit(1);
 }
 console.log(`ok ${passed} worlds checks passed`);
+

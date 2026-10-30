@@ -132,3 +132,49 @@ async def test_changing_the_drafts_languages_cleans_it_again(
     assert [m["kind"] for m in again["marks"]] == ["replaced"]
     assert again["languages"] == [{"language": lid, "role": "official"}]
     assert data["version"] == 1 and len(data["versions"]) == 1
+
+
+async def _languages(plugin, preview, rows):
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "draft_languages",
+            "draft_key": "d1",
+            "preview": preview,
+            "rows": rows,
+        }
+    )
+    await _drain(plugin)
+    return _last(plugin, "draft_languages")["data"]["preview"]
+
+
+async def test_a_name_kept_here_stays_kept_when_languages_change(
+    plugin, tmp_path, monkeypatch
+):
+    """Final I4: "Keep Novgorod here", then a Languages change: Novgorod
+    isn't replaced again."""
+
+    lid = await _setup(plugin, tmp_path, monkeypatch, "Tsardom of Moscavia")
+    preview = _last(plugin, "preview_thing")["data"]["preview"]
+    kept = {
+        **preview,
+        "facts": [{**preview["facts"][0], "text": "Fur caravans trade with Novgorod."}],
+        "marks": [],
+        "new_names": [],
+    }
+    again = await _languages(plugin, kept, [{"language": lid, "role": "spoken"}])
+    assert again["facts"][0]["text"] == "Fur caravans trade with Novgorod."
+    assert again["marks"] == []
+
+
+async def test_a_deleted_fact_stays_deleted_when_languages_change(
+    plugin, tmp_path, monkeypatch
+):
+    """Final I5: a fact the owner removed doesn't come back."""
+
+    lid = await _setup(plugin, tmp_path, monkeypatch, "Tsardom of Moscavia")
+    preview = _last(plugin, "preview_thing")["data"]["preview"]
+    extra = {**preview["facts"][0], "text": "The tsars hunt owls.", "removed": True}
+    copy = {**preview, "facts": [preview["facts"][0], extra]}
+    again = await _languages(plugin, copy, [{"language": lid, "role": "official"}])
+    assert [f["text"] for f in again["facts"]] == ["Fur caravans trade with Sovyetsk."]

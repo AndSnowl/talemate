@@ -443,6 +443,7 @@ from talemate.worldplay.cleaning import (
     clean_group_draft,
     clean_preview,
     inherited_rows,
+    owner_kept,
     unclean_preview,
 )
 from talemate.languages.entry import fields_of, language_of, used_words, word_uses
@@ -3220,20 +3221,40 @@ class WorldsPlugin(Plugin):
         new rows (`worldplay.cleaning`). The current version is replaced,
         not added to; answers `draft_languages` as `preview_thing` does."""
 
-        payload = DraftLanguagesPayload(**data)
+        # a fact the owner removed stays removed (final review I5): the
+        # client marks it `removed`, which a preview doesn't hold
+        raw = dict(data.get("preview") or {})
+        raw["facts"] = [
+            f
+            for f in raw.get("facts") or []
+            if not (isinstance(f, dict) and f.get("removed"))
+        ]
+        payload = DraftLanguagesPayload(**{**data, "preview": raw})
         world = self._require_world()
         key = payload.draft_key
         self._require_draft(key)
         self._refuse_while_nested(key)
         held = self._current_preview(key)
-        preview = payload.preview.model_copy(update={"stub_id": held.stub_id})
+        # what only the server vouches for stays the server's (F26)
+        preview = payload.preview.model_copy(
+            update={
+                "stub_id": held.stub_id,
+                "selected_names": held.selected_names,
+                "pick_names": held.pick_names,
+            }
+        )
+        keep = owner_kept(held, preview)
 
         async def recleaned() -> CreatePreview:
             fixed = _fixed_file(FIXED_CLEAN_ENV)
             client = None if fixed is not None else self._client()
             with _fixed_cleaning(fixed):
                 return await clean_preview(
-                    world, unclean_preview(preview), client, rows=payload.rows
+                    world,
+                    unclean_preview(preview),
+                    client,
+                    rows=payload.rows,
+                    keep=keep,
                 )
 
         def replace(cleaned: CreatePreview) -> dict:

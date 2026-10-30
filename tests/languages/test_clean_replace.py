@@ -259,3 +259,68 @@ def test_apply_mark_keeps_possessives():
     assert apply_mark(["Sovyetsk's walls; Sovyetskaya"], mark, "Lezhograd") == [
         "Lezhograd's walls; Sovyetskaya"
     ]
+
+
+# --- final review fixes --------------------------------------------------------
+
+
+async def test_a_replacement_never_reuses_a_name_the_draft_uses(world, moscavia):
+    """Final I1: Zizhigrad is already a new name in the draft: Novgorod
+    never becomes it (two places would merge)."""
+
+    for _ in range(5):
+        cleaned = await _clean(
+            world, moscavia, ["Trade with Novgorod and Zizhigrad."],
+            listed=[("Zizhigrad", "place")], replies=[{"names": []}, _picks(("Zizhigrad", ""))],
+        )  # fmt: skip
+        [mark] = [m for m in cleaned.marks if m.kind == "replaced"]
+        assert mark.name != "Zizhigrad" and "Zizhigrad" not in mark.spares
+
+
+async def test_no_spare_is_a_name_another_mark_took(world, moscavia):
+    """Final I2: a mark's spares never hold a name another mark has."""
+
+    lists = NameLists(real=["Kiev", "Pskov"])
+    cleaned = await _clean(
+        world, moscavia, ["Envoys from Kiev and Pskov, and Velkora."],
+        replies=[{"names": []}, _picks(("Zizhigrad", ""), ("Lezhograd", ""))], lists=lists,
+    )  # fmt: skip
+    taken = {m.name for m in cleaned.marks if m.kind == "replaced"}
+    for mark in cleaned.marks:
+        assert not taken & set(mark.spares), (mark.name, mark.spares)
+
+
+async def test_a_frame_word_stays_and_only_the_name_is_replaced(world, moscavia):
+    """Final I3: "Kingdom of" stays; France alone is replaced."""
+
+    cleaned = await _clean(
+        world, moscavia, ["The Kingdom of France trades furs."],
+        replies=[_picks(("Sovyetsk", ""))], lists=NameLists(real=["France"]),
+    )  # fmt: skip
+    assert cleaned.texts == ["The Kingdom of Sovyetsk trades furs."]
+
+
+async def test_a_listed_name_opening_a_sentence_is_found(world, moscavia):
+    """Final I7: a name on a list is caught even as a sentence's first
+    word (where unlisted capitalised words are skipped)."""
+
+    cleaned = await _clean(
+        world, moscavia, ["Novgorod is old."], replies=[_picks(("Sovyetsk", ""))]
+    )
+    assert cleaned.texts == ["Sovyetsk is old."]
+
+
+async def test_a_framed_stock_title_is_rewritten_whole(world, moscavia):
+    """Final I3's frame words don't cut a stock title: "Free Cities of the
+    Southern Coast" is rewritten as a whole."""
+
+    lists = NameLists(title=["Free Cities of the *"])
+    reply = {"titles": [{"n": 1, "title": "Free Provinces of {name}"}]}
+    cleaned = await _clean(
+        world, moscavia, ["The Free Cities of the Southern Coast trade salt."],
+        listed=[("Free Cities of the Southern Coast", "place")], replies=[reply], lists=lists,
+    )  # fmt: skip
+    [mark] = cleaned.marks
+    assert mark.was == "Free Cities of the Southern Coast"
+    assert cleaned.texts == [f"The {mark.name} trade salt."]
+    assert mark.name.startswith("Free Provinces of ")

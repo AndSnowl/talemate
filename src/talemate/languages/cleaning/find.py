@@ -29,6 +29,13 @@ KIND_WORDS = set(
     "river lake mountains mountain sea coast isles isle island forest marsh "
     "marshes steppe pass bay gulf hills hill valley plains strait straits".split()
 )
+# words framing a place's or group's name ("the Kingdom of X", "House
+# of X"): they stay as written and only X is judged (final review I3)
+FRAME_WORDS = set(
+    "kingdom kingdoms republic empire tsardom duchy grand principality realm "
+    "house city cities free province provinces county barony land lands "
+    "order church khanate dominion march marches state states league".split()
+)
 # a person's name stops at these: what follows is an epithet or an origin
 NAME_STOPS = {"the", "of", "from"}
 MIN_PART = 3
@@ -101,6 +108,14 @@ def _parts(full: str, kind: str) -> list[tuple[str, str]]:
     words = [w for w in words if w.lower() not in KIND_WORDS]
     while words and words[0].lower() in ("the", "of"):
         words = words[1:]
+    lowered = [w.lower() for w in words]
+    if "of" in lowered:
+        cut = lowered.index("of")
+        head = lowered[:cut]
+        if head and all(w in FRAME_WORDS or w in TITLE_WORDS for w in head):
+            words = words[cut + 1 :]
+            while words and words[0].lower() == "the":
+                words = words[1:]
     name = " ".join(words)
     return [(name, "whole")] if name else []
 
@@ -135,6 +150,7 @@ def spots(
     texts: list[str],
     listed: list[tuple[str, str]],
     protected: set[str],
+    lists: NameLists | None = None,
 ) -> list[Spot]:
     """The names to judge in `texts`: the `listed` ones (the draft's own
     name first, then its new names, with their kinds), and capitalised
@@ -179,6 +195,15 @@ def spots(
             ):
                 continue
             add(full, "place", False)
+        if lists is not None:
+            # a sentence's first word is skipped above ("In", "The"), but
+            # one on a list is still caught (final review I7)
+            for m in re.finditer(r"(?:^|[.!?]\s+)([A-Z][\w'’-]*)", text):
+                word = _strip_possessive(m.group(1))
+                if word.lower() not in listed_keys and (
+                    match(lists, "real", word) or match(lists, "cliche", word)
+                ):
+                    add(word, "place", False)
     return [s for s in found.values() if s.texts or s.full in dict(listed)]
 
 
