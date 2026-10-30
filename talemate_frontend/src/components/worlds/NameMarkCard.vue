@@ -39,12 +39,19 @@ export default {
         markId: { type: String, required: true },
     },
     emits: ['done'],
+    // a small draft's form ("+ Add facts", a group's "+ Add") gives its
+    // draft's key; else the card acts on the page draft
+    inject: { markScope: { default: null } },
     setup() {
         return { worlds: useWorldsStore() };
     },
     computed: {
+        smallKey() {
+            return this.markScope?.key || null;
+        },
         mark() {
-            return (this.worlds.draft?.edited?.marks || []).find((m) => m.id === this.markId) || null;
+            const edited = this.smallKey ? this.worlds.smallDrafts[this.smallKey]?.edited : this.worlds.draft?.edited;
+            return (edited?.marks || []).find((m) => m.id === this.markId) || null;
         },
         why() {
             return this.mark?.why ? this.mark.why.charAt(0).toUpperCase() + this.mark.why.slice(1) : '';
@@ -52,7 +59,7 @@ export default {
     },
     methods: {
         act(action) {
-            this.worlds.markAction(this.markId, action);
+            this.worlds.markAction(this.markId, action, this.smallKey);
             this.$emit('done');
         },
     },

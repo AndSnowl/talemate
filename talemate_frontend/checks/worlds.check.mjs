@@ -2476,6 +2476,8 @@ check('a group\'s "+ Add": drafted rows, edited, the ticked ones accepted', () =
         action: 'accept_group_add',
         thing_id: 'v',
         rows: [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }],
+        // its cleaned names (languages 4a): none here
+        marks: [],
         draft_key: key,
     };
     assert.deepEqual(sent.at(-1), accept);

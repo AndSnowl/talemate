@@ -16,15 +16,26 @@ export function swapName(text, from, to) {
     return (text || '').replace(wordPattern(from), () => to);
 }
 
-// The draft's texts with `from` swapped for `to`: its name, facts, summary
-// and "For other pages" rows.
+// The draft's texts with `from` swapped for `to`: those it has of a page
+// draft's name, facts, summary and "For other pages" rows, a fact draft's
+// facts, a group draft's rows (each one's name and line).
 function swapAll(edited, from, to) {
-    const changes = { name: swapName(edited.name, from, to) };
-    changes.facts = (edited.facts || []).map((fact) => ({ ...fact, text: swapName(fact.text, from, to) }));
+    const changes = {};
+    if (edited.name != null) {
+        changes.name = swapName(edited.name, from, to);
+    }
+    if (edited.facts) {
+        changes.facts = edited.facts.map((fact) => ({ ...fact, text: swapName(fact.text, from, to) }));
+    }
     if (edited.summary != null) {
         changes.summary = swapName(edited.summary, from, to);
     }
-    changes.elsewhere = (edited.elsewhere || []).map((row) => ({ ...row, text: swapName(row.text, from, to) }));
+    if (edited.elsewhere) {
+        changes.elsewhere = edited.elsewhere.map((row) => ({ ...row, text: swapName(row.text, from, to) }));
+    }
+    if (edited.rows) {
+        changes.rows = edited.rows.map((row) => ({ ...row, name: swapName(row.name, from, to), line: swapName(row.line, from, to) }));
+    }
     return changes;
 }
 
@@ -88,7 +99,7 @@ export function markEdit(edited, markId, action) {
         return {
             changes: {
                 ...swapAll(edited, from, next),
-                new_names: renameRows(edited.new_names, from, next, add),
+                ...(edited.new_names ? { new_names: renameRows(edited.new_names, from, next, add) } : {}),
                 marks: marks.map((m) => (m.id === markId ? changed : m)),
             },
             keep: null,
@@ -98,7 +109,7 @@ export function markEdit(edited, markId, action) {
         return {
             changes: {
                 ...swapAll(edited, mark.name, mark.was),
-                new_names: renameRows(edited.new_names, mark.name, mark.was),
+                ...(edited.new_names ? { new_names: renameRows(edited.new_names, mark.name, mark.was) } : {}),
                 marks: others,
             },
             keep: action === 'never' ? mark.was : null,

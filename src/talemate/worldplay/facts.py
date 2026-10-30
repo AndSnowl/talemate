@@ -41,6 +41,7 @@ from typing import Any, NamedTuple
 import structlog
 from pydantic import BaseModel, Field
 
+from talemate.languages.cleaning.marks import Mark
 from talemate.prompts import Prompt
 from talemate.world import entries
 from talemate.world.dates import WorldDate
@@ -125,6 +126,8 @@ class FactDraft(BaseModel):
     facts: list[PreviewFact] = Field(default_factory=list)
     new_names: list[DraftName] = Field(default_factory=list)
     move_here: list[MoveHereFact] = Field(default_factory=list)
+    # the names cleaning replaced or found suspect (languages 4a)
+    marks: list[Mark] = Field(default_factory=list)
 
 
 class DraftAddition(NamedTuple):
@@ -543,4 +546,10 @@ def _write_facts(
         )
         if not (written or moved or removed):
             raise _NothingWritten()
+        if draft.marks:
+            # languages 4a: each new name cleaning gave it, saved to its
+            # language as a word
+            from talemate.languages.cleaning.replace import save_mark_words
+
+            save_mark_words(rev, view, draft.marks, list(texts))
     return written, moved, removed

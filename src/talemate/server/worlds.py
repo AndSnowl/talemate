@@ -437,7 +437,14 @@ from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
 from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.cleaning import model as clean_model
-from talemate.worldplay.cleaning import clean_preview, unclean_preview
+from talemate.languages.cleaning.marks import Mark
+from talemate.worldplay.cleaning import (
+    clean_fact_draft,
+    clean_group_draft,
+    clean_preview,
+    inherited_rows,
+    unclean_preview,
+)
 from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
@@ -509,7 +516,6 @@ from talemate.worldplay.create import (
 from talemate.worldplay.create import _new_names as listed_stub_names
 from talemate.worldplay.decide import Verdict
 from talemate.worldplay.facts import (
-    DraftAddition,
     DraftName,
     FactDraft,
     accept_facts,
@@ -1079,6 +1085,8 @@ class GroupAddPayload(pydantic.BaseModel):
 class AcceptGroupAddPayload(pydantic.BaseModel):
     thing_id: str
     rows: list[GroupAddRow]
+    # the draft's cleaned names (languages 4a): saved as words on accept
+    marks: list[Mark] = []
     # the small draft accepted: dropped once it's written
     draft_key: str | None = None
 
@@ -4231,18 +4239,8 @@ class WorldsPlugin(Plugin):
         key = group_key(payload.thing_id, payload.tag)
         seq = self._ask_small(key, payload.regenerate)
 
-        def drafted(rows: list[GroupAddRow]) -> dict:
-            draft = GroupAddDraft(
-                thing_id=payload.thing_id,
-                tag=payload.tag,
-                prompt=payload.prompt,
-                show_under=payload.show_under,
-                rows=rows,
-            )
-            return self._small_add(world, key, draft)
-
-        self._spawn(
-            group_add(
+        async def drafting() -> GroupAddDraft:
+            rows = await group_add(
                 world,
                 payload.thing_id,
                 payload.tag,
@@ -4250,7 +4248,23 @@ class WorldsPlugin(Plugin):
                 client,
                 reply=reply,
                 show_under=payload.show_under,
-            ),
+            )
+            draft = GroupAddDraft(
+                thing_id=payload.thing_id,
+                tag=payload.tag,
+                prompt=payload.prompt,
+                show_under=payload.show_under,
+                rows=rows,
+            )
+            # languages 4a: its names cleaned
+            with _fixed_cleaning(_fixed_file(FIXED_CLEAN_ENV)):
+                return await clean_group_draft(world, draft, client)
+
+        def drafted(draft: GroupAddDraft) -> dict:
+            return self._small_add(world, key, draft)
+
+        self._spawn(
+            drafting(),
             self._small_done(
                 key,
                 seq,
@@ -4283,7 +4297,9 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         self._require_entry(world.view(), payload.thing_id)
         notes: list[str] = []
-        thing_ids = accept_group_add(world, payload.thing_id, payload.rows, notes=notes)
+        thing_ids = accept_group_add(
+            world, payload.thing_id, payload.rows, notes=notes, marks=payload.marks
+        )
         if payload.draft_key is not None:
             self._small.discard(payload.draft_key)
         self._reply(
@@ -4359,6 +4375,7 @@ class WorldsPlugin(Plugin):
                 "thing_id": draft.thing_id,
                 "tag": draft.tag,
                 "rows": [row.model_dump(mode="json") for row in draft.rows],
+                "marks": [m.model_dump(mode="json") for m in draft.marks],
             }
             versions = [
                 {"version": number, "prompt": version.prompt}
@@ -4426,13 +4443,12 @@ class WorldsPlugin(Plugin):
             # a new version of the held one; `write_nested_facts` puts the
             # ticked facts into the page draft
             preview = self._current_preview(key)
-            adding = draft_facts_for(
+            asked = draft_facts_for(
                 world, preview, payload.prompt, client, year=year, reply=reply
             )
-            small = nested_key(key)
-            seq = self._ask_small(small, payload.regenerate)
 
-            def nested(added: DraftAddition) -> dict:
+            async def adding_cleaned() -> FactDraft:
+                added = await asked
                 draft = FactDraft(
                     thing_id=None,
                     prompt=payload.prompt,
@@ -4440,6 +4456,16 @@ class WorldsPlugin(Plugin):
                     facts=added.facts,
                     new_names=[DraftName(**n.model_dump()) for n in added.new_names],
                 )
+                # cleaned in the page draft's languages (languages 4a)
+                rows = preview.languages or inherited_rows(world.view(), preview)
+                with _fixed_cleaning(_fixed_file(FIXED_CLEAN_ENV)):
+                    return await clean_fact_draft(world, draft, client, rows=rows)
+
+            adding = adding_cleaned()
+            small = nested_key(key)
+            seq = self._ask_small(small, payload.regenerate)
+
+            def nested(draft: FactDraft) -> dict:
                 return self._small_add(world, small, draft)
 
             answer = self._small_done(
@@ -4486,9 +4512,16 @@ class WorldsPlugin(Plugin):
             self._spawn(adding, on_done)
             return
         self._require_entry(world.view(), payload.thing_id)
-        drafting = draft_facts(
+        asked_facts = draft_facts(
             world, payload.thing_id, payload.prompt, client, year=year, reply=reply
         )
+
+        async def drafting_cleaned() -> FactDraft:
+            draft = await asked_facts
+            with _fixed_cleaning(_fixed_file(FIXED_CLEAN_ENV)):
+                return await clean_fact_draft(world, draft, client)
+
+        drafting = drafting_cleaned()
         # held as the page's small draft (`facts_key`): a fresh one, or
         # with `regenerate` a new version of the held one
         small = facts_key(payload.thing_id)
@@ -4634,6 +4667,10 @@ class WorldsPlugin(Plugin):
                 joining.append(fact)
         copy = preview.model_copy(deep=True)
         copy.facts.extend(joining)
+        # its cleaned names' marks join the page draft's (languages 4a)
+        copy.marks.extend(
+            m for m in draft.marks if m.id not in {k.id for k in copy.marks}
+        )
         copy.new_names.extend(
             self._nested_names(copy, [row for row in draft.new_names if row.ticked])
         )

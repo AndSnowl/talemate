@@ -158,6 +158,7 @@ import PreviewStubs from './PreviewStubs.vue';
 import SuggestionBar from './SuggestionBar.vue';
 import SuggestionRow from './SuggestionRow.vue';
 import { changeNewName, factDraftSegments, repeatChoice, settleRepeat, tickFact } from './draftPage.js';
+import { markSegments } from './nameMarks.js';
 import { factsKey, smallVersionRows } from './smallDrafts.js';
 
 // "+ Add facts…" and (`event`) "+ Add event…" on the entry page: a prompt
@@ -185,6 +186,11 @@ import { factsKey, smallVersionRows } from './smallDrafts.js';
 export default {
     name: 'EntryAddFacts',
     components: { FactLine, NameHighlightInput, PreviewRepeats, PreviewStubs, SuggestionBar, SuggestionRow },
+    // its cleaned names' cards act on this draft (languages 4a)
+    provide() {
+        const form = this;
+        return { markScope: { get key() { return form.draft?.key || null; } } };
+    },
     props: {
         thing: { type: Object, required: true },
         event: { type: Boolean, default: false },
@@ -304,9 +310,18 @@ export default {
         // a row as the fact line takes it: linked as it would be, its new
         // names in the stub colour while ticked
         lineOf(row) {
+            // a fact a name's card changed (languages 4a) is drawn from
+            // its words as the owner has them
+            const edited = this.draft?.edited;
+            const fact = edited?.facts?.[row.index];
+            const base = this.draft?.base?.facts?.[row.index];
+            const changed = !!fact && !!base && fact.text !== base.text;
+            const segments = changed
+                ? factDraftSegments([{ text: fact.text, ref: null, stub: false }], edited?.new_names)
+                : factDraftSegments(row.segments, edited?.new_names);
             return {
-                text: row.rendered,
-                segments: factDraftSegments(row.segments, this.draft?.edited?.new_names),
+                text: changed ? fact.text : row.rendered,
+                segments: markSegments(segments, edited?.marks),
                 category: row.category,
                 valid_from: row.since,
                 valid_until: null,

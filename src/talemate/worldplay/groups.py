@@ -50,6 +50,7 @@ from typing import Any
 import structlog
 from pydantic import BaseModel
 
+from talemate.languages.cleaning.marks import Mark
 from talemate.prompts import Prompt
 from talemate.world import entries
 from talemate.world.filing import (
@@ -158,6 +159,8 @@ class GroupAddDraft(BaseModel):
     prompt: str
     show_under: bool = False
     rows: list[GroupAddRow]
+    # the names cleaning replaced or found suspect (languages 4a)
+    marks: list[Mark] = []
 
 
 # --- synopsis ---------------------------------------------------------------
@@ -615,6 +618,7 @@ def accept_group_add(
     rows: list[GroupAddRow],
     *,
     notes: list[str] | None = None,
+    marks: list[Mark] | None = None,
 ) -> list[str]:
     """Write `rows`' ticked ones, in one revision, each filed in
     `thing_id` with its own `tag`, its `line` its first fact, its text
@@ -711,5 +715,14 @@ def accept_group_add(
             if not has_summary:
                 marked_summary.add(entry_id)
             written.append(entry_id)
+        if marks:
+            # languages 4a: each new name cleaning gave a written row,
+            # saved to its language as a word
+            from talemate.languages.cleaning.replace import save_mark_words
+
+            kept = [r for r in rows if r.ticked]
+            save_mark_words(
+                rev, view, marks, [t for r in kept for t in (r.name, r.line)]
+            )
     log.info("groups.accept_add", thing_id=thing_id, written=len(written))
     return written

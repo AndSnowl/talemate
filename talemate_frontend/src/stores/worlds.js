@@ -1266,12 +1266,19 @@ export const useWorldsStore = defineStore('worlds', {
 
         // languages 4a: a mark's action on the open draft (`nameMarks.
         // markEdit`), and the name kept from now on, if it says so
-        markAction(markId, action) {
-            const result = markEdit(this.draft?.edited, markId, action);
+        // (`smallKey`: on that small draft, "+ Add facts" or a group's
+        // "+ Add", instead of the page draft)
+        markAction(markId, action, smallKey = null) {
+            const edited = smallKey ? this.smallDrafts[smallKey]?.edited : this.draft?.edited;
+            const result = markEdit(edited, markId, action);
             if (!result) {
                 return;
             }
-            this.editDraft(result.changes);
+            if (smallKey) {
+                this.editSmall(smallKey, result.changes);
+            } else {
+                this.editDraft(result.changes);
+            }
             if (result.keep) {
                 this.nameListEdit('add', 'keep', result.keep);
             }
@@ -1728,7 +1735,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true } };
             if (slot.kind === 'group') {
                 this.pending = { ...this.pending, accept_group_add: true };
-                this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, draft_key: key });
+                this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, marks: slot.edited.marks || [], draft_key: key });
             } else if (slot.kind === 'nested') {
                 this.pending = { ...this.pending, write_nested_facts: true };
                 this.request('write_nested_facts', { draft_key: pageKeyOf(key), draft: slot.edited });
@@ -1757,7 +1764,7 @@ export const useWorldsStore = defineStore('worlds', {
                 return;
             }
             const { version, versions } = data;
-            const base = smallKind(key) === 'group' ? { thing_id: data.thing_id, tag: data.tag, rows: data.rows } : data.draft;
+            const base = smallKind(key) === 'group' ? { thing_id: data.thing_id, tag: data.tag, rows: data.rows, marks: data.marks || [] } : data.draft;
             if (how === 'asked' && slot.version != null) {
                 // the open version's edits kept; the oldest version
                 // dropped (five kept): the ones kept move down with it

@@ -6,6 +6,7 @@ languages."""
 
 from __future__ import annotations
 
+from talemate.languages.cleaning import model as clean_model
 from talemate.languages.cleaning.languages import language_rows, named_languages
 from talemate.languages.cleaning.lists import effective
 from talemate.languages.cleaning.replace import _swap, clean_texts
@@ -13,12 +14,20 @@ from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import languages_for
 from talemate.world.store import World
 from talemate.worldplay.create import CreatePreview
+from talemate.worldplay.facts import DraftName, FactDraft
+from talemate.worldplay.groups import GroupAddDraft
 from talemate.worldplay.links import NewName
 
-__all__ = ["clean_preview", "unclean_preview"]
+__all__ = [
+    "clean_fact_draft",
+    "clean_group_draft",
+    "clean_preview",
+    "inherited_rows",
+    "unclean_preview",
+]
 
 
-def _inherited(view, preview: CreatePreview) -> list:
+def inherited_rows(view, preview: CreatePreview) -> list:
     """The languages of where the draft is filed (ticked In rows), or of
     the stub it expands."""
 
@@ -59,6 +68,38 @@ def _with_texts(preview: CreatePreview, texts: list[str]) -> dict:
     }
 
 
+def _renamed(new_names: list, marks: list, own_name: str, make) -> list:
+    """`new_names` with each replaced mark's old name swapped for its new
+    one (a row so renamed remembers the name it replaced), plus a row
+    `make(mark)` for each replacement no row and not the entry's own name
+    held."""
+
+    replaced = [m for m in marks if m.kind == "replaced"]
+    out = []
+    covered: set[str] = set()
+    for n in new_names:
+        name = n.name
+        for mark in replaced:
+            swapped = _swap([name], mark.was, mark.name)[0]
+            if swapped != name:
+                covered.add(mark.id)
+                name = swapped
+        if name != n.name:
+            n = n.model_copy(
+                update={
+                    "name": name,
+                    "replaced": n.name,
+                    "written": [w for w in n.written if w != n.name],
+                }
+            )
+        out.append(n)
+    for mark in replaced:
+        if mark.id in covered or _swap([own_name], mark.was, mark.name)[0] != own_name:
+            continue
+        out.append(make(mark))
+    return out
+
+
 async def clean_preview(
     world: World, preview: CreatePreview, client, rows: list[dict] | None = None
 ) -> CreatePreview:
@@ -74,46 +115,21 @@ async def clean_preview(
     if rows is None:
         ids = named_languages(view, preview.prompt)
         rows = await language_rows(client, view, preview.prompt, ids) if ids else []
-    used = rows or _inherited(view, preview)
+    used = rows or inherited_rows(view, preview)
     listed = [(preview.name, preview.kind)] + [
         (n.name, n.kind) for n in preview.new_names
     ]
     cleaned = await clean_texts(
         client, view, _texts(preview), listed, preview.prompt, used, effective(world)
     )
-    replaced = [m for m in cleaned.marks if m.kind == "replaced"]
-    new_names = []
-    covered: set[str] = set()
-    for n in preview.new_names:
-        name = n.name
-        for mark in replaced:
-            swapped = _swap([name], mark.was, mark.name)[0]
-            if swapped != name:
-                covered.add(mark.id)
-                name = swapped
-        if name != n.name:
-            n = n.model_copy(
-                update={
-                    "name": name,
-                    "replaced": n.name,
-                    "written": [w for w in n.written if w != n.name],
-                }
-            )
-        new_names.append(n)
-    for mark in replaced:
-        if (
-            mark.id in covered
-            or _swap([preview.name], mark.was, mark.name)[0] != preview.name
-        ):
-            continue
-        new_names.append(
-            NewName(
-                name=mark.name,
-                kind=mark.entry_kind,
-                replaced=mark.was,
-                from_cleaning=True,
-            )
-        )
+    new_names = _renamed(
+        preview.new_names,
+        cleaned.marks,
+        preview.name,
+        lambda mark: NewName(
+            name=mark.name, kind=mark.entry_kind, replaced=mark.was, from_cleaning=True
+        ),
+    )
     shown = (
         [{**dict(r), "from_words": True} for r in rows]
         if from_words
@@ -145,3 +161,87 @@ def unclean_preview(preview: CreatePreview) -> CreatePreview:
     return preview.model_copy(
         update={**_with_texts(preview, texts), "new_names": new_names, "marks": []}
     )
+
+
+async def clean_fact_draft(
+    world: World, draft: FactDraft, client, rows: list | None = None
+) -> FactDraft:
+    """A "+ Add facts" or "+ Add event" draft cleaned. `rows` are the
+    languages to use (a page draft's, for its nested draft); else the
+    entry's own or inherited ones. Languages the owner's words name come
+    first. A world with no languages, or no model and no fixed replies,
+    leaves it alone."""
+
+    view = world.view()
+    if not all_languages(view) or (
+        client is None and clean_model.fixed_replies is None
+    ):
+        return draft
+    if rows is None:
+        rows = languages_for(view, draft.thing_id) if draft.thing_id else []
+    named = [
+        {"language": lid, "role": "spoken"}
+        for lid in named_languages(view, draft.prompt)
+    ]
+    used = named + list(rows) if named else list(rows)
+    name = (view.name_of(draft.thing_id) or "") if draft.thing_id else ""
+    cleaned = await clean_texts(
+        client,
+        view,
+        [f.text for f in draft.facts],
+        [(n.name, n.kind) for n in draft.new_names],
+        draft.prompt,
+        used,
+        effective(world),
+    )
+    facts = [
+        f.model_copy(update={"text": t}) for f, t in zip(draft.facts, cleaned.texts)
+    ]
+    new_names = _renamed(
+        draft.new_names,
+        cleaned.marks,
+        name,
+        lambda mark: DraftName(
+            name=mark.name, kind=mark.entry_kind, replaced=mark.was, from_cleaning=True
+        ),
+    )
+    return draft.model_copy(
+        update={"facts": facts, "new_names": new_names, "marks": cleaned.marks}
+    )
+
+
+async def clean_group_draft(
+    world: World, draft: GroupAddDraft, client
+) -> GroupAddDraft:
+    """A group's "+ Add" draft cleaned: each row's name and line, in the
+    page's languages (or ones the owner's words name). Left alone as
+    `clean_fact_draft` leaves a draft alone."""
+
+    view = world.view()
+    if not all_languages(view) or (
+        client is None and clean_model.fixed_replies is None
+    ):
+        return draft
+    rows = languages_for(view, draft.thing_id)
+    named = [
+        {"language": lid, "role": "spoken"}
+        for lid in named_languages(view, draft.prompt)
+    ]
+    used = named + list(rows) if named else list(rows)
+    texts = [t for row in draft.rows for t in (row.name, row.line)]
+    cleaned = await clean_texts(
+        client,
+        view,
+        texts,
+        [(row.name, row.kind) for row in draft.rows],
+        draft.prompt,
+        used,
+        effective(world),
+    )
+    rows_out = [
+        row.model_copy(
+            update={"name": cleaned.texts[2 * i], "line": cleaned.texts[2 * i + 1]}
+        )
+        for i, row in enumerate(draft.rows)
+    ]
+    return draft.model_copy(update={"rows": rows_out, "marks": cleaned.marks})

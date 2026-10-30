@@ -205,3 +205,59 @@ def test_accept_keeps_only_the_new_names(app, page, fixed_preview, fixed_clean):
     expect(thing.get_by_test_id("language-words")).to_contain_text(
         "Sovyetsk", timeout=TIMEOUT_MS
     )
+
+
+# --- Add facts (Task 8) -------------------------------------------------------
+
+
+def test_add_facts_shows_marks_and_the_card(app, page, fixed_facts, fixed_clean):
+    name = _world_name("Clean facts")
+    seeded = seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Moscavian",
+                "fields": {"name": "Moscavian", **fields_of(MOSCAVIAN)},
+            },
+            {"kind": "place", "name": "Sorau"},
+        ],
+    )
+    from talemate.world.store import Source, World
+
+    world = World.open(seeded.path)
+    with world.revision(Source.manual(note="rows")) as rev:
+        rev.set_field(
+            seeded.things["Sorau"],
+            "languages",
+            [{"language": seeded.things["Moscavian"], "role": "official"}],
+            None,
+        )
+    world.close()
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Sorau")
+    fixed_facts(
+        {
+            "facts": [
+                {"category": "general", "text": "Its traders winter in Novgorod."}
+            ],
+            "names": [],
+        }
+    )
+    fixed_clean(
+        {
+            "name-flags": {"names": []},
+            "name-picks": {"picks": [{"n": 1, "pick": "Sovyetsk", "meaning": ""}]},
+        }
+    )
+    thing.get_by_test_id("add-facts").click()
+    thing.get_by_test_id("add-facts-form").get_by_label("What to add").fill("its trade")
+    thing.get_by_test_id("add-draft").click()
+    draft = thing.get_by_test_id("fact-draft")
+    expect(draft).to_contain_text("Sovyetsk", timeout=TIMEOUT_MS)
+    card = _card(page, draft, "Sovyetsk")
+    card.get_by_test_id("mark-keep-here").click()
+    expect(draft).to_contain_text("Its traders winter in Novgorod.", timeout=TIMEOUT_MS)
