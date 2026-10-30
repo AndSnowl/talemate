@@ -188,6 +188,7 @@ from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
 from talemate.worldplay.decide import Verdict, preview_label, same_thing
 from talemate.worldplay.held import held_text
+from talemate.languages.cleaning.marks import Mark
 from talemate.worldplay.links import (
     FALLBACK_KIND,
     NameFiling,
@@ -509,6 +510,11 @@ class CreatePreview(BaseModel):
     # (ruling F26): only these link where they're written without a
     # capital; the router keeps only those its own copy of the draft holds
     selected_names: list[str] = Field(default_factory=list)
+    # the draft's Languages rows (languages 4a): found from the owner's
+    # words (`"from_words": true`) or the owner's own; written on accept
+    languages: list[dict] = Field(default_factory=list)
+    # the names cleaning replaced or found suspect (`cleaning.marks.Mark`)
+    marks: list[Mark] = Field(default_factory=list)
     # words the owner linked on the draft with "add as another name" (P4):
     # accept teaches each its pick's target as a common other name; the
     # router keeps only those its own copy of the draft holds
@@ -3300,9 +3306,9 @@ async def preview_thing(
         as_new=treated_as_new,
     )
 
-    prose = await _preview_prose(
-        view, calendar, kind, name, facts, fields, rows, sources, client
-    )
+    # the description is written on accept, not in the draft (languages
+    # 4a: the owner always edits a draft, which would leave it stale)
+    prose: dict[str, str] = {}
 
     # the model's verdict on the top candidate, a hint (ruling C2): only
     # when both sides have facts, after the preview's own calls
@@ -3339,7 +3345,7 @@ async def preview_thing(
         same_as=len(same_as),
         verdict=verdict is not None,
     )
-    return CreatePreview(
+    preview = CreatePreview(
         kind=kind,
         prompt=prompt,
         fields=fields,
@@ -3364,6 +3370,9 @@ async def preview_thing(
         file_into=file_into,
         move_here=move_here,
     )
+    from talemate.worldplay.cleaning import clean_preview
+
+    return await clean_preview(world, preview, client)
 
 
 _TAG_RE = re.compile(r'"tag"\s*:\s*"((?:[^"\\]|\\.)*)"')

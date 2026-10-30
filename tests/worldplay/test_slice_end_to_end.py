@@ -185,7 +185,7 @@ async def test_slice_end_to_end(world, loadable):
 
     # 1. create Maren from a prompt, with a lost eye from 314
     async with MockClientContext():
-        _queue(CREATE_REPLY, PROSE_NOW, PERSONALITY)
+        _queue(CREATE_REPLY)
         preview = await preview_thing(
             world,
             "character",

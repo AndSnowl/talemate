@@ -10,7 +10,7 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.languages.check import _real_words, stem
-from talemate.languages.cleaning import ask
+from talemate.languages.cleaning.model import ask
 from talemate.languages.cleaning.languages import named_languages
 from talemate.languages.cleaning.lists import NameLists, match
 from talemate.languages.generator import name_fits

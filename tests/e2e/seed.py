@@ -431,6 +431,8 @@ FIXED_GROUP_SYNOPSIS_FILE = "e2e-fixed-group-synopsis.json"
 FIXED_GROUP_ADD_FILE = "e2e-fixed-group-add.json"
 # language naming (definitions and picks, languages 3a)
 FIXED_LANGUAGE_FILE = "e2e-fixed-language.json"
+# canned replies for cleaning a draft's names (languages 4a)
+FIXED_CLEAN_FILE = "e2e-fixed-clean.json"
 
 
 def set_fixed_reply(root: Path, file_name: str, reply: dict) -> None:

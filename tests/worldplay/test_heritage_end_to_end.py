@@ -67,7 +67,6 @@ SPECIES_REPLY = json.dumps(
         ],
     }
 )
-SPECIES_PROSE = "The Owl-folk are winged, taloned and yellow-eyed."
 
 PLUMAGE = "Snowy owl-folk have white plumage flecked with black."
 RACE_REPLY = json.dumps(
@@ -77,7 +76,6 @@ RACE_REPLY = json.dumps(
         "no_longer_true": [],
     }
 )
-RACE_PROSE = "The Snowy are white-plumed owl-folk."
 
 BLACK_EYES = "Eira's eyes are a deep, glossy black."
 
@@ -104,9 +102,6 @@ def _character_reply(yellow_eyes_label: str) -> str:
         }
     )
 
-
-CHARACTER_PROSE = "Eira is a Snowy courier, white-plumed, with black eyes."
-CHARACTER_PERSONALITY = "Eira is dry-humoured and curious."
 
 # added after Eira's prose was written: it reaches her sheet as a since
 # line, prefixed with the species' name
@@ -298,9 +293,7 @@ async def test_heritage_end_to_end(plugin, client, loadable):
 
     # 1. the species, its race, and a Snowy character whose own black
     # eyes override the species' yellow ones
-    owl_folk = await _create(
-        plugin, "species", "owl people", {}, SPECIES_REPLY, SPECIES_PROSE
-    )
+    owl_folk = await _create(plugin, "species", "owl people", {}, SPECIES_REPLY)
     assert owl_folk["numbers"]["lifespan"] == 60
     assert owl_folk["numbers"]["adult_age"] == 16
     snowy = await _create(
@@ -309,7 +302,6 @@ async def test_heritage_end_to_end(plugin, client, loadable):
         "white owl-folk of the north",
         {"species": owl_folk["id"]},
         RACE_REPLY,
-        RACE_PROSE,
     )
     yellow_eyes = next(
         f["fact_id"] for f in owl_folk["facts"] if f["text"] == YELLOW_EYES
@@ -330,8 +322,6 @@ async def test_heritage_end_to_end(plugin, client, loadable):
         "a Snowy courier",
         fields,
         _character_reply(label),
-        CHARACTER_PROSE,
-        CHARACTER_PERSONALITY,
     )
     eyes = next(f for f in eira["facts"] if f["text"] == BLACK_EYES)
     assert eyes["overrides"] == [yellow_eyes]
@@ -451,8 +441,8 @@ async def test_heritage_end_to_end(plugin, client, loadable):
         "creative_instruction_3072": 3,
         # the scene's plan
         "creative_instruction_2048": 1,
-        # one section each for the species and race, two for Eira at
-        # creation, the species after the ruff, Eira's two at 499
-        "analyze": 7,
+        # none at creation (a draft writes no prose): the species after
+        # the ruff, Eira's two at 499
+        "analyze": 3,
         "conversation": 3,
     }

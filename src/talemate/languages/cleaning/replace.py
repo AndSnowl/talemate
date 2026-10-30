@@ -7,12 +7,10 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Literal
-
 import structlog
 from pydantic import BaseModel
 
-from talemate.languages.cleaning import ask
+from talemate.languages.cleaning.model import ask
 from talemate.languages.cleaning.find import (
     PERSON_KINDS,
     Spot,
@@ -23,6 +21,7 @@ from talemate.languages.cleaning.find import (
 )
 from talemate.languages.cleaning.languages import named_languages
 from talemate.languages.cleaning.lists import NameLists
+from talemate.languages.cleaning.marks import Mark
 from talemate.languages.entry import language_of
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.models import Language
@@ -36,19 +35,6 @@ log = structlog.get_logger("talemate.languages.cleaning")
 
 CANDIDATES = 6
 _SLOT = re.compile(r"\{name\}", re.I)
-
-
-class Mark(BaseModel):
-    id: str
-    kind: Literal["replaced", "suspect"]
-    name: str
-    was: str
-    why: str
-    meaning: str = ""
-    language_id: str | None = None
-    # the other rolled names: Reroll, and Replace it on a suspect one
-    spares: list[str] = []
-    entry_kind: str = "place"
 
 
 class Cleaned(BaseModel):

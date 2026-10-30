@@ -16,7 +16,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.filing import filings_of
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
-from talemate.worldplay import create, decide, prose_gen
+from talemate.worldplay import create, decide
 from talemate.worldplay.create import accept_preview, preview_thing
 from talemate.worldplay.decide import Verdict
 
@@ -74,10 +74,6 @@ def _queue(*responses: str) -> None:
         client_responses.get().append(response)
 
 
-def _prose_replies(kind: str) -> list[str]:
-    return [f"Prose {n}." for n, _ in enumerate(prose_gen.sections_for(kind))]
-
-
 def _make(
     world, *, stub: bool = True, ashenmere_facts: bool = True, bare_kind="lore"
 ) -> dict:
@@ -119,7 +115,7 @@ def _make(
 async def _caves_preview(world, ids, *, verdict: str | None = VERDICT_SAME):
     client = MockClient("test")
     async with MockClientContext():
-        _queue(CREATE_CAVES, *_prose_replies("place"))
+        _queue(CREATE_CAVES)
         if verdict is not None:
             _queue(verdict)
         preview = await preview_thing(
@@ -165,7 +161,7 @@ async def test_preview_offers_same_candidate_with_verdict(world):
     assert offer.has_facts
     assert offer.line.startswith("Ashenmere (place): A vast network")
 
-    # one verdict call, at `analyze`, after the preview's own calls
+    # one verdict call, at `analyze`, after the preview's own call
     calls = _analyze_calls(client)
     assert len(calls) == 1 and client.prompt_history[-1] is calls[0]
     prompt = str(calls[0]["prompt"])
@@ -396,7 +392,7 @@ async def test_at_most_five_candidates(world):
     )
     client = MockClient("test")
     async with MockClientContext():
-        _queue(reply, *_prose_replies("place"))
+        _queue(reply)
         preview = await preview_thing(world, "place", "Greyholm, a town", {}, client)
 
     assert len(preview.same_as) == 5
@@ -601,7 +597,7 @@ async def test_treated_as_new_names_get_no_candidates(world):
     ids = _make(world, stub=False)
     client = MockClient("test")
     async with MockClientContext():
-        _queue(CREATE_CAVES, *_prose_replies("place"), VERDICT_SAME)
+        _queue(CREATE_CAVES, VERDICT_SAME)
         preview = await preview_thing(
             world,
             "place",

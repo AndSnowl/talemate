@@ -73,7 +73,6 @@ SPECIES_REPLY = json.dumps(
         "names": [{"name": "Tsardom of Moscavia", "kind": "place", "aka": []}],
     }
 )
-SPECIES_PROSE = "The Owl-folk are winged and crepuscular."
 
 KALMARA_FACT = "Its capital, Kalmara, holds court only at dusk."
 PERCHES = "Moscavian law requires every doorway to be round, for wingspans."
@@ -92,7 +91,6 @@ TSARDOM_REPLY = json.dumps(
         ],
     }
 )
-TSARDOM_PROSE = "Moscavia is a dusk realm of round doors."
 
 ALDRIC_FACT = "Vasha's brother Aldric keeps the ferry at Kalmara."
 VASHA_REPLY = json.dumps(
@@ -108,7 +106,6 @@ VASHA_REPLY = json.dumps(
         ],
     }
 )
-VASHA_PROSE = "Vasha is an owl-folk courier."
 
 TOWN_PROMPT = "a river town where Moscavian Owls trade with barge crews"
 TOWN_FACT = "Moscavian Owls trade amber here at dusk with the barge crews."
@@ -120,7 +117,6 @@ TOWN_REPLY = json.dumps(
         "names": [{"name": "Moscavian Owls", "kind": "species", "aka": []}],
     }
 )
-TOWN_PROSE = "Barrowford is a river town of amber traders."
 
 SETUP_REPLY = json.dumps(
     {
@@ -135,7 +131,7 @@ SETUP_REPLY = json.dumps(
     }
 )
 # the stub previews at planning, in setup order: Aldric (a character), then
-# Kalmara (the place); each its create reply, then its prose
+# Kalmara (the place); each its create reply (a draft writes no prose)
 ALDRIC_PREVIEW = json.dumps(
     {
         "name": "Aldric",
@@ -143,7 +139,6 @@ ALDRIC_PREVIEW = json.dumps(
         "names": [{"name": "Kalmara", "kind": "place", "aka": []}],
     }
 )
-ALDRIC_PROSE = "Aldric is a weathered owl-folk ferryman."
 KALMARA_PREVIEW = json.dumps(
     {
         "name": "Kalmara",
@@ -156,7 +151,6 @@ KALMARA_PREVIEW = json.dumps(
         "names": [],
     }
 )
-KALMARA_PROSE = "Kalmara is a capital of round towers."
 
 TURN_ALDRIC = "Aldric: The ferry went down at midday, while we slept."
 
@@ -307,7 +301,6 @@ async def test_connections_end_to_end(plugin, client, loadable):
         plugin,
         client,
         SPECIES_REPLY,
-        SPECIES_PROSE,
         kind="species",
         prompt="owl people who were once human, in a Russian-flavoured realm",
         fields={},
@@ -340,7 +333,6 @@ async def test_connections_end_to_end(plugin, client, loadable):
         plugin,
         client,
         TSARDOM_REPLY,
-        TSARDOM_PROSE,
         kind="place",
         prompt=suggestion["prompt"],
         fields={},
@@ -370,7 +362,6 @@ async def test_connections_end_to_end(plugin, client, loadable):
         plugin,
         client,
         VASHA_REPLY,
-        VASHA_PROSE,
         kind="character",
         prompt="an owl-folk courier of Kalmara",
         fields={"name": "Vasha", "heritage": owl_folk["id"]},
@@ -405,7 +396,6 @@ async def test_connections_end_to_end(plugin, client, loadable):
         plugin,
         client,
         TOWN_REPLY,
-        TOWN_PROSE,
         kind="place",
         prompt=TOWN_PROMPT,
         fields={},
@@ -416,8 +406,9 @@ async def test_connections_end_to_end(plugin, client, loadable):
     town = await _accept(plugin, preview)
     assert _linked(town, TOWN_FACT)[0] == ("Moscavian Owls", owl_folk["id"], False)
     assert sorted(await _stubs(plugin)) == ["Aldric", "Kalmara"]
-    # the lookups were code: two creates' calls only (create, prose)
-    assert len(client.prompt_history) - before == 2
+    # the lookups were code: the create's call only (a draft writes no
+    # prose)
+    assert len(client.prompt_history) - before == 1
 
     # 5. a scene with Vasha in Kalmara: the setup names Kalmara and Aldric
     # (from Vasha's relationship fact); each stub gets a preview at
@@ -427,9 +418,7 @@ async def test_connections_end_to_end(plugin, client, loadable):
         "plan_scene",
         SETUP_REPLY,
         ALDRIC_PREVIEW,
-        ALDRIC_PROSE,
         KALMARA_PREVIEW,
-        KALMARA_PROSE,
         prompt="Vasha looks into the sunken ferry in Kalmara",
         picks={"Vasha": vasha["id"], "Kalmara": kalmara_id},
         player=vasha["id"],

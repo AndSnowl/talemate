@@ -121,6 +121,11 @@ class NewName(BaseModel):
     same_target_id: str | None = None
     tag: str | None = None
     filing: NameFiling | None = None
+    # the name cleaning replaced with this one ("Novgorod"), shown as
+    # "replaced Novgorod"; and whether cleaning made this stub itself (a
+    # name the reply didn't list), so undoing the cleaning drops it
+    replaced: str = ""
+    from_cleaning: bool = False
 
 
 def _norm(text: str) -> str:

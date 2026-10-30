@@ -70,7 +70,7 @@ from talemate.server.worlds import WorldsPlugin
 from talemate.tale_mate import Scene
 from talemate.world.dates import WorldDate
 from talemate.world.filing import filings_of
-from talemate.worldplay import create, prose_gen
+from talemate.worldplay import create
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.context import TOUCHED_LINES, world_context_block
 from talemate.worldplay.persistence import close_world_scene, world_target
@@ -520,19 +520,11 @@ async def _send(plugin, action: str, *responses, **data) -> dict:
     return _last(plugin, action)
 
 
-def _prose(kind: str) -> list[str]:
-    """One prose reply per section a `kind` draft writes."""
-
-    return [f"Prose of a {kind}." for _ in prose_gen.sections_for(kind)]
-
-
 async def _draft(plugin, kind: str, reply, *, then=(), **data) -> dict:
-    """A draft page (`preview_thing`) from the model's `reply` and its
-    prose, then `then` (a same-thing verdict, asked last)."""
+    """A draft page (`preview_thing`) from the model's `reply` (a draft
+    writes no prose), then `then` (a same-thing verdict, asked last)."""
 
-    return await _send(
-        plugin, "preview_thing", reply, *_prose(kind), *then, kind=kind, **data
-    )
+    return await _send(plugin, "preview_thing", reply, *then, kind=kind, **data)
 
 
 async def _picks(plugin, prompt: str) -> dict[str, str]:

@@ -48,6 +48,7 @@ from .filing import check_filings, stored_filings_value
 from .view import FactState, WorldView, _fact_state_from_row
 
 if TYPE_CHECKING:
+    from talemate.languages.cleaning.lists import WorldNameLists
     from .prose import ProseCache
     from .scenes import SceneStore
     from .timeline import TimelineEntry
@@ -896,22 +897,22 @@ class World:
     def set_curation(self, settings: CurationSettings) -> None:
         self._set_meta("curation", settings.model_dump_json())
 
-    def name_lists(self):
+    def name_lists(self) -> "WorldNameLists":
         """The world's own name lists for cleaning drafts, and the app rows
         it turned off (`languages.cleaning.lists.WorldNameLists`); empty
         until `set_name_lists`, or when the stored value can't be read."""
 
-        from talemate.languages.cleaning.lists import WorldNameLists
+        from talemate.languages.cleaning.lists import WorldNameLists as Lists
 
         try:
-            return WorldNameLists.model_validate_json(self._meta("name_lists"))
+            return Lists.model_validate_json(self._meta("name_lists"))
         except KeyError:
-            return WorldNameLists()
+            return Lists()
         except ValidationError as exc:
             log.warning("world.name_lists_unreadable", error=str(exc))
-            return WorldNameLists()
+            return Lists()
 
-    def set_name_lists(self, lists) -> None:
+    def set_name_lists(self, lists: "WorldNameLists") -> None:
         self._set_meta("name_lists", lists.model_dump_json())
 
     def present(self) -> WorldDate:

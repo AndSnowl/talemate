@@ -648,7 +648,6 @@ async def test_preview_then_accept(plugin, client):
 
     async with MockClientContext():
         client_responses.get().append(reply)
-        client_responses.get().append("Lowmere is half under water.")
         await plugin.handle(
             {
                 "type": "worlds",
@@ -2592,7 +2591,7 @@ async def test_preview_with_stub_id_and_accept_into_stub(plugin, client):
     )
 
     async with MockClientContext():
-        client_responses.get().extend([reply, "Pines, everywhere."])
+        client_responses.get().append(reply)
         await plugin.handle(
             {
                 "type": "worlds",
@@ -2626,7 +2625,7 @@ async def test_preview_with_stub_id_and_accept_into_stub(plugin, client):
         }
     )
     async with MockClientContext():
-        client_responses.get().extend([lore_reply, "A creed."])
+        client_responses.get().append(lore_reply)
         await plugin.handle(
             {
                 "type": "worlds",
@@ -2672,7 +2671,7 @@ async def test_preview_names_treated_as_new(plugin, client):
     async def preview_and_accept(model_reply):
         client.prompt_history.clear()
         async with MockClientContext():
-            client_responses.get().extend([model_reply, "Ilse."])
+            client_responses.get().append(model_reply)
             await plugin.handle(
                 {
                     "type": "worlds",
@@ -2685,15 +2684,15 @@ async def test_preview_names_treated_as_new(plugin, client):
                 }
             )
             await _drain(plugin)
-            # the facts, then the one prose section they have facts for (the
-            # second time, the first Ilse is a same-thing candidate with
-            # facts: its verdict is asked after them)
+            # the facts, and no prose (a draft writes none; the second
+            # time, the first Ilse is a same-thing candidate with facts:
+            # its verdict is asked after them)
             asked = [
                 p
                 for p in client.prompt_history
                 if p["prompt"].uid != "world.same-thing"
             ]
-            assert len(asked) == 2 and client.prompt_history[:2] == asked
+            assert len(asked) == 1 and client.prompt_history[:1] == asked
             preview = _last(plugin, "preview_thing")["data"]["preview"]
             prompt = str(client.prompt_history[0]["prompt"])
         await plugin.handle(
@@ -6811,7 +6810,6 @@ def _draft_reply(name, *facts, tag="military", **extra):
 async def _preview(plugin, client, reply, **data):
     async with MockClientContext():
         client_responses.get().append(reply)
-        client_responses.get().append("The prose.")
         await _act(plugin, "preview_thing", **{"kind": "lore", "fields": {}, **data})
         await _drain(plugin)
     return _last(plugin, "preview_thing")["data"]
@@ -6871,7 +6869,8 @@ async def test_preview_thing_answers_a_draft_page(plugin, client):
             "ticked": False,
         }
     ]
-    assert draft["prose"]["description"]["text"].endswith("The prose.")
+    # a draft writes no prose: its description is written on accept
+    assert draft["prose"]["description"]["text"] is None
     assert draft["connected"] == [] and draft["mentioned_in"] == []
     assert draft["preview"]["name"] == "The Frostwing Host"
     json.dumps(draft)
@@ -7980,7 +7979,6 @@ async def test_nested_ask_refused_while_page_regenerates(plugin, client):
     key = draft["draft_key"]
     async with MockClientContext():
         client_responses.get().append(_draft_reply("Frostwing Host", "Again."))
-        client_responses.get().append("The prose.")
         # no reply for the nested ask: it never asks the model
         await _act(
             plugin,
@@ -8023,7 +8021,6 @@ async def test_page_preview_landing_on_a_held_nested_draft_is_refused(plugin, cl
     replies = len(_replies(plugin, "preview_thing"))
     async with MockClientContext():
         client_responses.get().append(_draft_reply("Frostwing Host", "Again."))
-        client_responses.get().append("The prose.")
         await _act(plugin, "preview_thing", kind="lore", fields={}, prompt="again")
         await _drain(plugin)
     failed = _last(plugin, "preview_failed")

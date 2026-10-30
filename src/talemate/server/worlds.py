@@ -375,6 +375,7 @@ formatted with the world's calendar; `label` is ignored on the way in.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import os
@@ -435,6 +436,8 @@ from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
 from talemate.languages.cleaning import lists as name_lists
+from talemate.languages.cleaning import model as clean_model
+from talemate.worldplay.cleaning import clean_preview, unclean_preview
 from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
@@ -621,6 +624,10 @@ FIXED_GROUP_ADD_ENV = "TALEMATE_TEST_FIXED_GROUP_ADD"
 # browser tests: the model's reply to every language naming call
 # (definitions and picks, `languages.naming`)
 FIXED_LANGUAGE_ENV = "TALEMATE_TEST_FIXED_LANGUAGE"
+# browser tests: canned replies for cleaning a draft's names (languages
+# 4a), `{"name-flags": ..., "name-picks": ..., "title-rewrites": ...,
+# "language-roles": ...}`, each the model's reply text or a JSON object
+FIXED_CLEAN_ENV = "TALEMATE_TEST_FIXED_CLEAN"
 # one language job at a time (a make, a change or a fill)
 BUSY = "Something else is being made or changed; wait for it or cancel it"
 LANGUAGE_GONE = "The language this was for is gone"
@@ -697,6 +704,13 @@ class DraftRenderPayload(DraftKeyPayload):
     preview: CreatePreview
     # sent back as it came, so the client keeps the newest reply only
     seq: int | None = None
+
+
+class DraftLanguagesPayload(DraftKeyPayload):
+    # the draft as the owner left it (the client's copy), and its new
+    # Languages rows
+    preview: CreatePreview
+    rows: list[dict] = []
 
 
 class UseVersionPayload(DraftKeyPayload):
@@ -1263,6 +1277,37 @@ def _fixed_file(env: str) -> Path | None:
         return None
     path = Path(name)
     return path if path.exists() else None
+
+
+@contextlib.contextmanager
+def _fixed_cleaning(path: Path | None):
+    """While open, cleaning's model calls answer from the browser tests'
+    file at `path` (`FIXED_CLEAN_ENV`); with no file, from the model."""
+
+    if path is None:
+        yield
+        return
+    replies = {
+        name: reply if isinstance(reply, str) else json.dumps(reply)
+        for name, reply in json.loads(path.read_text(encoding="utf-8")).items()
+    }
+    clean_model.fixed_replies = replies
+    try:
+        yield
+    finally:
+        clean_model.fixed_replies = None
+
+
+async def _cleaned_fixed(preview: Coroutine, world: World) -> CreatePreview:
+    """A fixed preview, cleaned from the fixed cleaning replies when a
+    test wrote them; else as it is (no model to ask)."""
+
+    found = await preview
+    fixed = _fixed_file(FIXED_CLEAN_ENV)
+    if fixed is None:
+        return found
+    with _fixed_cleaning(fixed):
+        return await clean_preview(world, found, None)
 
 
 async def _fixed_preview(
@@ -3002,7 +3047,7 @@ class WorldsPlugin(Plugin):
         self._refuse_while_nested(payload.draft_key)
         fixed = _fixed_file(FIXED_PREVIEW_ENV)
         if fixed is not None:
-            preview = _fixed_preview(fixed, payload, world)
+            preview = _cleaned_fixed(_fixed_preview(fixed, payload, world), world)
         else:
             client = self._client()
             preview = preview_thing(
@@ -3160,6 +3205,43 @@ class WorldsPlugin(Plugin):
         self._current.pop(payload.draft_key, None)
         self._small.discard(nested_key(payload.draft_key))
         self._reply("discard_preview", {"draft_key": payload.draft_key})
+
+    async def handle_draft_languages(self, data: dict):
+        """Set a draft's Languages rows and clean it again: every name
+        cleaning replaced is put back, then the draft is cleaned with the
+        new rows (`worldplay.cleaning`). The current version is replaced,
+        not added to; answers `draft_languages` as `preview_thing` does."""
+
+        payload = DraftLanguagesPayload(**data)
+        world = self._require_world()
+        key = payload.draft_key
+        self._require_draft(key)
+        self._refuse_while_nested(key)
+        held = self._current_preview(key)
+        preview = payload.preview.model_copy(update={"stub_id": held.stub_id})
+
+        async def recleaned() -> CreatePreview:
+            fixed = _fixed_file(FIXED_CLEAN_ENV)
+            client = None if fixed is not None else self._client()
+            with _fixed_cleaning(fixed):
+                return await clean_preview(
+                    world, unclean_preview(preview), client, rows=payload.rows
+                )
+
+        def replace(cleaned: CreatePreview) -> dict:
+            versions = self._require_draft(key)
+            versions[self._current.get(key, len(versions) - 1)] = cleaned
+            return self._draft_out(world, key)
+
+        self._spawn(
+            recleaned(),
+            self.create_task_done_callback(
+                "draft_languages",
+                "preview_failed",
+                "Error cleaning a draft again",
+                success_data=replace,
+            ),
+        )
 
     async def handle_draft_render(self, data: dict):
         """The draft as the owner left it, linked as accept will link it

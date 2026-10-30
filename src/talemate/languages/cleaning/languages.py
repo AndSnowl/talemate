@@ -8,7 +8,7 @@ import re
 
 import structlog
 
-from talemate.languages.cleaning import ask
+from talemate.languages.cleaning.model import ask
 from talemate.languages.entry import languages as all_languages
 from talemate.world.kinds import LANGUAGE_ROLES
 from talemate.world.view import WorldView
