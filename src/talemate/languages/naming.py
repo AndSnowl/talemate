@@ -50,6 +50,8 @@ _CANDIDATES = 8
 class NameInResult(BaseModel):
     name: str
     new_words: list[dict[str, str]] = []
+    # each word of the name: `{word, meaning, new}` (languages 4a revised)
+    parts: list[dict] = []
 
 
 def generator_for(language: Language, kind: str) -> GeneratorDef:
@@ -216,21 +218,48 @@ async def name_in(
     if thing is None or state is None or state.kind != "language":
         raise ValueError("there's no such entry or language")
     language = language_of(state)
+    name = str(thing.fields.get("name") or "")
+    return await translate_text(client, language, name, what=name, reply=reply)
+
+
+async def translate_text(
+    client, language: Language, text: str, *, what: str = "", reply: str | None = None
+) -> NameInResult:
+    """`text` in `language`, word by word: words the language already has
+    stay, English words whose meaning it has are translated, function
+    words are dropped, and each other word is rolled from its word rules
+    and picked by the model (its new words in `new_words`). Nothing is
+    saved."""
+
     by_word = {e.word.lower(): e.word for e in language.dictionary}
     by_meaning = {m.lower(): e.word for e in language.dictionary for m in e.meanings}
+    meaning_of_word = {
+        e.word.lower(): (e.meanings[0] if e.meanings else "")
+        for e in language.dictionary
+    }
     word_rules = language.word_generator()
     taken = set(by_word)
     out: list[str] = []
+    parts: list[dict] = []
     new_words: list[dict[str, str]] = []
-    name = str(thing.fields.get("name") or "")
-    for word in re.findall(r"[^\W\d_]+(?:['’-][^\W\d_]+)*", name):
+    for word in re.findall(r"[^\W\d_]+(?:['’-][^\W\d_]+)*", text):
         key = word.lower()
         if key in by_word:
             out.append(by_word[key])
+            parts.append(
+                {
+                    "word": by_word[key].lower(),
+                    "meaning": meaning_of_word[key],
+                    "new": False,
+                }
+            )
         elif key in _FUNCTION_WORDS:
             continue
         elif key in by_meaning:
             out.append(by_meaning[key])
+            parts.append(
+                {"word": by_meaning[key].lower(), "meaning": key, "new": False}
+            )
         else:
             if word_rules is None:
                 raise ValueError("this language has no word rules to make new words")
@@ -247,14 +276,17 @@ async def name_in(
                 client,
                 language,
                 candidates,
-                f'the word for "{key}" ({name})',
+                f'the word for "{key}" ({what or text})',
                 reply=reply,
             )
             taken.add(chosen.lower())
             new_words.append({"word": chosen.lower(), "meaning": key})
+            parts.append({"word": chosen.lower(), "meaning": key, "new": True})
             out.append(chosen)
     return NameInResult(
-        name=" ".join(w[:1].upper() + w[1:] for w in out), new_words=new_words
+        name=" ".join(w[:1].upper() + w[1:] for w in out),
+        new_words=new_words,
+        parts=parts,
     )
 
 

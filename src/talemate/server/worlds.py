@@ -435,6 +435,7 @@ from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
+from talemate.languages import naming_panel
 from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.cleaning import model as clean_model
 from talemate.worldplay.cleaning import (
@@ -6209,6 +6210,80 @@ class WorldsPlugin(Plugin):
         else:
             # the scene's world, not the one the Worlds tab shows
             self._reply("language_add_word", {"id": payload.language_id, "scene": True})
+
+    # --- Name it… (languages 4a revised) ----------------------------------
+
+    def _language_entry(self, language_id: str):
+        state = self._require_world().view().thing(str(language_id or ""))
+        if state is None or state.kind != "language":
+            raise ValueError("there's no such language")
+        return state
+
+    async def handle_name_it_rules(self, data: dict):
+        """A language's rules and their patterns, for the Name it… panel:
+        `{language_id, rules: [{id, name, use, patterns}]}`."""
+
+        state = self._language_entry(data.get("language_id"))
+        rules = naming_panel.rules_of(language_of(state))
+        self._reply(
+            "name_it_rules",
+            {"language_id": state.id, "rules": [r.model_dump() for r in rules]},
+        )
+
+    async def handle_name_it_batch(self, data: dict):
+        """A batch of names from a rule, or one of its patterns (`pattern`,
+        an index), leaving out names the world has; no model:
+        `{language_id, rule_id, pattern, names: [{name, meaning}]}`."""
+
+        state = self._language_entry(data.get("language_id"))
+        view = self._require_world().view()
+        rule_id = str(data.get("rule_id") or "")
+        pattern = data.get("pattern")
+        pattern = int(pattern) if pattern is not None else None
+        taken = frozenset(
+            str(t.fields.get("name") or "").lower() for t in view.things(facts=False)
+        )
+        names = naming_panel.batch(
+            language_of(state),
+            rule_id,
+            pattern=pattern,
+            count=int(data.get("count") or naming_panel.BATCH),
+            exclude=taken,
+        )
+        self._reply(
+            "name_it_batch",
+            {
+                "language_id": state.id,
+                "rule_id": rule_id,
+                "pattern": pattern,
+                "names": names,
+            },
+        )
+
+    async def handle_name_it_meaning(self, data: dict):
+        """Names for a meaning the owner typed, in the background (new words
+        are picked by the model): `{language_id, text, candidates}`."""
+
+        state = self._language_entry(data.get("language_id"))
+        text = str(data.get("text") or "").strip()
+        if not text:
+            raise ValueError("type what it should mean")
+        view = self._require_world().view()
+        client, reply = self._language_reply()
+        self._spawn(
+            naming_panel.from_meaning(view, client, state.id, text, reply=reply),
+            self.create_task_done_callback(
+                "name_it_meaning",
+                "name_it_meaning_failed",
+                "Error naming from a meaning",
+                success_data=lambda found: {
+                    "language_id": state.id,
+                    "text": text,
+                    "candidates": found,
+                },
+                failure_data={"language_id": state.id, "text": text},
+            ),
+        )
 
     async def handle_language_name_in(self, data: dict):
         """The entry's name in a language, for review, in the background:
