@@ -72,3 +72,37 @@ The runs used Skyfall-31B on koboldcpp, in an isolated test app with the saved M
 4. **Names the model judged fine still get through:** Olekh (Oleg), Velikoretsk (marked suspect), and Velva.
 
 **The owner's verdict:** *(pending)*
+
+## Revised (2026-11-01): mark, then Name it…
+
+The owner's verdict on the first build: the checking wasn't accurate enough, and swapping lost meaning ("Court of Lakes" → "Court of Kinchvovy Brezhi"). So drafts now only mark, and naming is the owner's, with **Name it…**.
+- **Spec:** part 4, section "4a revised".
+- **Plan:** `docs/superpowers/plans/2026-11-01-fantasymate-languages-4a-revised-name-it.md`.
+- **Mockup:** `docs/superpowers/mockups/2026-11-01-languages-4a-name-it.html`.
+
+| Step | What to look at | Proven by |
+|---|---|---|
+| **A draft arrives unchanged, with marks.** Real names, clichés, stock titles and names that don't fit the language get a wavy underline. A new stub keeps its stub look, under the mark. Names on the lists are only marked, never replaced. | Are the right names marked, and nothing rewritten? | `tests/languages/test_clean_mark.py`; `tests/worldplay/test_create_cleaning.py`; e2e `test_clean_names.py::test_a_draft_arrives_unchanged_with_flags`, `test_a_flagged_new_stub_keeps_its_stub_look_and_one_card` |
+| **The card:** "Flagged: why", with **Name it…**, **Keep it** and **Never flag it in this world**. | Is it clear what each does? | `test_keeping_a_flagged_stub_keeps_the_stub`, `test_never_flag_adds_to_the_keep_list`, `test_new_stubs_say_why_a_name_is_flagged` |
+| **Name it…** (mockup frames 2 and 3): the language, its rule and one pattern; ten names with a fast **Reroll**; **From a meaning** shows what each candidate is built from. Picking puts the name everywhere the draft writes it, and saves new words to the language. | Are the rolls quick, and is it clear which generator you're using? | `tests/languages/test_naming_panel.py`, `tests/server/test_worlds_name_it.py`; e2e `test_name_it.py` (8 tests) |
+| **Name it… on any words:** part of a name ("Greywash" in "Duchies of the Greywash Coast"), a stub's page (the old name is forgotten), or an entry's page (the old name stays as another name). Right-click's Make a name and Reroll this part are replaced by it; the scene box keeps Make a name. | Does renaming land everywhere? | `test_name_it_on_part_of_a_name`, `test_name_it_on_an_entry_renames_it_and_keeps_the_old_name`, `test_name_it_on_a_stub_forgets_the_old_name`, `test_the_reference_menu_offers_name_it_not_make_a_name`; `tests/worldplay/test_repoint*.py` (rename_everywhere) |
+| **The narrator rule:** with a language in the world, the create and Add facts prompts say titles and descriptions stay English and only proper names may sound foreign. | Do you still get "Court of Lakes", not a foreign title? | `test_the_create_prompt_carries_the_narrator_rule_with_a_language`, `test_add_facts_prompt_carries_it_too` |
+| **Language entries get facts:** importing a language writes "X is a language of this world…", so other entries' "For other pages" can target it. The language skill makes men's and women's name rules by default. | — | `tests/languages/test_importer.py::test_importing_a_language_writes_a_fact_about_it` |
+| **Your bugs.** A race draft whose reply lists no names offers its facts' unknown names as unticked New stubs rows ("the AI didn't list it: tick to make a stub"), and the race prompt asks for the places its facts name. A picked language shows at once, with a spinner, and Add waits. A stub's draft shows the language it inherits ("From Tsarvenya: …"), so you aren't asked to pick one. "Duchies of the Greywash Coast" judges only "Greywash". | Does the Eared Owl-folk draft offer Velmora and the rest now? | `test_create.py::test_names_the_reply_left_out_come_as_unticked_rows`, `test_accept_makes_stubs_only_for_ticked_rows`; e2e `test_names_the_ai_did_not_list_come_unticked`, `test_a_picked_language_shows_at_once`, `test_adding_twice_is_not_possible_while_saving`, `test_a_stub_draft_shows_the_language_it_inherits`; `test_clean_find.py::test_a_plural_frame_name_judges_only_its_name` |
+
+### Real runs on the revised build (2026-11-01)
+
+These ran on Skyfall-31B on koboldcpp, with the owner's go-ahead, in a fresh test app holding a copy of the owner's Test world (language Varsenyk, Tsarvenyan Owl-folk). The owner's own app was left alone. Raw records are `real-runs.json`, `real-runs.log` and the screenshots in the plan's workspace.
+
+| Run | Time | What happened |
+|---|---|---|
+| **Race draft** ("Horned owl-folk … trading with the countries there") | 22 s | 6 facts, all body and instinct. The model named no places, so there was nothing to stub or offer, and the unlisted-names fix wasn't exercised. No marks. |
+| **Lake draft** ("a great lake in Otsyenya, with fishing villages on its shores") | 36 s | "Lake Otsyeno", 12 facts, 3 new stubs listed and ticked: Vashkovo, Grethik Range, Frostspine Peaks. No language was in reach: the prompt names none, and a new place isn't filed yet. So nothing was marked. "Moskovian frontier" went unmarked. |
+| **Name it on the lake** | — | Rule "Places", ten names (Zhyadyensk, Milyensk, Tremrenya…). **Reroll took 0.11 s.** One pattern (`CVCV[rsk|nsk]`) gave ten -rsk/-nsk names at once. |
+| **From a meaning** ("lakeland") | 13 s | One candidate: **Khvodakhan**, "khvodakhan “lakeland” (new word, saved if you pick it)". Picking it renamed the lake, and "Lake Otsyeno" stayed as another name. |
+| **Name it on a stub** (The Hooting Bazaar) | — | The panel said "“The Hooting Bazaar” is forgotten". Picking renamed it with no other name kept. |
+
+What the runs show:
+- Name it is fast and clear about which rule it's using.
+- From a meaning gave one candidate this time; the plan asks for up to two.
+- A draft with no language in reach marks only list hits. Pick a language, or file the draft somewhere that has one.
