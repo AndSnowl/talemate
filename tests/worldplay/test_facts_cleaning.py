@@ -26,7 +26,6 @@ MOSCAVIAN = Language(
         )
     ],
 )
-PICKS = {"picks": [{"n": 1, "pick": "Sovyetsk", "meaning": "owl town"}]}
 
 
 @pytest.fixture(autouse=True)
@@ -66,39 +65,29 @@ async def _clean(world, draft, *replies):
         return await clean_fact_draft(world, draft, MockClient("t"))
 
 
-async def test_add_facts_cleans_real_names(world, setup):
+async def test_add_facts_marks_real_names(world, setup):
     lid, speaking, _ = setup
-    cleaned = await _clean(world, _draft(speaking), PICKS)
-    assert cleaned.facts[0].text == "Its traders winter in Sovyetsk."
-    assert [(m.kind, m.was, m.language_id) for m in cleaned.marks] == [
-        ("replaced", "Novgorod", lid)
-    ]
-    assert [(n.name, n.replaced) for n in cleaned.new_names] == [
-        ("Sovyetsk", "Novgorod")
-    ]
+    cleaned = await _clean(world, _draft(speaking))
+    assert cleaned.facts[0].text == "Its traders winter in Novgorod."
+    assert [(m.name, m.language_id) for m in cleaned.marks] == [("Novgorod", lid)]
 
 
-async def test_add_facts_without_a_language_marks_suspect_only(world, setup):
+async def test_add_facts_without_a_language_marks_list_hits(world, setup):
     _, _, silent = setup
     cleaned = await _clean(world, _draft(silent))
-    assert cleaned.facts[0].text == "Its traders winter in Novgorod."
-    assert [(m.kind, m.why) for m in cleaned.marks] == [
-        ("suspect", "no language picked")
+    assert [(m.name, m.why) for m in cleaned.marks] == [
+        ("Novgorod", "no language picked")
     ]
 
 
 async def test_the_owners_words_name_a_language(world, setup):
-    _, _, silent = setup
+    lid, _, silent = setup
     draft = _draft(silent).model_copy(update={"prompt": "its Moscavian traders"})
-    cleaned = await _clean(world, draft, PICKS)
-    assert cleaned.facts[0].text == "Its traders winter in Sovyetsk."
+    cleaned = await _clean(world, draft)
+    assert [m.language_id for m in cleaned.marks] == [lid]
 
 
-async def test_accepting_added_facts_saves_the_words(world, setup):
+async def test_accepting_added_facts_saves_no_words(world, setup):
     lid, speaking, _ = setup
-    cleaned = await _clean(world, _draft(speaking), PICKS)
-    accept_facts(world, cleaned)
-    words = {
-        e.word: e.meanings for e in language_of(world.view().thing(lid)).dictionary
-    }
-    assert words == {"Sovyetsk": ["owl town"]}
+    accept_facts(world, await _clean(world, _draft(speaking)))
+    assert language_of(world.view().thing(lid)).dictionary == []

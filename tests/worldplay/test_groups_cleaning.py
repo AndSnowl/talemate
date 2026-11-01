@@ -2,17 +2,15 @@
 drafted row's name and line are cleaned in the page's languages, and
 accepting saves the new names as words."""
 
-import json
-
 import pytest
 
 import talemate.config.state as config_state
-from conftest import MockClient, MockClientContext, client_responses
-from talemate.languages.entry import fields_of, language_of
+from conftest import MockClient, MockClientContext
+from talemate.languages.entry import fields_of
 from talemate.languages.models import GeneratorDef, Language
 from talemate.world.store import Source
 from talemate.worldplay.cleaning import clean_group_draft
-from talemate.worldplay.groups import GroupAddDraft, GroupAddRow, accept_group_add
+from talemate.worldplay.groups import GroupAddDraft, GroupAddRow
 
 PLACES = ["Zizhigrad", "Sovyetsk", "Lezhograd"]
 MOSCAVIAN = Language(
@@ -25,7 +23,6 @@ MOSCAVIAN = Language(
         )
     ],
 )
-PICKS = {"picks": [{"n": 1, "pick": "Sovyetsk", "meaning": "owl town"}]}
 
 
 @pytest.fixture(autouse=True)
@@ -65,23 +62,10 @@ def _draft(page):
     )
 
 
-async def test_group_add_cleans_its_lines(world, setup):
+async def test_group_add_marks_its_rows(world, setup):
     lid, page = setup
     async with MockClientContext():
-        client_responses.get().append(json.dumps(PICKS))
         cleaned = await clean_group_draft(world, _draft(page), MockClient("t"))
     [row] = cleaned.rows
-    assert (row.name, row.line) == ("Sovyetsk", "Sovyetsk trades in furs.")
-    assert [(m.was, m.language_id) for m in cleaned.marks] == [("Novgorod", lid)]
-
-
-async def test_accepting_a_group_add_saves_the_words(world, setup):
-    lid, page = setup
-    async with MockClientContext():
-        client_responses.get().append(json.dumps(PICKS))
-        cleaned = await clean_group_draft(world, _draft(page), MockClient("t"))
-    accept_group_add(world, page, cleaned.rows, marks=cleaned.marks)
-    words = {
-        e.word: e.meanings for e in language_of(world.view().thing(lid)).dictionary
-    }
-    assert words == {"Sovyetsk": ["owl town"]}
+    assert (row.name, row.line) == ("Novgorod", "Novgorod trades in furs.")
+    assert [(m.name, m.language_id) for m in cleaned.marks] == [("Novgorod", lid)]

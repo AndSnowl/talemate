@@ -437,14 +437,12 @@ from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
 from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.cleaning import model as clean_model
-from talemate.languages.cleaning.marks import Mark
 from talemate.worldplay.cleaning import (
     clean_fact_draft,
     clean_group_draft,
     clean_preview,
     inherited_rows,
     owner_kept,
-    unclean_preview,
 )
 from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
@@ -1086,8 +1084,7 @@ class GroupAddPayload(pydantic.BaseModel):
 class AcceptGroupAddPayload(pydantic.BaseModel):
     thing_id: str
     rows: list[GroupAddRow]
-    # the draft's cleaned names (languages 4a): saved as words on accept
-    marks: list[Mark] = []
+
     # the small draft accepted: dropped once it's written
     draft_key: str | None = None
 
@@ -3251,7 +3248,7 @@ class WorldsPlugin(Plugin):
             with _fixed_cleaning(fixed):
                 return await clean_preview(
                     world,
-                    unclean_preview(preview),
+                    preview,
                     client,
                     rows=payload.rows,
                     keep=keep,
@@ -4318,9 +4315,7 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         self._require_entry(world.view(), payload.thing_id)
         notes: list[str] = []
-        thing_ids = accept_group_add(
-            world, payload.thing_id, payload.rows, notes=notes, marks=payload.marks
-        )
+        thing_ids = accept_group_add(world, payload.thing_id, payload.rows, notes=notes)
         if payload.draft_key is not None:
             self._small.discard(payload.draft_key)
         self._reply(

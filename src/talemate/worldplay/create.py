@@ -513,7 +513,7 @@ class CreatePreview(BaseModel):
     # the draft's Languages rows (languages 4a): found from the owner's
     # words (`"from_words": true`) or the owner's own; written on accept
     languages: list[dict] = Field(default_factory=list)
-    # the names cleaning replaced or found suspect (`cleaning.marks.Mark`)
+    # the names cleaning flagged (`cleaning.marks.Mark`)
     marks: list[Mark] = Field(default_factory=list)
     # words the owner linked on the draft with "add as another name" (P4):
     # accept teaches each its pick's target as a common other name; the
@@ -3929,23 +3929,13 @@ def _write_preview(
         )
         removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, thing_id)
-        # languages 4a: the draft's Languages rows, and each new name
-        # cleaning gave it saved to its language as a word
+        # languages 4a: the draft's Languages rows
         if preview.languages and "languages" not in preview.fields:
             rows = [
                 {k: v for k, v in r.items() if k != "from_words"}
                 for r in preview.languages
             ]
             rev.set_field(thing_id, "languages", rows, None)
-        if preview.marks:
-            from talemate.languages.cleaning.replace import save_mark_words
-
-            save_mark_words(
-                rev,
-                view,
-                preview.marks,
-                [preview.name, *(f.text for f in preview.facts if f.ticked)],
-            )
         orphans = {
             stub_id
             for stub_id in made.values()

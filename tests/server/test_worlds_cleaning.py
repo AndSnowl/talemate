@@ -34,7 +34,6 @@ FIXED = {
 CLEAN = {
     "language-roles": {"languages": [{"language": "Moscavian", "role": "official"}]},
     "name-flags": {"names": []},
-    "name-picks": {"picks": [{"n": 1, "pick": "Sovyetsk", "meaning": "owl town"}]},
 }
 
 
@@ -103,19 +102,19 @@ async def _setup(plugin, tmp_path, monkeypatch, prompt):
 async def test_the_fixed_clean_file_answers_the_cleaning(plugin, tmp_path, monkeypatch):
     lid = await _setup(plugin, tmp_path, monkeypatch, "Tsardom of Moscavia")
     preview = _last(plugin, "preview_thing")["data"]["preview"]
-    assert preview["facts"][0]["text"] == "Fur caravans trade with Sovyetsk."
-    assert [m["was"] for m in preview["marks"]] == ["Novgorod"]
+    assert preview["facts"][0]["text"] == "Fur caravans trade with Novgorod."
+    assert [m["name"] for m in preview["marks"]] == ["Novgorod"]
     assert preview["languages"] == [
         {"language": lid, "role": "official", "from_words": True}
     ]
 
 
-async def test_changing_the_drafts_languages_cleans_it_again(
+async def test_changing_the_drafts_languages_marks_it_again(
     plugin, tmp_path, monkeypatch
 ):
     lid = await _setup(plugin, tmp_path, monkeypatch, "a cold northern realm")
     preview = _last(plugin, "preview_thing")["data"]["preview"]
-    assert [m["kind"] for m in preview["marks"]] == ["suspect"]
+    assert [m["why"] for m in preview["marks"]] == ["no language picked"]
     await plugin.handle(
         {
             "type": "worlds",
@@ -128,8 +127,8 @@ async def test_changing_the_drafts_languages_cleans_it_again(
     await _drain(plugin)
     data = _last(plugin, "draft_languages")["data"]
     again = data["preview"]
-    assert again["facts"][0]["text"] == "Fur caravans trade with Sovyetsk."
-    assert [m["kind"] for m in again["marks"]] == ["replaced"]
+    assert again["facts"][0]["text"] == "Fur caravans trade with Novgorod."
+    assert [m["why"] for m in again["marks"]] == ["a real name, on the Real names list"]
     assert again["languages"] == [{"language": lid, "role": "official"}]
     assert data["version"] == 1 and len(data["versions"]) == 1
 
@@ -151,17 +150,12 @@ async def _languages(plugin, preview, rows):
 async def test_a_name_kept_here_stays_kept_when_languages_change(
     plugin, tmp_path, monkeypatch
 ):
-    """Final I4: "Keep Novgorod here", then a Languages change: Novgorod
-    isn't replaced again."""
+    """Final I4: the owner kept Novgorod (dropped its mark), then changed
+    the Languages: it isn't marked again."""
 
     lid = await _setup(plugin, tmp_path, monkeypatch, "Tsardom of Moscavia")
     preview = _last(plugin, "preview_thing")["data"]["preview"]
-    kept = {
-        **preview,
-        "facts": [{**preview["facts"][0], "text": "Fur caravans trade with Novgorod."}],
-        "marks": [],
-        "new_names": [],
-    }
+    kept = {**preview, "marks": []}
     again = await _languages(plugin, kept, [{"language": lid, "role": "spoken"}])
     assert again["facts"][0]["text"] == "Fur caravans trade with Novgorod."
     assert again["marks"] == []
@@ -177,4 +171,4 @@ async def test_a_deleted_fact_stays_deleted_when_languages_change(
     extra = {**preview["facts"][0], "text": "The tsars hunt owls.", "removed": True}
     copy = {**preview, "facts": [preview["facts"][0], extra]}
     again = await _languages(plugin, copy, [{"language": lid, "role": "official"}])
-    assert [f["text"] for f in again["facts"]] == ["Fur caravans trade with Sovyetsk."]
+    assert [f["text"] for f in again["facts"]] == ["Fur caravans trade with Novgorod."]

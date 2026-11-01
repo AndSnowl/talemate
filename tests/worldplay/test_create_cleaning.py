@@ -12,7 +12,7 @@ from talemate.languages.entry import fields_of
 from talemate.languages.models import GeneratorDef, Language
 from talemate.world.dates import WorldDate
 from talemate.world.store import Source
-from talemate.worldplay.cleaning import clean_preview, unclean_preview
+from talemate.worldplay.cleaning import clean_preview
 from talemate.worldplay.create import preview_thing
 
 PLACES = ["Zizhigrad", "Sovyetsk", "Lezhograd"]
@@ -73,7 +73,6 @@ def _queue(*replies):
 
 
 ROLES = {"languages": [{"language": "Moscavian", "role": "official"}]}
-PICKS = {"picks": [{"n": 1, "pick": "Sovyetsk", "meaning": "owl town"}]}
 
 
 async def _preview(world, prompt="Tsardom of Moscavia, a cold realm", *replies):
@@ -86,42 +85,33 @@ async def _preview(world, prompt="Tsardom of Moscavia, a cold realm", *replies):
     return preview, left
 
 
-async def test_a_draft_with_a_language_in_reach_arrives_cleaned(world, moscavian):
-    preview, left = await _preview(
-        world, "Tsardom of Moscavia, a cold realm", ROLES, PICKS
-    )
+async def test_a_draft_arrives_unchanged_with_marks(world, moscavian):
+    """4a revised: the text is exactly the model's; Novgorod is marked."""
+
+    preview, left = await _preview(world, "Tsardom of Moscavia, a cold realm", ROLES)
     assert left == []
     assert [f.text for f in preview.facts] == [
-        "Fur caravans trade with Sovyetsk.",
-        "The tsars once ruled from Sovyetsk's walls.",
+        "Fur caravans trade with Novgorod.",
+        "The tsars once ruled from Novgorod's walls.",
     ]
-    [mark] = preview.marks
-    assert (mark.kind, mark.name, mark.was, mark.meaning) == (
-        "replaced",
-        "Sovyetsk",
-        "Novgorod",
-        "owl town",
-    )
-    assert [(n.name, n.kind, n.replaced) for n in preview.new_names] == [
-        ("Sovyetsk", "place", "Novgorod")
+    assert [(m.name, m.why) for m in preview.marks] == [
+        ("Novgorod", "a real name, on the Real names list")
     ]
+    assert preview.new_names == []
 
 
 async def test_the_draft_finds_its_language_from_the_prompt(world, moscavian):
-    preview, _ = await _preview(
-        world, "Tsardom of Moscavia, a cold realm", ROLES, PICKS
-    )
+    preview, _ = await _preview(world, "Tsardom of Moscavia, a cold realm", ROLES)
     assert preview.languages == [
         {"language": moscavian, "role": "official", "from_words": True}
     ]
 
 
-async def test_no_language_named_or_in_reach_replaces_nothing(world, moscavian):
+async def test_no_language_named_or_in_reach_marks_list_hits(world, moscavian):
     preview, left = await _preview(world, "a cold northern realm")
     assert left == []
-    assert "Novgorod" in preview.facts[0].text
-    assert [(m.kind, m.why) for m in preview.marks] == [
-        ("suspect", "no language picked")
+    assert [(m.name, m.why) for m in preview.marks] == [
+        ("Novgorod", "no language picked")
     ]
     assert preview.languages == []
 
@@ -133,33 +123,19 @@ async def test_a_world_without_languages_is_not_cleaned(world):
 
 
 async def test_the_draft_has_no_prose(world, moscavian):
-    preview, _ = await _preview(
-        world, "Tsardom of Moscavia, a cold realm", ROLES, PICKS
-    )
+    preview, _ = await _preview(world, "Tsardom of Moscavia, a cold realm", ROLES)
     assert preview.prose == {}
 
 
-async def test_changing_the_drafts_languages_cleans_it_again(world, moscavian):
+async def test_changing_languages_remarks_and_keeps_kept_names(world, moscavian):
     preview, _ = await _preview(world, "a cold northern realm")
     async with MockClientContext():
-        _queue(PICKS)
         again = await clean_preview(
-            world, unclean_preview(preview), MockClient("t"),
-            rows=[{"language": moscavian, "role": "official"}],
+            world, preview, MockClient("t"),
+            rows=[{"language": moscavian, "role": "official"}], keep={"Novgorod"},
         )  # fmt: skip
-        client_responses.get().clear()
-    assert "Sovyetsk" in again.facts[0].text
+    assert again.marks == []
     assert again.languages == [{"language": moscavian, "role": "official"}]
-    assert [m.kind for m in again.marks] == ["replaced"]
-
-
-async def test_unclean_puts_back_every_old_name(world, moscavian):
-    preview, _ = await _preview(
-        world, "Tsardom of Moscavia, a cold realm", ROLES, PICKS
-    )
-    back = unclean_preview(preview)
-    assert back.facts[0].text == "Fur caravans trade with Novgorod."
-    assert back.marks == [] and back.new_names == []
 
 
 # --- accepting (Task 6) ------------------------------------------------------
@@ -169,9 +145,7 @@ from talemate.worldplay.create import accept_preview  # noqa: E402
 
 
 async def _cleaned(world):
-    preview, _ = await _preview(
-        world, "Tsardom of Moscavia, a cold realm", ROLES, PICKS
-    )
+    preview, _ = await _preview(world, "Tsardom of Moscavia, a cold realm", ROLES)
     return preview
 
 
@@ -186,19 +160,11 @@ async def test_accept_writes_the_drafts_languages(world, moscavian):
     assert "from_words" not in rows[0]
 
 
-async def test_accept_saves_each_new_name_as_a_word(world, moscavian):
+async def test_accept_saves_no_words(world, moscavian):
+    """Words go into the language when the owner names something (Name
+    it…), not on accept."""
+
     accept_preview(world, await _cleaned(world))
-    assert _words(world, moscavian) == {"Sovyetsk": ["owl town"]}
-
-
-async def test_a_name_edited_out_before_accept_is_not_saved(world, moscavian):
-    preview = await _cleaned(world)
-    facts = [
-        f.model_copy(update={"text": "Fur caravans trade widely."})
-        for f in preview.facts
-    ]
-    preview = preview.model_copy(update={"facts": facts, "new_names": []})
-    accept_preview(world, preview)
     assert _words(world, moscavian) == {}
 
 
