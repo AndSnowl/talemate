@@ -16,7 +16,7 @@ from talemate.languages.entry import fields_of
 from talemate.languages.models import GeneratorDef, Language
 
 from e2e.seed import seed_fm_world
-from e2e.worlds.test_drafts import _draft, _draft_fact, _wait_sent
+from e2e.worlds.test_drafts import HOLD_ASKS_JS, _draft, _draft_fact, _wait_sent
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
@@ -188,6 +188,49 @@ def test_no_language_offers_pick_a_language(app, page, fixed_preview, fixed_clea
         timeout=TIMEOUT_MS
     )
     expect(_flag(draft, "Novgorod")).to_be_visible()
+
+
+# hold the `draft_languages` sends while `window.__e2eHold` is set (a slow
+# model's marking), and send them on `window.__e2eRelease()`
+HOLD_LANGUAGES_JS = HOLD_ASKS_JS.replace("'add_facts'", "'draft_languages'")
+
+
+def _pick_held(app, page, fixed_preview, fixed_clean, stem):
+    page.evaluate(HOLD_LANGUAGES_JS)
+    draft = _cleaned_draft(
+        app, page, fixed_preview, fixed_clean, stem, prompt="a cold northern realm"
+    )
+    draft.get_by_test_id("draft-pick-language").click()
+    page.evaluate("() => { window.__e2eHold = true; }")
+    form = draft.get_by_test_id("languages-form")
+    form.get_by_test_id("languages-language").click()
+    page.get_by_role("option", name="Moscavian", exact=True).click()
+    form.get_by_role("button", name="Save").click()
+    return draft.get_by_test_id("entry-languages")
+
+
+def test_a_picked_language_shows_at_once(app, page, fixed_preview, fixed_clean):
+    """Task 7: the row shows while the draft is marked again, saying so."""
+
+    section = _pick_held(app, page, fixed_preview, fixed_clean, "Lang at once")
+    row = section.get_by_test_id("languages-row").filter(has_text="Moscavian")
+    expect(row).to_have_count(1, timeout=TIMEOUT_MS)
+    expect(section.get_by_test_id("languages-saving")).to_be_visible()
+    page.evaluate("() => window.__e2eRelease()")
+    expect(section.get_by_test_id("languages-saving")).to_have_count(
+        0, timeout=TIMEOUT_MS
+    )
+    expect(row).to_have_count(1)
+
+
+def test_adding_twice_is_not_possible_while_saving(
+    app, page, fixed_preview, fixed_clean
+):
+    section = _pick_held(app, page, fixed_preview, fixed_clean, "Lang twice")
+    expect(section.get_by_test_id("languages-row")).to_have_count(1, timeout=TIMEOUT_MS)
+    expect(section.get_by_test_id("languages-add")).to_be_disabled()
+    page.evaluate("() => window.__e2eRelease()")
+    expect(section.get_by_test_id("languages-add")).to_be_enabled(timeout=TIMEOUT_MS)
 
 
 # --- Add facts ----------------------------------------------------------------

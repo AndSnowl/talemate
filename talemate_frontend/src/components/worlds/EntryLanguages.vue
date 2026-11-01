@@ -5,7 +5,8 @@
         <div class="d-flex align-center mt-4 mb-1" data-testid="languages-heading">
             <span class="text-overline text-muted">Languages</span>
             <v-spacer></v-spacer>
-            <v-btn v-if="!form" variant="text" size="small" color="accent" prepend-icon="mdi-plus" data-testid="languages-add" @click="startAdd">Add</v-btn>
+            <v-progress-circular v-if="saving" indeterminate size="14" width="2" color="accent" class="mr-2" data-testid="languages-saving" aria-label="Saving"></v-progress-circular>
+            <v-btn v-if="!form" variant="text" size="small" color="accent" prepend-icon="mdi-plus" :disabled="busy || !!saving" data-testid="languages-add" @click="startAdd">Add</v-btn>
         </div>
 
         <div v-if="form" class="languages-form pa-2 mb-2" data-testid="languages-form">
@@ -57,7 +58,7 @@
                 ></v-select>
                 <v-text-field v-model.number="form.since" label="Since (year)" type="number" density="compact" variant="outlined" hide-details class="field-year" data-testid="languages-since"></v-text-field>
                 <v-text-field v-model.number="form.until" label="Until (year)" type="number" density="compact" variant="outlined" hide-details class="field-year" data-testid="languages-until"></v-text-field>
-                <v-btn color="accent" variant="flat" size="small" :disabled="!formValid" :loading="busy" @click="save">Save</v-btn>
+                <v-btn color="accent" variant="flat" size="small" :disabled="!formValid || !!saving" :loading="busy" @click="save">Save</v-btn>
                 <v-btn variant="text" size="small" @click="form = null">Cancel</v-btn>
             </div>
             <div v-if="!languageItems.length" class="text-caption text-muted mt-1">This world has no languages yet: import one in the World tab's Languages.</div>
@@ -132,12 +133,17 @@ export default {
         return { worlds: useWorldsStore(), ROLES, FLUENCIES };
     },
     data() {
-        return { form: null };
+        // the rows just written, shown until the reply brings them (a
+        // draft's is marked again first, which takes a while)
+        return { form: null, saving: null };
     },
     computed: {
         own() {
+            const names = new Map((this.worlds.things.language || []).map((t) => [t.id, t.name]));
+            if (this.saving) {
+                return this.saving.map((row) => ({ ...row, name: names.get(row.language) || '' }));
+            }
             if (this.draft) {
-                const names = new Map((this.worlds.things.language || []).map((t) => [t.id, t.name]));
                 return this.rows.map((row) => ({ ...row, name: names.get(row.language) || '' }));
             }
             return this.thing.languages_own || [];
@@ -171,6 +177,18 @@ export default {
             return !!this.worlds.pending.set_field || (this.draft && !!this.worlds.pending.draft_languages);
         },
     },
+    watch: {
+        // the reply's rows replace the ones shown while saving
+        rows() {
+            this.saving = null;
+        },
+        'thing.languages_own'() {
+            this.saving = null;
+        },
+        busy(now, before) {
+            if (before && !now) this.saving = null;
+        },
+    },
     mounted() {
         if (!this.worlds.things.language) this.worlds.listThings('language');
     },
@@ -191,6 +209,7 @@ export default {
         },
         // the rows saved: on a page, its field; on a draft, back to it
         write(rows) {
+            this.saving = rows;
             if (this.draft) {
                 this.$emit('change', rows);
             } else {
