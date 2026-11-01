@@ -233,6 +233,58 @@ def test_adding_twice_is_not_possible_while_saving(
     expect(section.get_by_test_id("languages-add")).to_be_enabled(timeout=TIMEOUT_MS)
 
 
+def test_a_stub_draft_shows_the_language_it_inherits(
+    app, page, fixed_preview, fixed_clean
+):
+    """Task 7: expanding a stub filed in a page with a language, the draft
+    shows that language as inherited and asks for none."""
+
+    name = _world_name("Lang inherit")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Moscavian",
+                "fields": {"name": "Moscavian", **fields_of(MOSCAVIAN)},
+            },
+            {
+                "kind": "place",
+                "name": "Tsarvenya",
+                "languages": [{"language": "Moscavian", "role": "official"}],
+            },
+            {
+                "kind": "place",
+                "name": "Khyagovsk",
+                "stub": "live",
+                "filings": [{"target": "Tsarvenya"}],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-stubs").click()
+    tab = page.get_by_test_id("stubs-tab")
+    tab.get_by_test_id("stub-row").filter(has_text="Khyagovsk").get_by_role(
+        "button", name="Expand"
+    ).click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("from-stub").filter(has_text="Khyagovsk").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    fixed_preview({**DRAFT, "name": "Khyagovsk"})
+    fixed_clean(CLEAN)
+    box.get_by_role("button", name="Create").click()
+    draft = page.get_by_test_id("draft-page")
+    languages = draft.get_by_test_id("entry-languages")
+    expect(languages.get_by_test_id("languages-inherited")).to_contain_text(
+        "From Tsarvenya: Moscavian (official)", timeout=TIMEOUT_MS
+    )
+    expect(draft.get_by_test_id("draft-pick-language")).to_have_count(0)
+
+
 # --- Add facts ----------------------------------------------------------------
 
 

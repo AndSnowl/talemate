@@ -308,6 +308,12 @@ try:
                     if isinstance(names, list)
                     else ids[names]
                 )
+            # its Languages rows: earlier language things, by name
+            if thing.get("languages"):
+                fields["languages"] = [
+                    {**row, "language": ids[row["language"]]}
+                    for row in thing["languages"]
+                ]
             # the entries it's filed in: earlier things, by name
             if thing.get("filings"):
                 fields["filings"] = [
@@ -376,7 +382,8 @@ def seed_fm_world(
 
     ``things`` items are ``{"kind", "name", "born": year|None, "fields":
     {field: value}|None, "links": {field: name | [names]}|None, "stub":
-    "live"|"ignored"|None, "filings": [{"target": name, "role", "since":
+    "live"|"ignored"|None, "languages": [{"language": name, "role"}]|None,
+    "filings": [{"target": name, "role", "since":
     year|None, "until": year|None, "within": name|None}]|None, "facts":
     [{"category", "text", "since": year|None, "until": year|None,
     "origin": dict|None}]}``, written in one revision, in order. An

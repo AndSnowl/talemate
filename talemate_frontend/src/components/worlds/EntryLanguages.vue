@@ -94,7 +94,7 @@
             <v-btn size="x-small" variant="text" class="ml-1" :disabled="busy" @click="setItsOwn">Set its own</v-btn>
         </div>
         <!-- a draft with no language: cleaning waits for one (languages 4a) -->
-        <div v-if="draft && !own.length && !form" class="d-flex align-center flex-wrap ga-2 text-body-2 text-muted">
+        <div v-if="draft && !own.length && !inherited.length && !form" class="d-flex align-center flex-wrap ga-2 text-body-2 text-muted">
             No language picked: real names in this draft are only marked.
             <v-btn size="small" variant="outlined" color="accent" prepend-icon="mdi-translate" data-testid="draft-pick-language" @click="startAdd('official')">Pick a language for this draft</v-btn>
         </div>
@@ -127,6 +127,9 @@ export default {
         // emitted as `change(rows)` instead of saved
         draft: { type: Boolean, default: false },
         rows: { type: Array, default: () => [] },
+        // a draft's inherited rows (where it's filed, or its stub's), as a
+        // page's `languages_view` gives them
+        inheritedRows: { type: Array, default: () => [] },
     },
     emits: ['change'],
     setup() {
@@ -149,7 +152,7 @@ export default {
             return this.thing.languages_own || [];
         },
         inherited() {
-            return this.draft ? [] : (this.thing.languages_view || []).filter((r) => r.inherited);
+            return this.draft ? this.inheritedRows : (this.thing.languages_view || []).filter((r) => r.inherited);
         },
         inheritedGroups() {
             const groups = [];

@@ -179,3 +179,34 @@ async def test_accept_is_one_revision(world, moscavian):
     head = world.head_rev()
     accept_preview(world, await _cleaned(world))
     assert world.head_rev() == head + 1
+
+
+async def test_preview_lists_inherited_languages(world, moscavian):
+    """Task 7: a draft filed in a page with a language shows it as
+    inherited, so the owner needn't pick one."""
+
+    with world.revision(Source.manual()) as rev:
+        realm = rev.create_thing(
+            "place",
+            {
+                "name": "Tsarvenya",
+                "languages": [{"language": moscavian, "role": "official"}],
+            },
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(REPLY, {"names": []})
+        preview = await preview_thing(
+            world, "place", "a cold town", {"filings": [{"target": realm}]}, client
+        )
+        client_responses.get().clear()
+    assert preview.languages == []
+    assert preview.inherited_languages == [
+        {
+            "language_id": moscavian,
+            "name": "Moscavian",
+            "role": "official",
+            "share": None,
+            "source_name": "Tsarvenya",
+        }
+    ]

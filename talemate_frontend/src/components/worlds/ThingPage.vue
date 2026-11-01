@@ -301,6 +301,7 @@
                         :thing="thing"
                         draft
                         :rows="edited?.languages || []"
+                        :inherited-rows="edited?.inherited_languages || []"
                         @change="worlds.draftLanguages($event)"
                     />
 

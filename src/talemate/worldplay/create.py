@@ -514,6 +514,10 @@ class CreatePreview(BaseModel):
     # the draft's Languages rows (languages 4a): found from the owner's
     # words (`"from_words": true`) or the owner's own; written on accept
     languages: list[dict] = Field(default_factory=list)
+    # the languages it takes from where it's filed, or from the stub it
+    # expands (languages 4a revised), as a page's inherited rows: shown
+    # when it has none of its own
+    inherited_languages: list[dict] = Field(default_factory=list)
     # the names cleaning flagged (`cleaning.marks.Mark`)
     marks: list[Mark] = Field(default_factory=list)
     # words the owner linked on the draft with "add as another name" (P4):

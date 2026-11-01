@@ -84,7 +84,8 @@ async def clean_preview(
     if rows is None:
         ids = named_languages(view, preview.prompt)
         rows = await language_rows(client, view, preview.prompt, ids) if ids else []
-    used = rows or inherited_rows(view, preview)
+    inherited = inherited_rows(view, preview)
+    used = rows or inherited
     listed = [(preview.name, preview.kind)] + [
         (n.name, n.kind) for n in preview.new_names
     ]
@@ -103,7 +104,33 @@ async def clean_preview(
         if from_words
         else [dict(r) for r in rows]
     )
-    return preview.model_copy(update={"marks": marks, "languages": shown})
+    return preview.model_copy(
+        update={
+            "marks": marks,
+            "languages": shown,
+            "inherited_languages": _shown_inherited(view, inherited),
+        }
+    )
+
+
+def _shown_inherited(view, rows: list) -> list[dict]:
+    """Inherited rows as the draft's Languages section shows them, each
+    language once."""
+
+    out: list[dict] = []
+    for row in rows:
+        if any(o["language_id"] == row.language_id for o in out):
+            continue
+        out.append(
+            {
+                "language_id": row.language_id,
+                "name": row.name,
+                "role": row.role,
+                "share": row.share,
+                "source_name": view.name_of(row.source_id) or "",
+            }
+        )
+    return out
 
 
 def owner_kept(held: CreatePreview, copy: CreatePreview) -> set[str]:
