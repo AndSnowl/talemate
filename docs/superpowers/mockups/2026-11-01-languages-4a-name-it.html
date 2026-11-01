@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Name it</title>
+<style>
+  :root { --bg:#1d2021; --panel:#282828; --raised:#32302f; --line:#3c3836; --text:#ebdbb2; --muted:#a89984; --dim:#7c6f64; --accent:#fe8019; --link:#fabd2f; --foreign:#d3869b; --chip:#3c3836; --good:#b8bb26; --warn:#fabd2f; --bad:#fb4934; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#111; color:var(--text); font-family: Roboto, ui-sans-serif, system-ui, sans-serif; font-size:15px; }
+  .intro { padding:16px 24px; color:#ddd; font-size:14px; max-width:1150px; line-height:1.5; } .intro h1 { font-size:18px; margin:0 0 6px; }
+  .option-label { padding:18px 24px 6px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#ccc; } .option-label b { color:#fff; font-size:16px; }
+  .frame { width:1920px; zoom:.62; margin:0 24px 30px; border:1px solid #444; background:var(--bg); display:grid; grid-template-columns:276px 1fr 350px; min-height:820px; }
+  .side { padding:16px; } .side .box { background:var(--panel); border-radius:6px; height:600px; padding:14px; color:var(--muted); font-size:13px; line-height:1.9; }
+  .side .sel { color:var(--accent); background:#3c2a1a; padding:3px 8px; border-radius:4px; }
+  .agents { border-left:1px solid var(--line); }
+  .page { padding:22px 16px 40px; position:relative; }
+  .head { display:flex; align-items:center; gap:10px; }
+  .title { color:var(--accent); font-size:23px; font-family:Georgia, serif; }
+  .kchip { font-size:11px; color:var(--muted); background:var(--chip); padding:2px 6px; border-radius:3px; }
+  .draftchip { font-size:11px; color:#1d2021; background:var(--warn); padding:2px 6px; border-radius:3px; }
+  .panel { background:var(--panel); border-radius:6px; padding:14px 16px; margin-top:14px; max-width:1240px; }
+  .ov { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .muted { color:var(--muted); } .small { font-size:13px; } .dim { color:var(--dim); }
+  .fact { padding:6px 0; border-bottom:1px dashed var(--line); line-height:1.7; }
+  .flag { text-decoration: underline wavy var(--warn); text-decoration-thickness:1px; text-underline-offset:4px; cursor:help; }
+  .stub { color:var(--foreign); text-decoration: underline dashed var(--foreign); text-underline-offset:3px; }
+  .stub.flag { text-decoration: underline wavy var(--warn); text-decoration-thickness:1px; }
+  .sel-words { background:rgba(254,128,25,.25); border-radius:2px; }
+  .card { position:absolute; background:var(--raised); border:1px solid #504945; border-radius:6px; padding:12px 14px; box-shadow:0 6px 24px #000a; font-size:14px; z-index:2; }
+  .btn { font-size:12px; letter-spacing:.08em; text-transform:uppercase; padding:6px 10px; border-radius:3px; color:var(--text); display:inline-block; }
+  .btn.main { border:1px solid var(--accent); color:var(--accent); }
+  .btn.acc { color:var(--accent); }
+  .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .sel-box { border:1px solid #5a524c; border-radius:4px; padding:5px 10px; font-size:13px; }
+  .cands { display:grid; grid-template-columns:repeat(5, max-content); gap:8px 10px; margin-top:10px; }
+  .cand { background:var(--chip); padding:5px 10px; border-radius:14px; font-size:14px; color:var(--foreign); font-style:italic; cursor:pointer; }
+  .cand.hover { outline:1px solid var(--accent); }
+  .field { border:1px solid #5a524c; border-radius:4px; padding:6px 10px; color:var(--text); width:220px; display:inline-block; font-size:13px; }
+  .means { margin-top:8px; font-size:14px; line-height:1.8; }
+  .f { color:var(--foreign); font-style:italic; }
+  .note { font-size:12px; color:var(--muted); margin-top:10px; }
+  .tick { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:14px; }
+  .box2 { width:15px; height:15px; border:1px solid var(--muted); border-radius:2px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+  .box2.on { background:var(--accent); border-color:var(--accent); color:#1d2021; }
+  .why { color:var(--dim); font-size:12px; }
+</style></head>
+<body>
+<div class="intro"><h1>Revised 4a: drafts only mark; you name things with Name it…</h1>
+Frame 1: a draft arrives exactly as the model wrote it. Flagged names get one wavy underline; a flagged name that's also a new stub keeps its stub look. Frame 2: <b>Name it…</b> on a selected part of a name ("Greywash"), with the rule shown, a batch of ten, Reroll, and From a meaning. Say what's wrong in the terminal.</div>
+
+<div class="option-label"><b>1</b> A draft: marked, not changed</div>
+<div class="frame">
+  <div class="side"><div class="box">TEST<br>Places<br>Languages<br>&nbsp;&nbsp;Otsyenyan<br><span class="sel">New: Tsardom of Otsyenya</span></div></div>
+  <div class="page">
+    <div class="head"><span class="title">Tsardom of Otsyenya</span><span class="kchip">place</span><span class="draftchip">draft</span></div>
+    <div class="panel">
+      <div class="ov">Languages</div>
+      <div class="tick" style="margin-top:4px"><span class="f">Otsyenyan</span> <span class="kchip">official</span> <span class="why">from your words</span></div>
+    </div>
+    <div class="panel">
+      <div class="ov">Facts</div>
+      <div class="fact">Fur caravans trade south with <span class="stub flag">Novgorod</span> and the salt marshes beyond.</div>
+      <div class="fact">The tsars rule from <span class="stub">Velikograd</span>, on the frozen bend of the <span class="flag">Volga</span>.</div>
+      <div class="fact">Its western border runs along the <span class="stub">Duchies of the Greywash Coast</span>.</div>
+      <div class="fact">The <span class="flag">Night Watch</span> keeps the curfew in the long winter.</div>
+    </div>
+    <div class="card" style="left:360px; top:260px; width:430px;">
+      <div class="row"><span class="stub">Novgorod</span> <span class="kchip">place</span> <span class="dim small">a new stub</span></div>
+      <div class="small" style="margin-top:6px; color:var(--warn)">Flagged: a real city <span class="dim">(Real names, all worlds)</span></div>
+      <div class="row" style="margin-top:10px">
+        <span class="btn main">Name it…</span><span class="btn">Keep it</span><span class="btn">Never flag it in this world</span>
+      </div>
+      <div class="row" style="margin-top:6px"><span class="btn acc">Expand</span><span class="btn">Ignore</span></div>
+    </div>
+    <div class="panel">
+      <div class="ov">New stubs</div>
+      <div class="tick"><span class="box2 on">✓</span> <span class="stub flag">Novgorod</span> <span class="kchip">place</span> <span class="why" style="color:var(--warn)">flagged: a real city</span></div>
+      <div class="tick"><span class="box2 on">✓</span> Velikograd <span class="kchip">place</span></div>
+      <div class="tick"><span class="box2 on">✓</span> Duchies of the Greywash Coast <span class="kchip">place</span></div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div>
+
+<div class="option-label"><b>2</b> Name it… on "Greywash", selected inside a name</div>
+<div class="frame">
+  <div class="side"><div class="box">TEST<br>Places<br>Languages<br>&nbsp;&nbsp;Otsyenyan<br><span class="sel">New: Tsardom of Otsyenya</span></div></div>
+  <div class="page">
+    <div class="head"><span class="title">Tsardom of Otsyenya</span><span class="kchip">place</span><span class="draftchip">draft</span></div>
+    <div class="panel">
+      <div class="ov">Facts</div>
+      <div class="fact">Its western border runs along the <span class="stub">Duchies of the <span class="sel-words">Greywash</span> Coast</span>.</div>
+    </div>
+    <div class="card" style="left:300px; top:150px; width:760px;">
+      <div class="row"><b>Name it:</b> <span class="sel-words">Greywash</span> <span class="dim small">in "Duchies of the Greywash Coast" (this draft: every place it's written)</span></div>
+      <div class="row" style="margin-top:10px">
+        <span class="sel-box">Otsyenyan ▾</span>
+        <span class="sel-box">Rule: Place names ▾</span>
+        <span class="sel-box">Pattern: any ▾</span>
+        <span class="btn main">⟳ Reroll</span>
+      </div>
+      <div class="cands">
+        <span class="cand">Vryushovsk</span><span class="cand hover">Kolvagorsk</span><span class="cand">Dochograd</span><span class="cand">Zizhivets</span><span class="cand">Lezhoinsk</span>
+        <span class="cand">Tivavets</span><span class="cand">Slyetsova</span><span class="cand">Gdotograd</span><span class="cand">Pyerinsk</span><span class="cand">Mnalova</span>
+      </div>
+      <div class="note">Click one to use it. <span class="f">Kolvagorsk</span>: hill town (<span class="f">kolva</span> “hill” + -gorsk). Names with no meaning are fine too.</div>
+      <div style="border-top:1px solid var(--line); margin-top:12px; padding-top:10px">
+        <div class="row"><b class="small">From a meaning</b> <span class="field">grey water</span> <span class="btn acc">Find</span></div>
+        <div class="means">
+          <span class="cand">Syevoda</span> <span class="dim small"><span class="f">syev</span> “grey” + <span class="f">voda</span> “water”</span><br>
+          <span class="cand">Syevrechye</span> <span class="dim small"><span class="f">syev</span> “grey” + <span class="f">rechye</span> “river-water” (new word, will be saved)</span>
+        </div>
+      </div>
+      <div class="note">Picked: <i>Duchies of the Kolvagorsk Coast</i>, and the word goes into Otsyenyan's dictionary.</div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div>
+
+<div class="option-label"><b>3</b> Name it… on a saved entry's name (renames it everywhere)</div>
+<div class="frame" style="min-height:420px">
+  <div class="side"><div class="box" style="height:300px">TEST<br>Places<br>&nbsp;&nbsp;<span class="sel">Tsargrad</span></div></div>
+  <div class="page">
+    <div class="head"><span class="title">Tsargrad</span><span class="kchip">place</span></div>
+    <div class="card" style="left:30px; top:80px; width:760px;">
+      <div class="row"><b>Name it:</b> Tsargrad <span class="dim small">renames this entry everywhere it's linked; Tsargrad stays as an other name</span></div>
+      <div class="row" style="margin-top:10px">
+        <span class="sel-box">Otsyenyan ▾</span><span class="sel-box">Rule: City names ▾</span><span class="sel-box">Pattern: [C]V[C]V-grad ▾</span><span class="btn main">⟳ Reroll</span>
+      </div>
+      <div class="cands">
+        <span class="cand">Khyagovsk</span><span class="cand">Zdyonigrad</span><span class="cand">Plichigrad</span><span class="cand">Velgrad</span><span class="cand">Troegrad</span>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div>
+</body></html>

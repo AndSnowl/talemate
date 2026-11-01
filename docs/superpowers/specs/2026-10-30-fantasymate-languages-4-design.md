@@ -1,6 +1,6 @@
 # Fantasymate languages 4: clean names in drafts, and fuller names
 
-Date: 2026-10-30. Status: written up after the brainstorm and the builder check; awaiting the owner's review. Mockup approved: `docs/superpowers/mockups/2026-10-30-languages-4-clean-names.html` (frame 1, and layout 2A for the Names page).
+Date: 2026-10-30. Status: approved 2026-10-30; 4a revised by the owner on 2026-11-01 after using it ("4a revised" section). Mockup approved: `docs/superpowers/mockups/2026-10-30-languages-4-clean-names.html` (frame 1, and layout 2A for the Names page).
 
 This is part 4 of `docs/superpowers/specs/2026-10-28-fantasymate-languages-design.md` ("Part 4: the AI side"). It replaces that section's "Drafts: flag and regenerate" and its name-structure bullets. Parts 3a to 3b-2b are merged (0b91e3ce).
 - **The owner's own words and decisions** carry no mark.
@@ -39,8 +39,8 @@ Each part gets its own plan. Both need **probe 4** first (below), on the local m
 
 ## Goals
 
-1. **Text the AI writes for review** arrives with real names, AI stock names and stock titles already replaced by names from the language in reach. Names it can't be sure of come marked as suspect. This covers a draft's own name, its facts' text and its new stubs, on every review screen (below).
-2. **The owner sees what was replaced**, can undo one, reroll it, or stop it ever being replaced.
+1. **Text the AI writes for review** arrives with real names, AI stock names and stock titles **marked**, never replaced (revised 2026-11-01). Names the model or the fit check doubts are marked too. This covers a draft's own name, its facts' text and its new stubs, on every review screen.
+2. **The owner names things deliberately** with **Name it…**, on any selected words: random names from a rule they can see and narrow, with fast rerolls, or a name made from a meaning.
 3. **One Names page** in the world's Settings shows every list that affects this world, the world's own and the app-wide ones together.
 4. **The draft knows its language from the owner's words**, including more than one language, before anything is generated.
 5. **A person's name has the structure its language gives it** (4b), with parts from the world where the world knows them.
@@ -61,7 +61,81 @@ Each part gets its own plan. Both need **probe 4** first (below), on the local m
 - **Remembering old names.** Once a draft is accepted, only the new names exist (below).
 - **Linguistics jargon** in front of the owner (standing).
 
-## 4a: clean names in drafts
+## 4a revised (owner, 2026-11-01): mark, don't replace; Name it…
+
+The owner used the built 4a in the test app (worlds Test and Test2). Their verdict:
+- the automatic replacing isn't accurate enough;
+- it loses meaning ("Court of Lakes" became "Court of Kinchvovy Brezhi": what does that mean?);
+- it gets in the way of naming things deliberately.
+
+Approved mockup: `docs/superpowers/mockups/2026-11-01-languages-4a-name-it.html` (owner, 2026-11-01):
+- frame 1: a draft marked, not changed;
+- frame 2: Name it… on part of a name;
+- frame 3: Name it… on a saved entry.
+
+**This section supersedes "How it's replaced" and the replace half of "What the owner sees" below.** Where the two disagree, this one wins. Finding names (the lists, the flag call, the fit check, the languages found from the owner's words), the Names page and the hover card stay as built.
+
+### The narrator rule (owner)
+
+The world is written in the narrator's language: English, as a story would tell it.
+- **A language supplies:** names of people, places and things; flavour such as sayings, oaths and inscriptions; and ancient or magical words.
+- **Everything descriptive stays English:** "the Tsardom of Otsyenya", "the Court of Lakes", "the Duchies of the Greywash Coast". The Otsyenyans surely have their own words for these, but the narrator's are the useful ones, for the model and for the owner.
+- **A foreign word always shows its meaning where it has one.** Vryushovsk is "the lake". A name can also have no meaning today, like "Australia": a history, not a translation. Both kinds are wanted.
+- **What gets built now (owner, 2026-11-01):** the draft prompts tell the model to keep descriptive words in English and to use the language only for names. The Name it… panel shows meanings. **Later, with the scene rework:** every foreign word anywhere in the text shows its meaning on hover.
+- **A stock English title is never turned into a foreign phrase.** It's marked. The owner may give it fresher English, or name its name slot ("the Court of Vryushovsk", after the lake).
+
+### Drafts mark, never replace (owner)
+
+- **Every review screen marks flagged names and changes nothing.** That's a new entry's draft, Add facts, Add event and a group's + Add. The flagged names are: on a list, flagged by the model, or not fitting the language (unchanged from the built 4a).
+- **The text arrives exactly as the model wrote it.** A list hit (Novgorod) is marked too, not swapped.
+- **The card says why** ("a real city", "an AI cliché", "doesn't sound like Otsyenyan"), and offers **Name it…**, **Keep it** and **Never flag it in this world**.
+- **What goes:** the pick call, the title rewrite, the spare names and **Reroll** on a mark. Their work moves into Name it…, where the owner chooses.
+- ***My call:* a flagged name that's also a new stub keeps the stub's look.** The flag adds a thin wavy underline in the warning role, and one card holds both: the stub's own (kind, Expand) and the flag's ("flagged: a real city", Name it…). The owner found the replaced mark hid the stub.
+
+### Name it… (owner)
+
+- **Where:** on any selected words, the whole name or part of it. For example, select "Greywash" in "Duchies of the Greywash Coast". It works in a draft, on a stub, on an entry's name and in a fact's text, from the flag card or from the selection's right-click menu.
+- **The panel stays open while the owner picks:**
+  - **The rule in use is shown and can be switched** (country names, place names, men's names, women's names, words…). It can also be narrowed to **one pattern of a rule** (owner: "roll for one specific pattern only").
+  - **A batch of names, about ten.** **Reroll** gives a fresh batch on each click: fast, no hovering, never cycling a short list. Speed matters most: the owner picks most names and many rolls aren't good.
+  - **From a meaning:** the owner types what it should mean ("lakeland"). They get the language's word or words for it, each with what it's built from.
+    - ***My call:*** this reuses the existing Name it in… translation: look up each English word, coin any the language lacks, with a meaning.
+    - Picked words are saved to the language with their meaning.
+- **Picking a name** puts it where the selection was.
+  - **On an entry's or stub's name, it renames the entry,** and every link to it follows. No stub of the old name is left (the owner's Tsargrad → Khyagovsk left a Tsargrad stub).
+  - **The picked word goes into the language's dictionary**, with its meaning or none.
+- ***My calls* (from the builder check):**
+  - **In a draft, a pick changes every place the draft writes those words:** name, facts, facts for other pages. A flagged name that wasn't a stub becomes a ticked new stub, as other new names do.
+  - **Renaming a draft or a stub forgets the old name.** Renaming a saved entry keeps the old name as a common other name, as renaming does today (`repoint.retitle`), since its history and scenes may still use it.
+  - **Rolled names don't ask the model for meanings,** so a reroll is instant. A rolled name made of dictionary words shows that meaning. Otherwise it's saved with none. **From a meaning** is the way to get one.
+  - **On words that link to an entry, Name it… renames that entry everywhere,** and the panel says so.
+  - **Name it… replaces the right-click "Make a name / Reroll this part" items** (one look, one component). "Name it in…" (translation) stays.
+  - **One mark for every flagged name.** The card says why. A stub keeps its stub look, plus the thin wavy underline.
+- **With no language behind the selection,** Name it… asks which of the world's languages to use. A built-in default language for worlds without one comes later (owner: maybe one they make with the language system).
+- **"Named after someone"** (the lake named for a person, as in Lake Borodey or Borodevsk) is 4b: building blocks with forms.
+
+### Languages as entries the model knows (owner)
+
+- **A language entry has facts like any other entry,** and its page shows them, with Add fact and Add facts.
+  - A draft's "facts for other pages" can target a language.
+  - ***My call:*** making a language writes one fact about it ("Otsyenyan is the tongue of the Tsardom of Otsyenya"). The model then knows "Varonvi" is a language, not a codex, as one draft assumed.
+- **The language-design skill makes separate men's and women's name rules by default** (the owner always asks for it).
+
+### Bugs from the owner's run, to fix
+
+1. **Names in a draft not stubbed:** country names in "Eared Owl-folk" (world Test) were made but not stubbed. Find whether cleaning broke new-name detection.
+2. **Picking a language for a stub:** the row appears late, so the owner added it twice. It should show at once, with a busy indicator while anything is generated.
+3. **A draft from a stub ignores the language it inherits:** "Pick a language" shows although its filing gives one.
+4. **"Duchies of the Greywash" was judged as one name** after "Coast" was dropped. A name's parts should be found more carefully.
+5. **A rename left the old stub behind** (Tsargrad), covered by Name it… above.
+
+### Later
+
+- a built-in default language for worlds with none;
+- "named after someone" place forms (4b);
+- scenes: language as flavour and as gameplay (who understands whom, translators, private talk), in the scene rework.
+
+## 4a: clean names in drafts (as first built; partly superseded above)
 
 ### Which AI text is cleaned
 
