@@ -64,6 +64,7 @@ from talemate.worldplay.create import (
     _row_stubs,
     clean_tag,
     create_categories,
+    language_names,
     current_date,
     default_category,
     entry_names,
@@ -221,6 +222,7 @@ async def _ask(
                     "categories": categories,
                     "year": calendar.format(WorldDate.of(year)) if year else None,
                     "now_year": now_year,
+                    "language_names": language_names(world.view()),
                 },
             )
         reply = extracted["response"]

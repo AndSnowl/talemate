@@ -2876,6 +2876,17 @@ def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
     return None
 
 
+def language_names(view: WorldView) -> list[str]:
+    """The world's languages' names, for the narrator rule in prompts
+    (languages 4a revised)."""
+
+    return sorted(
+        str(t.fields.get("name") or "")
+        for t in view.things("language", facts=False)
+        if t.fields.get("name")
+    )
+
+
 async def preview_thing(
     world: World,
     kind: str,
@@ -3059,6 +3070,9 @@ async def preview_thing(
         known.append(("tag", known_tag))
 
     template_vars: dict[str, Any] = {
+        # the narrator rule (languages 4a revised): with languages in the
+        # world, titles and descriptions stay English
+        "language_names": language_names(view),
         "kind": kind,
         "prompt": prompt,
         "categories": categories,

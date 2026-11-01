@@ -3061,3 +3061,37 @@ async def test_in_new_name_the_world_has_files_in_that_entry(at_1020):
     ]
     assert not [t for t in view.things() if t.is_stub]
     assert view.thing(court).kind == "lore"
+
+
+async def test_the_create_prompt_carries_the_narrator_rule_with_a_language(at_313):
+    """4a revised: with a language in the world, the prompt says to keep
+    titles and descriptions English and names the languages."""
+
+    from talemate.languages.entry import fields_of
+    from talemate.languages.models import Language
+
+    with at_313.revision(Source.manual()) as rev:
+        rev.create_thing(
+            "language",
+            {
+                "name": "Otsyenyan",
+                **fields_of(Language(name="Otsyenyan", level="description")),
+            },
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY)
+        await preview_thing(at_313, "character", "a disgraced duelist", {}, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "Titles and descriptions stay English" in prompt
+    assert "Otsyenyan is a language, not a thing" in prompt
+
+
+async def test_no_narrator_rule_without_a_language(at_313):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY)
+        await preview_thing(at_313, "character", "a disgraced duelist", {}, client)
+    assert "Titles and descriptions stay English" not in str(
+        client.prompt_history[0]["prompt"]
+    )

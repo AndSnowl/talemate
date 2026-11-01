@@ -66,7 +66,8 @@ from `talemate.languages.models.LanguageFile`). The shape:
     "categories": {"C": "k v r s z t n l", "V": "a o e u i"},
     "generators": [
       {"id": "words", "name": "Words", "use": "words", "patterns": ["CVC", "CVCVC"]},
-      {"id": "people", "name": "People", "use": "character", "patterns": ["CVCVC"]},
+      {"id": "men", "name": "Men's names", "use": "character", "patterns": ["CVCVC"]},
+      {"id": "women", "name": "Women's names", "use": "character", "patterns": ["CVCVCa"]},
       {"id": "places", "name": "Places", "use": "place", "patterns": ["CVCVC(ov)"]}
     ],
     "grammar": [
@@ -121,6 +122,10 @@ from `talemate.languages.models.LanguageFile`). The shape:
   kind (`character`, `place`, `item`, `event`, `lore`, `being`,
   `species`, `race`), or a form (`adjective`, `demonym`). Write 2-3
   patterns each.
+- **Character names come as two rules by default:** "Men's names" and
+  "Women's names" (both `"use": "character"`, ids `men` and `women`),
+  with the endings or sounds that tell them apart. Make one shared rule
+  only when the brief says the language doesn't mark it.
 - A naming style made of English parts: put whole-word parts in
   categories (`"A": "dusk thorn ash raven"`, `"B": "hollow field mere
   ford"`), use a pattern like `"AB"`, and give every part's meaning in

@@ -38,6 +38,9 @@ Rules:
 - Write 1 to 5 facts, each one claim in a full sentence, about {{ name }}.
 - Keep them consistent with what the records already say.
 - Use only these categories: {{ categories | join(", ") }}.
+{%- if language_names %}
+- Write in plain English. Titles and descriptions stay English ("the Court of Lakes", "the Tsardom of Otsyenya"); only proper names may sound foreign. {{ language_names | join(", ") }} {{ "is a language, not a thing" if language_names | length == 1 else "are languages, not things" }}.
+{%- endif %}
 {% if not year -%}
 - "since" is optional: give it only when a fact started at a known time, as a bare year no later than {{ now_year }}.
 {% endif -%}

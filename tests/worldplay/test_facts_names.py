@@ -274,3 +274,26 @@ async def test_add_facts_prompt_has_create_s_tag_rule(realm):
         "The tag is never the kind's own name (lore, event, place, …): say what"
         " sort of lore it is, such as custom, law, battle, festival." in prompt
     )
+
+
+async def test_add_facts_prompt_carries_it_too(realm):
+    """4a revised: the narrator rule reaches "+ Add facts" as well."""
+
+    from talemate.languages.entry import fields_of
+    from talemate.languages.models import Language
+
+    with realm.revision(Source.manual()) as rev:
+        rev.create_thing(
+            "language",
+            {
+                "name": "Otsyenyan",
+                **fields_of(Language(name="Otsyenyan", level="description")),
+            },
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        client_responses.get().append(_reply("It is cold."))
+        await facts.draft_facts(realm, realm.tsardom, "the current Tsar", client)
+    prompt = str(client.prompt_history[-1]["prompt"])
+    assert "Titles and descriptions stay English" in prompt
+    assert "Otsyenyan is a language, not a thing" in prompt
