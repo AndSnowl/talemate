@@ -42,7 +42,9 @@ def _right_click(box, start=None, end=None):
     if start is not None:
         box.evaluate(f"(el) => {{ el.focus(); el.setSelectionRange({start}, {end}); }}")
     else:
-        box.evaluate("(el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }")
+        box.evaluate(
+            "(el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }"
+        )
     box.dispatch_event("contextmenu", {"clientX": 400, "clientY": 300, "button": 2})
 
 
@@ -56,30 +58,13 @@ def _words(page, language):
     thing = _open_thing(page, language)
     thing.get_by_test_id("language-tab-lexicon").click()
     words = thing.get_by_test_id("language-words")
-    words.get_by_test_id("language-word").first.wait_for(state="visible", timeout=TIMEOUT_MS)
+    words.get_by_test_id("language-word").first.wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
     return [
         row.locator("td").first.inner_text().strip()
         for row in words.get_by_test_id("language-word").all()
     ]
-
-
-def test_make_a_name_inserts_and_saves_word(app, page, fixed_language):
-    fixed_language({"definitions": {}})
-    name = _seed(app, "Name make")
-    _open_world(page, name)
-    _world_tab(page)
-    box = _place_box(page)
-    box.fill("Tsardom of ")
-    _right_click(box)
-    menu = page.get_by_test_id("reference-menu")
-    menu.get_by_text("Make a name…").click()
-    _pick_language(page, menu)
-    candidates = menu.get_by_test_id("language-candidate")
-    expect(candidates).to_have_count(4, timeout=TIMEOUT_MS)
-    picked = candidates.first.get_by_test_id("language-candidate-name").inner_text()
-    candidates.first.click()
-    expect(box).to_have_value(f"Tsardom of {picked}", timeout=TIMEOUT_MS)
-    assert picked in _words(page, "Sorauan")
 
 
 def test_add_selected_word_with_definition(app, page, fixed_language):
@@ -97,24 +82,6 @@ def test_add_selected_word_with_definition(app, page, fixed_language):
     expect(meaning).to_have_value("The nation's own name.", timeout=TIMEOUT_MS)
     menu.get_by_role("button", name="Save").click()
     assert "Moscavia" in _words(page, "Sorauan")
-
-
-def test_reroll_this_part(app, page, fixed_language):
-    fixed_language({"definitions": {}})
-    name = _seed(app, "Name reroll")
-    _open_world(page, name)
-    _world_tab(page)
-    box = _place_box(page)
-    box.fill("Tsardom of Moscavia")
-    _right_click(box, 11, 19)
-    menu = page.get_by_test_id("reference-menu")
-    menu.get_by_text("Reroll this part…").click()
-    _pick_language(page, menu)
-    candidates = menu.get_by_test_id("language-candidate")
-    expect(candidates).to_have_count(4, timeout=TIMEOUT_MS)
-    picked = candidates.nth(1).get_by_test_id("language-candidate-name").inner_text()
-    candidates.nth(1).click()
-    expect(box).to_have_value(f"Tsardom of {picked}", timeout=TIMEOUT_MS)
 
 
 def test_name_it_in_other_language(app, page, fixed_language):
@@ -135,7 +102,6 @@ def test_name_it_in_other_language(app, page, fixed_language):
     expect(names).to_contain_text("Sorauan")
 
 
-
 def test_add_a_word_with_no_meaning(app, page, fixed_language):
     # a word made only to be a name has no meaning, and that's allowed
     fixed_language({"definitions": {"Moscavia": ""}})
@@ -149,7 +115,9 @@ def test_add_a_word_with_no_meaning(app, page, fixed_language):
     menu.get_by_text('Add "Moscavia" to a language…').click()
     _pick_language(page, menu)
     meaning = menu.get_by_test_id("language-word-meaning").locator("input")
-    expect(meaning).to_have_attribute("placeholder", "leave blank if it is only a name", timeout=TIMEOUT_MS)
+    expect(meaning).to_have_attribute(
+        "placeholder", "leave blank if it is only a name", timeout=TIMEOUT_MS
+    )
     expect(meaning).to_have_value("")
     menu.get_by_role("button", name="Save").click()
     assert "Moscavia" in _words(page, "Sorauan")
@@ -172,30 +140,6 @@ def test_make_a_phrase_inserts_once_and_closes(app, page):
     expect(page.get_by_test_id("reference-menu")).to_have_count(0, timeout=TIMEOUT_MS)
 
 
-def test_a_language_without_name_rules_cannot_make_names(app, page):
-    name = _world_name("Name rules none")
-    seed_fm_world(
-        app.root,
-        name,
-        things=[
-            {"kind": "language", "name": "Sorauan", "fields": _language_fields()},
-            {"kind": "language", "name": "Whistle", "fields": {"depth": "description"}},
-        ],
-    )
-    _open_world(page, name)
-    _world_tab(page)
-    box = _place_box(page)
-    box.fill("Tsardom of ")
-    _right_click(box)
-    menu = page.get_by_test_id("reference-menu")
-    menu.get_by_test_id("menu-make-name").click()
-    picker = menu.get_by_test_id("language-picker")
-    picker.wait_for(state="visible", timeout=TIMEOUT_MS)
-    expect(picker.locator(".v-chip", has_text="Whistle")).to_have_class(
-        __import__("re").compile("v-chip--disabled")
-    )
-
-
 def test_name_it_in_lets_the_owner_type_the_name(app, page, fixed_language):
     fixed_language({"definitions": {}, "pick": "", "why": ""})
     name = _seed(app, "Name in typed")
@@ -212,3 +156,43 @@ def test_name_it_in_lets_the_owner_type_the_name(app, page, fixed_language):
     expect(sorau.get_by_test_id("thing-other-names")).to_contain_text(
         "Sel Provanna", timeout=TIMEOUT_MS
     )
+
+
+def test_name_it_inserts_at_the_cursor_and_saves_the_word(app, page):
+    """4a revised: Name it… replaces "Make a name…" in world boxes."""
+
+    name = _seed(app, "Name it box")
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.fill("Tsardom of ")
+    _right_click(box)
+    menu = page.get_by_test_id("reference-menu")
+    expect(menu.get_by_test_id("menu-make-name")).to_have_count(0)
+    menu.get_by_test_id("menu-name-it").click()
+    panel = page.get_by_test_id("name-it")
+    names = panel.get_by_test_id("name-it-name")
+    expect(names.first).to_be_visible(timeout=TIMEOUT_MS)
+    picked = names.first.inner_text().strip()
+    names.first.click()
+    expect(box).to_have_value(f"Tsardom of {picked}", timeout=TIMEOUT_MS)
+    assert picked in _words(page, "Sorauan")
+
+
+def test_name_it_replaces_the_selected_part(app, page):
+    name = _seed(app, "Name it part")
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.fill("Tsardom of Moscavia")
+    _right_click(box, 11, 19)
+    menu = page.get_by_test_id("reference-menu")
+    expect(menu.get_by_test_id("menu-reroll-part")).to_have_count(0)
+    menu.get_by_test_id("menu-name-it").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel).to_contain_text("Moscavia")
+    names = panel.get_by_test_id("name-it-name")
+    expect(names.first).to_be_visible(timeout=TIMEOUT_MS)
+    picked = names.nth(1).inner_text().strip()
+    names.nth(1).click()
+    expect(box).to_have_value(f"Tsardom of {picked}", timeout=TIMEOUT_MS)

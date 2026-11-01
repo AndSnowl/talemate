@@ -60,6 +60,15 @@
                     :disabled="!!blocked"
                     @click="searchLink"
                 ></v-list-item>
+                <v-list-item
+                    v-if="draft"
+                    prepend-icon="mdi-rename"
+                    title="Name it…"
+                    subtitle="a name from a language, for these words"
+                    role="menuitem"
+                    data-testid="selection-name-it"
+                    @click="nameIt"
+                ></v-list-item>
                 <v-divider></v-divider>
                 <v-list-item
                     prepend-icon="mdi-comment-question-outline"
@@ -84,6 +93,7 @@
 </template>
 
 <script>
+import { useWorldsStore } from '@/stores/worlds.js';
 import { normaliseTag } from './entryPage.js';
 import { STUB_KINDS, canExpand, kindInfo } from './worldKinds.js';
 import NameModeMenu from './NameModeMenu.vue';
@@ -114,6 +124,9 @@ export default {
         exclude: { type: Array, default: () => [] },
     },
     emits: ['update:modelValue', 'stub', 'expand', 'link'],
+    setup() {
+        return { worlds: useWorldsStore() };
+    },
     data() {
         return { kind: 'lore', tag: '', linking: false, choosing: false, chosen: null };
     },
@@ -139,6 +152,15 @@ export default {
         },
         act(action) {
             this.$emit(action, { kind: this.kind, tag: normaliseTag(this.tag) || null });
+            this.close();
+        },
+        nameIt() {
+            this.worlds.openNameIt({
+                words: this.shownWords,
+                languageId: (this.worlds.draft?.edited?.languages || [])[0]?.language || null,
+                kind: this.kind || 'place',
+                target: { draftKey: this.worlds.draft?.key },
+            });
             this.close();
         },
         searchLink() {

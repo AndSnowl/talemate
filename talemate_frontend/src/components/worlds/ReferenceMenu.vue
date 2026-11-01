@@ -39,11 +39,15 @@
                         data-testid="menu-change-language"
                         @click="changeLanguage"
                     ></v-list-item>
-                    <v-list-item v-if="!hasSelection" prepend-icon="mdi-alphabetical-variant" title="Make a name…" data-testid="menu-make-name" @click="mode = 'name'"></v-list-item>
+                    <!-- Name it… (languages 4a revised): for the selection, or a
+                         new name at the cursor -->
+                    <v-list-item v-if="!contextScene" prepend-icon="mdi-rename" title="Name it…" data-testid="menu-name-it" @click="nameIt"></v-list-item>
+                    <!-- a scene's box keeps naming from its speakers' languages
+                         until the scene rework -->
+                    <v-list-item v-else-if="!hasSelection" prepend-icon="mdi-alphabetical-variant" title="Make a name…" data-testid="menu-make-name" @click="mode = 'name'"></v-list-item>
                     <v-list-item prepend-icon="mdi-format-quote-open" title="Make a phrase…" data-testid="menu-make-phrase" @click="mode = 'phrase'"></v-list-item>
                     <template v-if="hasSelection && selectedText.trim()">
                         <v-list-item prepend-icon="mdi-book-plus-outline" :title="`Add &quot;${selectedText.trim()}&quot; to a language…`" data-testid="menu-add-word" @click="mode = 'word'"></v-list-item>
-                        <v-list-item prepend-icon="mdi-dice-multiple-outline" title="Reroll this part…" data-testid="menu-reroll-part" @click="mode = 'reroll'"></v-list-item>
                     </template>
                 </template>
                 <v-divider></v-divider>
@@ -137,6 +141,15 @@ export default {
         },
     },
     methods: {
+        nameIt() {
+            this.worlds.openNameIt({
+                words: this.selectedText.trim(),
+                languageId: null,
+                kind: this.contextKind || 'place',
+                target: { onPick: (name) => this.$emit('insert', name) },
+            });
+            this.$emit('update:modelValue', false);
+        },
         changeLanguage() {
             this.worlds.openLanguageChange({ originId: this.contextThingId });
             this.$emit('update:modelValue', false);

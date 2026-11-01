@@ -185,7 +185,7 @@ import { toRaw } from 'vue';
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
-import { markEdit } from '../components/worlds/nameMarks.js';
+import { markEdit, pickName } from '../components/worlds/nameMarks.js';
 import {
     factsKey,
     groupDraftKey,
@@ -705,6 +705,11 @@ export const useWorldsStore = defineStore('worlds', {
         // languages 4a revised: the Name it… panel's request, while it's
         // open (`{words, languageId, kind, target, markId}`), else null
         nameIt: null,
+        // its language's rules (`[{id, name, use, patterns}]`), the batch
+        // shown (`[{name, meaning}]`), and From a meaning's candidates
+        nameItRules: [],
+        nameItBatch: [],
+        nameItMeaning: { pending: false, candidates: [], error: null },
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
@@ -1295,6 +1300,48 @@ export const useWorldsStore = defineStore('worlds', {
 
         closeNameIt() {
             this.nameIt = null;
+            this.nameItBatch = [];
+            this.nameItMeaning = { pending: false, candidates: [], error: null };
+        },
+
+        nameItLoadRules(languageId) {
+            this.nameItRules = [];
+            this.nameItBatch = [];
+            if (languageId) this.request('name_it_rules', { language_id: languageId });
+        },
+
+        nameItRoll(languageId, ruleId, pattern = null) {
+            if (languageId && ruleId) {
+                this.request('name_it_batch', { language_id: languageId, rule_id: ruleId, pattern });
+            }
+        },
+
+        nameItFromMeaning(languageId, text) {
+            if (!languageId || !text.trim()) return;
+            this.nameItMeaning = { pending: true, candidates: [], error: null };
+            this.request('name_it_meaning', { language_id: languageId, text: text.trim() });
+        },
+
+        // a name picked in the panel: put where the request asked (a page
+        // draft, a small draft, an entry, or a text box's callback), and
+        // its word added to the language with its meaning
+        pickNameIt(languageId, name, meaning = '') {
+            const request = this.nameIt;
+            if (!request) return;
+            const target = request.target || {};
+            const options = { flagged: !!request.markId, kind: request.kind || 'place' };
+            if (target.draftKey && this.draft?.key === target.draftKey) {
+                this.editDraft(pickName(this.draft.edited, request.words, name, options));
+            } else if (target.smallKey && this.smallDrafts[target.smallKey]?.edited) {
+                this.editSmall(target.smallKey, pickName(this.smallDrafts[target.smallKey].edited, request.words, name, options));
+            } else if (target.thingId) {
+                this.pending = { ...this.pending, name_it_rename: true };
+                this.request('name_it_rename', { thing_id: target.thingId, name });
+            } else if (typeof target.onPick === 'function') {
+                target.onPick(name);
+            }
+            if (languageId) this.addLanguageWord(languageId, name, meaning);
+            this.closeNameIt();
         },
 
         // the draft's Languages rows changed: cleaned again with them
@@ -2630,6 +2677,27 @@ export const useWorldsStore = defineStore('worlds', {
                     if (this.draft?.key === data.draft_key) {
                         this.draftTaken(data, 'replace');
                     }
+                    break;
+                case 'name_it_rules':
+                    if (this.nameIt) this.nameItRules = data.rules || [];
+                    break;
+                case 'name_it_batch':
+                    if (this.nameIt) this.nameItBatch = data.names || [];
+                    break;
+                case 'name_it_meaning':
+                    this.nameItMeaning = { pending: false, candidates: data.candidates || [], error: null };
+                    break;
+                case 'name_it_meaning_failed':
+                    this.nameItMeaning = { pending: false, candidates: [], error: message.message || 'No names came back.' };
+                    break;
+                case 'name_it_rename':
+                    this.pending = { ...this.pending, name_it_rename: false };
+                    if (data.id === this.selectedThingId) {
+                        this.thing = data;
+                    } else {
+                        this.refreshThing();
+                    }
+                    if (data.kind) this.listThings(data.kind);
                     break;
                 case 'get_name_lists':
                 case 'name_list_edit':

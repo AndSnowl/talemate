@@ -155,6 +155,8 @@
                 <KindList v-if="!worlds.draft" :kind="kind" :query="query || ''" />
             </template>
         </div>
+        <!-- Name it… (languages 4a revised): one panel for every caller -->
+        <NameItPanel />
     </div>
 </template>
 
@@ -167,6 +169,7 @@ import LanguageImport from './LanguageImport.vue';
 import LanguageMake from './LanguageMake.vue';
 import CurationSettings from './CurationSettings.vue';
 import NamesSettings from './NamesSettings.vue';
+import NameItPanel from './NameItPanel.vue';
 import ExpandAskDialog from './ExpandAskDialog.vue';
 import KindList from './KindList.vue';
 import StubsTab from './StubsTab.vue';
@@ -186,7 +189,7 @@ import ThingPage from './ThingPage.vue';
 // dimmed as context. Stubs, Tags and Settings sit at the bottom.
 export default {
     name: 'WorldTab',
-    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, LanguageImport, LanguageMake, NamesSettings, StubsTab, TagsTab, ThingPage },
+    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, LanguageImport, LanguageMake, NameItPanel, NamesSettings, StubsTab, TagsTab, ThingPage },
     setup() {
         return { worlds: useWorldsStore() };
     },

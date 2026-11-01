@@ -39,6 +39,8 @@
                 <template v-else>
                     <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
+                    <!-- Name it… (languages 4a revised): rename from a language -->
+                    <v-btn v-if="!draft && thing.kind !== 'language'" variant="text" size="x-small" color="accent" prepend-icon="mdi-rename" data-testid="name-it-thing" @click="nameItThing">Name it…</v-btn>
                 </template>
                 <!-- a draft's kind can change (its facts' categories follow) -->
                 <v-select
@@ -1473,6 +1475,17 @@ export default {
             this.asOfMenu = false;
             const at = date ? { instant: date.instant, precision: date.precision } : null;
             this.worlds.viewThingAt(at);
+        },
+        nameItThing() {
+            const own = this.thing.languages_own || [];
+            const seen = (this.thing.languages_view || []).map((r) => ({ language: r.language_id }));
+            this.worlds.openNameIt({
+                words: this.thing.name,
+                languageId: [...own, ...seen][0]?.language || null,
+                kind: this.thing.kind,
+                target: { thingId: this.thing.id },
+                stub: !!this.thing.stub,
+            });
         },
         startRename() {
             this.rename = { text: this.thing.name, sent: false };
