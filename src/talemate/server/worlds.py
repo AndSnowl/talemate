@@ -514,6 +514,7 @@ from talemate.worldplay.create import (
     same_offers,
 )
 from talemate.worldplay.create import _new_names as listed_stub_names
+from talemate.worldplay.create import _unlisted_names as unlisted_stub_names
 from talemate.worldplay.decide import Verdict
 from talemate.worldplay.facts import (
     DraftName,
@@ -1437,6 +1438,10 @@ async def _fixed_preview(
         list(payload.picks),
         payload.new_names,
     )
+    if not listed_names(fixed.get("names") or []):
+        new_names += unlisted_stub_names(
+            view, [fact.text for fact in facts], [name], new_names, payload.picks
+        )
     file_into = parse_file_into(
         fixed.get("file_into") or [],
         view,
@@ -1730,8 +1735,10 @@ def _draft_new_names(
     it will be (the second mapping: stand-in to kind, for
     `_Links.draft_segments`); a name marked the same as a live entry
     maps, with its written forms, to that entry. `fresh`: the names the
-    owner treats as new (`treated_as_new`)."""
+    owner treats as new (`treated_as_new`). An unticked row makes no
+    stub, so its words stay plain."""
 
+    rows = [row for row in rows if row.ticked]
     same: dict[str, str] = {}
     for row in rows:
         target = row.same_target_id

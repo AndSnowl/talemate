@@ -91,7 +91,9 @@ async def _rename_world(plugin):
     await _act(plugin, "create_world", name="Test")
     with plugin.world.revision(Source.manual()) as rev:
         city = rev.create_thing("place", {"name": "Tsargrad"})
-        stub = rev.create_thing("place", {"name": "Novgorod", "stub": {"ignored": False}})
+        stub = rev.create_thing(
+            "place", {"name": "Novgorod", "stub": {"ignored": False}}
+        )
         rev.create_thing("place", {"name": "Velgrad"})
         realm = rev.create_thing("place", {"name": "Otsyenya"})
         rev.add_fact(realm, "general", f"Its capital is [[thing:{city}|Tsargrad]].")

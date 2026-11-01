@@ -97,7 +97,8 @@ async def test_a_draft_arrives_unchanged_with_marks(world, moscavian):
     assert [(m.name, m.why) for m in preview.marks] == [
         ("Novgorod", "a real name, on the Real names list")
     ]
-    assert preview.new_names == []
+    # the reply listed no names: Novgorod is an unticked row to Name it
+    assert [(n.name, n.ticked) for n in preview.new_names] == [("Novgorod", False)]
 
 
 async def test_the_draft_finds_its_language_from_the_prompt(world, moscavian):

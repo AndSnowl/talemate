@@ -84,7 +84,9 @@ def _message_box(page):
 
 
 def _right_click(box):
-    box.evaluate("(el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }")
+    box.evaluate(
+        "(el) => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }"
+    )
     box.dispatch_event("contextmenu", {"clientX": 400, "clientY": 300, "button": 2})
 
 

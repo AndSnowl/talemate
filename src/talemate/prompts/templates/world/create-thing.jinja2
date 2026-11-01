@@ -191,6 +191,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "facts": between 4 and 8 facts, one claim each, only what is specific to this race. "category" is one of: {{ categories | join(", ") }}.
 - "no_longer_true": after the facts, the labels of the species facts that are untrue for this race now that your facts hold, such as ["F4"]. An inherited fact your facts only add detail to stays true and isn't listed; an empty list is fine when nothing changes.
 - Leave "since" out: these facts describe the race for as long as it has existed, and are never dated.
+- A race's facts may still name places, peoples and other things (where they live, who they trade with): list each in "names", as for any entry.
 {%- elif heritage_label -%}
 {"name": "...", "age": 34, "aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}], "names": [{"name": "...", "kind": "place", "tag": "...", "in": null, "aka": []}]{% if nearby %}, "in": [{"entry": "<an entry's name>", "role": "a few words"{% if homes %}, "exceptions": [{"text": "One sentence.", "rejects": "S1"}]{% endif %}}], "file_into": [{"entry": "<an entry's name>", "role": null}]{% endif %}}
 

@@ -66,18 +66,20 @@ def test_add_rows_then_inherit_and_set_its_own(app, page):
     sorau = _open_thing(page, "Free Provinces of Sorau")
     section = sorau.get_by_test_id("entry-languages")
     _add_row(page, section, "Sorauan", "official")
-    expect(section.get_by_test_id("languages-row").filter(has_text="Sorauan")).to_contain_text(
-        "official", timeout=TIMEOUT_MS
-    )
+    expect(
+        section.get_by_test_id("languages-row").filter(has_text="Sorauan")
+    ).to_contain_text("official", timeout=TIMEOUT_MS)
     _add_row(page, section, "Moscavian", "spoken", share=25)
-    expect(section.get_by_test_id("languages-row").filter(has_text="Moscavian")).to_contain_text(
-        "25%", timeout=TIMEOUT_MS
-    )
+    expect(
+        section.get_by_test_id("languages-row").filter(has_text="Moscavian")
+    ).to_contain_text("25%", timeout=TIMEOUT_MS)
 
     town = _open_thing(page, "Thornfield")
     section = town.get_by_test_id("entry-languages")
     inherited = section.get_by_test_id("languages-inherited")
-    expect(inherited).to_contain_text("From Free Provinces of Sorau", timeout=TIMEOUT_MS)
+    expect(inherited).to_contain_text(
+        "From Free Provinces of Sorau", timeout=TIMEOUT_MS
+    )
     expect(inherited).to_contain_text("Sorauan")
     section.get_by_role("button", name="Set its own").click()
     expect(section.get_by_test_id("languages-row")).to_have_count(2, timeout=TIMEOUT_MS)
@@ -91,7 +93,9 @@ def test_character_fluency(app, page):
     mira = _open_thing(page, "Mira")
     section = mira.get_by_test_id("entry-languages")
     _add_row(page, section, "Sorauan", "spoken", fluency="native")
-    expect(section.get_by_test_id("languages-row")).to_contain_text("native", timeout=TIMEOUT_MS)
+    expect(section.get_by_test_id("languages-row")).to_contain_text(
+        "native", timeout=TIMEOUT_MS
+    )
 
 
 def test_a_character_takes_its_places_everyday_languages(app, page):
@@ -132,8 +136,12 @@ def test_a_character_takes_its_places_everyday_languages(app, page):
     _open_world(page, name)
     _world_tab(page)
     mira = _open_thing(page, "Mira")
-    inherited = mira.get_by_test_id("entry-languages").get_by_test_id("languages-inherited")
-    expect(inherited).to_contain_text("From Free Provinces of Sorau", timeout=TIMEOUT_MS)
+    inherited = mira.get_by_test_id("entry-languages").get_by_test_id(
+        "languages-inherited"
+    )
+    expect(inherited).to_contain_text(
+        "From Free Provinces of Sorau", timeout=TIMEOUT_MS
+    )
     expect(inherited).to_contain_text("Sorauan")
     expect(inherited).to_contain_text("Moscavian")
     expect(inherited).not_to_contain_text("Old Moscavian")

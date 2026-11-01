@@ -387,14 +387,14 @@ function plural(count, one, many = `${one}s`) {
 
 // What accepting a preview would write: `{facts, elsewhere, stubs,
 // movedIn}` -- its own facts ticked, the elsewhere facts ticked, the new
-// stubs it'd make (its new names, the new entries a ticked elsewhere fact
+// stubs it'd make (its ticked new names, the new entries a ticked elsewhere fact
 // goes onto; not one the owner marked as some thing already), and the
 // facts moving in, ticked.
 export function previewCounts(preview) {
     const ticked = (rows) => (rows || []).filter((row) => row.ticked !== false);
     const elsewhere = ticked(preview?.elsewhere);
     const stubs = new Set();
-    for (const row of preview?.new_names || []) {
+    for (const row of ticked(preview?.new_names)) {
         if (!row.same_target_id) {
             stubs.add(nameKey(row.name));
         }

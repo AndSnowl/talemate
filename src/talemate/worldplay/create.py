@@ -181,6 +181,7 @@ from talemate.world.names import (
     find_names,
     unknown_proper_phrases,
 )
+from talemate.world.names import TITLE_WORDS as NAME_TITLE_WORDS
 from talemate.world.store import Source, World
 from talemate.world.view import FactState, ThingState, WorldView
 from talemate.worldplay import prose_gen
@@ -1072,6 +1073,36 @@ def _written_forms(
     if not parts:
         return None
     return [max(parts, key=len)]
+
+
+def _unlisted_names(
+    view: WorldView,
+    texts: list[str],
+    own_names: list[str],
+    kept: list[NewName],
+    picked: Sequence[str] = (),
+) -> list[NewName]:
+    """The names `texts` write that the world hasn't
+    (`unknown_proper_phrases`), each an unticked place row for the owner
+    to tick, for a reply that listed none: a race draft's often doesn't
+    (languages 4a revised, the owner's Eared Owl-folk). A reply that
+    lists names is trusted to have left the rest out on purpose. A title word on its own ("Tsar")
+    is left out."""
+
+    taken = {name_key(n) for n in [*own_names, *picked] if n.strip()}
+    for name in kept:
+        taken |= {name_key(name.name), *map(name_key, name.written)}
+    rows: list[NewName] = []
+    for text in texts:
+        for unknown in unknown_proper_phrases(view, text):
+            key = name_key(unknown.text)
+            if not key or key in taken or key in NAME_TITLE_WORDS:
+                continue
+            taken.add(key)
+            rows.append(
+                NewName(name=unknown.text, kind="place", ticked=False, unlisted=True)
+            )
+    return rows
 
 
 def _new_names(
@@ -3223,6 +3254,12 @@ async def preview_thing(
         list(picks),
         treated_as_new,
     )
+    if not listed_names(raw_names):
+        # a reply that listed no names at all (every race draft of the
+        # owner's): its facts' unknown names, unticked
+        stub_names += _unlisted_names(
+            view, [f.text for f in facts], own_names, stub_names, picks
+        )
     if kind == "character" and "born" not in fields and age is not None:
         # an age older than the calendar itself is clamped to year 1
         fields["born"] = WorldDate.of(max(1, now_year - age))
@@ -3602,7 +3639,7 @@ def _accept_new(
         skip.add(fold.stub_id)
     elsewhere = live_elsewhere(view, preview.elsewhere, skip, notes)
     before = world.head_rev()
-    new_names = list(preview.new_names)
+    new_names = [n for n in preview.new_names if n.ticked]
     while True:
         try:
             thing_id, made, written_notes, moved, removed = _write_preview(
@@ -4516,7 +4553,7 @@ def _accept_same(
         view, preview.elsewhere, {stub.id} if stub is not None else set(), notes
     )
 
-    new_names = list(preview.new_names)
+    new_names = [n for n in preview.new_names if n.ticked]
     while True:
         try:
             made, written_notes, moved, removed = _write_same(

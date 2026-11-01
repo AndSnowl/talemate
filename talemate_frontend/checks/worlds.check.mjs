@@ -3989,6 +3989,24 @@ check('keep and never_flag drop only the mark (4a revised)', () => {
     assert.equal(markEdit(edited, 'm', 'reroll'), null);
 });
 
+check('an unticked new name stays plain in a draft (4a revised, Task 7)', () => {
+    const rows = [{ name: 'Velmora', kind: 'place', ticked: false, unlisted: true }];
+    assert.equal(freshSegments([{ text: 'Roosts in Velmora.', ref: null, stub: false }], rows).some((s) => s.fresh), false);
+    const ticked = freshSegments([{ text: 'Roosts in Velmora.', ref: null, stub: false }], [{ ...rows[0], ticked: true }]);
+    assert.equal(ticked.find((s) => s.text === 'Velmora').fresh, true);
+});
+
+check('previewCounts leaves unticked new names out (4a revised, Task 7)', () => {
+    const counts = previewCounts({ facts: [{ text: 'x' }], new_names: [{ name: 'Velmora', ticked: false, unlisted: true }, { name: 'Ashenmark' }] });
+    assert.equal(counts.stubs, 1);
+});
+
+check('naming a flagged unticked row ticks it (4a revised, Task 7)', () => {
+    const edited = { name: 'T', facts: [{ text: 'Trade with Novgorod.' }], new_names: [{ name: 'Novgorod', kind: 'place', ticked: false, unlisted: true }], marks: [] };
+    const changes = pickName(edited, 'Novgorod', 'Sovyetsk', { flagged: true, kind: 'place' });
+    assert.deepEqual(changes.new_names, [{ name: 'Sovyetsk', kind: 'place', ticked: true, unlisted: true }]);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

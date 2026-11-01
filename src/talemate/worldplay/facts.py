@@ -105,8 +105,6 @@ class DraftName(NewName):
     """A fact draft's "New names" row: a name its facts use that the world
     hasn't, a stub on accept while `ticked` (ruling H8)."""
 
-    ticked: bool = True
-
 
 class FactDraft(BaseModel):
     """A small draft of facts for an entry (`thing_id`), from the owner's

@@ -35,24 +35,44 @@ SECTIONS = [
         "examples": [
             {
                 "original": "Zorin doven stoi",
-                "breakdown": [["zorin", "bright"], ["doven", "shrine-the"], ["stoi", "stands"]],
+                "breakdown": [
+                    ["zorin", "bright"],
+                    ["doven", "shrine-the"],
+                    ["stoi", "stands"],
+                ],
                 "translation": "The bright shrine stands.",
             }
         ],
     },
-    {"title": "Articles live on the noun", "topic": "other", "text": "There's no word for 'the'."},
+    {
+        "title": "Articles live on the noun",
+        "topic": "other",
+        "text": "There's no word for 'the'.",
+    },
 ]
 
 
-SOUNDS = {"title": "Sounds and stress", "topic": "sounds", "text": "Stress falls on the last syllable."}
-NAMES = {"title": "How names are built", "topic": "names", "text": "A father's name ends in -ovik."}
+SOUNDS = {
+    "title": "Sounds and stress",
+    "topic": "sounds",
+    "text": "Stress falls on the last syllable.",
+}
+NAMES = {
+    "title": "How names are built",
+    "topic": "names",
+    "text": "A father's name ends in -ovik.",
+}
 
 
 def _language_tab(app, page, stem, grammar):
     fields = _language_fields()
     fields["rules"] = {**fields["rules"], "grammar": grammar}
     name = _world_name(stem)
-    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    seed_fm_world(
+        app.root,
+        name,
+        things=[{"kind": "language", "name": "Velskar", "fields": fields}],
+    )
     _open_world(page, name)
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
@@ -68,7 +88,9 @@ def _chapter(thing, title):
 def test_the_language_tab_is_in_chapters(app, page):
     thing = _language_tab(app, page, "Lang chapters", [SOUNDS, NAMES, *SECTIONS])
     expect(thing.get_by_test_id("language-tab-grammar")).to_have_count(0)
-    chapters = thing.get_by_test_id("language-chapters").get_by_test_id("language-chapter")
+    chapters = thing.get_by_test_id("language-chapters").get_by_test_id(
+        "language-chapter"
+    )
     expect(chapters).to_have_text(
         ["Overview", "Sounds", "Name rules", "Nouns", "Articles live on the noun"],
         timeout=TIMEOUT_MS,
@@ -90,10 +112,16 @@ def test_sounds_and_names_hold_their_grammar(app, page):
     thing = _language_tab(app, page, "Lang sounds names", [SOUNDS, NAMES, *SECTIONS])
     _chapter(thing, "Sounds")
     expect(thing.get_by_test_id("language-inventory")).to_be_visible(timeout=TIMEOUT_MS)
-    expect(thing.get_by_test_id("grammar-section")).to_contain_text("Stress falls on the last syllable.")
+    expect(thing.get_by_test_id("grammar-section")).to_contain_text(
+        "Stress falls on the last syllable."
+    )
     _chapter(thing, "Name rules")
-    expect(thing.get_by_test_id("language-generator").first).to_be_visible(timeout=TIMEOUT_MS)
-    expect(thing.get_by_test_id("grammar-section")).to_contain_text("A father's name ends in -ovik.")
+    expect(thing.get_by_test_id("language-generator").first).to_be_visible(
+        timeout=TIMEOUT_MS
+    )
+    expect(thing.get_by_test_id("grammar-section")).to_contain_text(
+        "A father's name ends in -ovik."
+    )
     expect(thing.get_by_test_id("language-inventory")).to_have_count(0)
 
 
@@ -147,10 +175,14 @@ def test_the_side_column_keeps_its_height_whatever_the_page(app, page):
     thing = _language_tab(app, page, "Grammar height", sections)
     side = page.get_by_test_id("world-list")
     _chapter(thing, "Nouns")
-    expect(thing.get_by_test_id("grammar-section")).to_contain_text("Short.", timeout=TIMEOUT_MS)
+    expect(thing.get_by_test_id("grammar-section")).to_contain_text(
+        "Short.", timeout=TIMEOUT_MS
+    )
     short = side.bounding_box()["height"]
     _chapter(thing, "Verbs")
-    expect(thing.get_by_test_id("grammar-section")).to_contain_text("A long explanation.")
+    expect(thing.get_by_test_id("grammar-section")).to_contain_text(
+        "A long explanation."
+    )
     page.wait_for_timeout(300)
     assert side.bounding_box()["height"] == short
 
@@ -159,7 +191,9 @@ def test_the_names_chapter_uses_the_full_width(app, page):
     page.set_viewport_size({"width": 1920, "height": 1080})
     thing = _language_tab(app, page, "Names wide", [NAMES, *SECTIONS])
     _chapter(thing, "Name rules")
-    expect(thing.get_by_test_id("language-generator").first).to_be_visible(timeout=TIMEOUT_MS)
+    expect(thing.get_by_test_id("language-generator").first).to_be_visible(
+        timeout=TIMEOUT_MS
+    )
     assert page.get_by_test_id("language-book").bounding_box()["width"] > 1240
     _chapter(thing, "Overview")
     page.wait_for_timeout(200)

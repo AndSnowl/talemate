@@ -34,7 +34,9 @@ def _make_box(app, page, stem):
     return box
 
 
-def test_make_a_language_with_claude_code_lands_in_the_review(app, page, fake_claude_mode):
+def test_make_a_language_with_claude_code_lands_in_the_review(
+    app, page, fake_claude_mode
+):
     fake_claude_mode("ok")
     box = _make_box(app, page, "Make cc")
     box.get_by_test_id("make-start").click()
@@ -49,7 +51,9 @@ def test_make_a_language_with_claude_code_lands_in_the_review(app, page, fake_cl
     review.get_by_test_id("language-show-file").click()
     expect(review.get_by_test_id("language-paste")).to_be_visible()
     review.get_by_role("button", name="Import").click()
-    expect(page.get_by_test_id("thing-name")).to_have_text("Velskar", timeout=TIMEOUT_MS)
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        "Velskar", timeout=TIMEOUT_MS
+    )
 
 
 def test_progress_shows_while_it_runs(app, page, fake_claude_mode):
@@ -135,7 +139,9 @@ def test_the_dialog_offers_route_model_and_size(app, page):
         "aria-pressed", "true", timeout=TIMEOUT_MS
     )
     expect(box.get_by_test_id("make-model")).to_be_visible()
-    expect(box.get_by_test_id("make-size-full")).to_have_attribute("aria-pressed", "true")
+    expect(box.get_by_test_id("make-size-full")).to_have_attribute(
+        "aria-pressed", "true"
+    )
     expect(box.get_by_test_id("make-size-note")).to_contain_text("subscription")
 
 
@@ -149,7 +155,9 @@ def test_choosing_the_agents_model_switches_to_quick(app, page):
     # the test app has no clients: beside the buttons and the note say so
     expect(box.get_by_test_id("make-route-in_app")).to_contain_text("Language agent")
     expect(box.get_by_test_id("make-client")).to_contain_text("no client set")
-    expect(box.get_by_test_id("make-size-note")).to_contain_text("pick one under Agents")
+    expect(box.get_by_test_id("make-size-note")).to_contain_text(
+        "pick one under Agents"
+    )
 
 
 def _route_reply(page, client):
@@ -168,36 +176,62 @@ def _route_reply(page, client):
 def test_the_agents_model_is_named_and_a_hosted_one_spends_tokens(app, page):
     box = _make_box(app, page, "Make named hosted")
     expect(box.get_by_test_id("make-route-in_app")).to_be_visible(timeout=TIMEOUT_MS)
-    _route_reply(page, {"agent": "Language", "name": "Anthropic", "model": "claude-sonnet-5", "hosted": True})
+    _route_reply(
+        page,
+        {
+            "agent": "Language",
+            "name": "Anthropic",
+            "model": "claude-sonnet-5",
+            "hosted": True,
+        },
+    )
     button = box.get_by_test_id("make-route-in_app")
     expect(button).to_contain_text("Language agent")
     expect(button).to_contain_text("(API tokens)")
     button.click()
-    expect(box.get_by_test_id("make-client")).to_have_text("Anthropic · claude-sonnet-5")
+    expect(box.get_by_test_id("make-client")).to_have_text(
+        "Anthropic · claude-sonnet-5"
+    )
     expect(box.get_by_test_id("make-size-note")).to_contain_text("Spends API tokens")
 
 
 def test_a_self_hosted_model_spends_no_tokens(app, page):
     box = _make_box(app, page, "Make named local")
     expect(box.get_by_test_id("make-route-in_app")).to_be_visible(timeout=TIMEOUT_MS)
-    _route_reply(page, {"agent": "Creator", "name": "KoboldCpp", "model": "Mistral-Small-24B", "hosted": False})
+    _route_reply(
+        page,
+        {
+            "agent": "Creator",
+            "name": "KoboldCpp",
+            "model": "Mistral-Small-24B",
+            "hosted": False,
+        },
+    )
     button = box.get_by_test_id("make-route-in_app")
     # the Language agent has none: the Creator's stands in, and says so
     expect(button).to_contain_text("Creator agent")
     expect(button).not_to_contain_text("API tokens")
     button.click()
-    expect(box.get_by_test_id("make-client")).to_have_text("KoboldCpp · Mistral-Small-24B")
+    expect(box.get_by_test_id("make-client")).to_have_text(
+        "KoboldCpp · Mistral-Small-24B"
+    )
     expect(box.get_by_test_id("make-size-note")).not_to_contain_text("API tokens")
 
 
 def test_a_chosen_route_is_used_for_the_run(app, page, fixed_language):
-    sample = (Path(__file__).resolve().parents[2] / "languages/data/sample.language.json").read_text()
+    sample = (
+        Path(__file__).resolve().parents[2] / "languages/data/sample.language.json"
+    ).read_text()
     fixed_language({"language_file": sample})
     box = _make_box(app, page, "Make in app")
     box.get_by_test_id("make-route-in_app").click()
     box.get_by_test_id("make-start").click()
-    expect(page.get_by_test_id("language-preview")).to_contain_text("Velskar", timeout=TIMEOUT_MS)
-    expect(box.get_by_test_id("make-done")).to_contain_text("the Language agent's model")
+    expect(page.get_by_test_id("language-preview")).to_contain_text(
+        "Velskar", timeout=TIMEOUT_MS
+    )
+    expect(box.get_by_test_id("make-done")).to_contain_text(
+        "the Language agent's model"
+    )
 
 
 def test_copy_the_brief_route_makes_copy_the_main_button(app, page):
@@ -215,7 +249,9 @@ def test_the_copied_brief_follows_how_much(app, page):
     box.get_by_test_id("make-size-quick").click()
     box.get_by_test_id("make-copy-brief").click()
     expect(box.get_by_test_id("make-copied")).to_be_visible(timeout=TIMEOUT_MS)
-    assert "fill in the rest later" in page.evaluate("() => navigator.clipboard.readText()")
+    assert "fill in the rest later" in page.evaluate(
+        "() => navigator.clipboard.readText()"
+    )
 
 
 def test_the_review_shows_still_to_fill_in(app, page, fake_claude_mode):

@@ -3095,3 +3095,90 @@ async def test_no_narrator_rule_without_a_language(at_313):
     assert "Titles and descriptions stay English" not in str(
         client.prompt_history[0]["prompt"]
     )
+
+
+# --- names the reply didn't list (languages 4a revised, Task 7) --------------
+
+EARED_FACT = (
+    "Eared Owl-folk roost across the countries of Velmora, Ashenmark, and"
+    " the Duchies of the Greywash Coast."
+)
+
+
+def _eared_reply(names):
+    return json.dumps(
+        {
+            "name": "Eared Owl-folk",
+            "facts": [{"category": "origin", "text": EARED_FACT}],
+            "names": names,
+        }
+    )
+
+
+async def _eared(probe_world, names):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(_eared_reply(names))
+        return await preview_thing(
+            probe_world.world,
+            "race",
+            "Eared owl-folk",
+            {"species": probe_world.owl_folk},
+            client,
+        )
+
+
+async def test_names_the_reply_left_out_come_as_unticked_rows(probe_world):
+    """Every race draft in the owner's world listed no names: its facts'
+    unknown names come as unticked, unlisted New stubs rows."""
+
+    preview = await _eared(probe_world, [])
+    rows = [(n.name, n.kind, n.ticked, n.unlisted) for n in preview.new_names]
+    assert rows == [
+        ("Velmora", "place", False, True),
+        ("Ashenmark", "place", False, True),
+        ("Duchies of the Greywash Coast", "place", False, True),
+    ]
+
+
+async def test_a_reply_that_lists_names_gets_no_unlisted_rows(probe_world):
+    """A reply that lists names left the rest out on purpose (a title, a
+    demonym): only the listed ones are rows."""
+
+    preview = await _eared(
+        probe_world, [{"name": "Velmora", "kind": "place", "tag": "country"}]
+    )
+    rows = [(n.name, n.ticked, n.unlisted) for n in preview.new_names]
+    assert rows == [("Velmora", True, False)]
+
+
+async def test_accept_makes_stubs_only_for_ticked_rows(probe_world):
+    preview = await _eared(probe_world, [])
+    names = [
+        n.model_copy(update={"ticked": True}) if n.name == "Ashenmark" else n
+        for n in preview.new_names
+    ]
+    thing_id = accept_preview(
+        probe_world.world, preview.model_copy(update={"new_names": names})
+    )
+    view = probe_world.world.view()
+    places = {view.name_of(t.id) for t in view.things("place", facts=False)}
+    assert "Ashenmark" in places
+    assert not places & {"Velmora", "Duchies of the Greywash Coast"}
+    (fact,) = view.thing(thing_id).facts
+    assert "|Ashenmark]]" in fact.text and "Velmora," in fact.text
+
+
+async def test_the_race_prompt_asks_for_the_places_its_facts_name(probe_world):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(_eared_reply([]))
+        await preview_thing(
+            probe_world.world,
+            "race",
+            "Eared owl-folk",
+            {"species": probe_world.owl_folk},
+            client,
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "A race's facts may still name places" in prompt

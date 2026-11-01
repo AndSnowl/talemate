@@ -16,7 +16,7 @@ from talemate.languages.entry import fields_of
 from talemate.languages.models import GeneratorDef, Language
 
 from e2e.seed import seed_fm_world
-from e2e.worlds.test_drafts import _draft, _draft_fact
+from e2e.worlds.test_drafts import _draft, _draft_fact, _wait_sent
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
@@ -239,3 +239,38 @@ def test_add_facts_shows_marks_and_the_card(app, page, fixed_facts, fixed_clean)
     _card(page, draft, "Novgorod").get_by_test_id("flag-keep").click()
     expect(draft.get_by_test_id("name-flag")).to_have_count(0, timeout=TIMEOUT_MS)
     expect(draft).to_contain_text("Its traders winter in Novgorod.")
+
+
+def test_names_the_ai_did_not_list_come_unticked(app, page, fixed_preview, fixed_clean):
+    """Task 7: a reply that lists no names (every race draft of the
+    owner's) still offers its facts' unknown names, unticked; ticking one
+    makes it a stub on accept."""
+
+    _world(app, page, "Unlisted names")
+    fixed_preview(
+        {
+            "name": "Tsardom of Otsyenya",
+            "facts": [
+                {
+                    "category": "history",
+                    "text": "It borders Velmora and the Duchies of the Greywash Coast.",
+                }
+            ],
+            "names": [],
+            "prose": {},
+        }
+    )
+    fixed_clean(CLEAN)
+    draft = _draft(page, "place", "Tsardom of Otsyenya, a cold realm")
+    rows = draft.get_by_test_id("new-name-row")
+    velmora = rows.filter(has_text="Velmora")
+    expect(velmora.get_by_test_id("new-name-plain")).to_contain_text(
+        "didn’t list it", timeout=TIMEOUT_MS
+    )
+    expect(rows.filter(has_text="Duchies of the Greywash Coast")).to_have_count(1)
+    velmora.get_by_test_id("new-name-tick").click()
+    expect(velmora.get_by_test_id("new-name-plain")).to_have_count(0)
+    draft.get_by_test_id("draft-accept-foot").click()
+    sent = _wait_sent(page, "accept_preview")
+    ticked = {n["name"]: n["ticked"] for n in sent["preview"]["new_names"]}
+    assert ticked == {"Velmora": True, "Duchies of the Greywash Coast": False}

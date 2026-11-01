@@ -117,8 +117,10 @@ export function previewSegments(text, newNames = []) {
 // F26) is found in any case, as accept will link it.
 export function freshSegments(segments, newNames = [], selected = []) {
     const owned = new Set((selected || []).map(nameKey));
+    // an unticked row (a "+ Add facts" draft's, or one the reply didn't
+    // list) makes no stub: its words stay plain
     const fresh = (newNames || [])
-        .filter((row) => !row.same_target_id)
+        .filter((row) => !row.same_target_id && row.ticked !== false)
         .map((row) => (owned.has(nameKey(row.name)) ? { ...row, anyCase: true } : row));
     return (segments || []).flatMap((segment) => (segment.ref || segment.self || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
 }

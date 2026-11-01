@@ -4,9 +4,9 @@
         <SuggestionRow
             v-for="row in rows"
             :key="row.name"
-            :tickable="tickable"
+            :tickable="tickable || !!row.unlisted"
             :ticked="row.ticked !== false"
-            :dropped="tickable && row.ticked === false"
+            :dropped="plain(row)"
             :tick-label="'Make a stub of ' + row.name"
             testid="new-name-row"
             tick-testid="new-name-tick"
@@ -43,7 +43,7 @@
             <template #under>
                 <!-- a "same as X?" dropdown gets room under the kind's -->
                 <div class="d-flex align-center flex-wrap ga-2" :class="{ 'same-room': asksSame(row) }">
-                    <span v-if="plain(row)" class="text-caption text-muted" data-testid="new-name-plain">no stub: its words stay plain</span>
+                    <span v-if="plain(row)" class="text-caption text-muted" data-testid="new-name-plain">{{ row.unlisted ? 'the AI didn’t list it: tick to make a stub' : 'no stub: its words stay plain' }}</span>
                     <template v-else-if="row.same_target_id">
                         <span class="text-caption text-muted" data-testid="new-name-same">same as <b>{{ nameOf(row.same_target_id) }}</b>: no stub, it links that entry</span>
                         <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" :aria-label="'Not the same: ' + row.name" @click="change(row, { same_target_id: null })"></v-btn>
@@ -127,9 +127,10 @@ export default {
             return !this.plain(row) && !row.same_target_id && !!(row.same_as && row.same_as.length);
         },
         normaliseTag,
-        // unticked (a "+ Add facts…" draft's): no stub, its words plain
+        // unticked (a "+ Add facts…" draft's, or a name the reply didn't
+        // list, languages 4a revised): no stub, its words plain
         plain(row) {
-            return this.tickable && row.ticked === false;
+            return (this.tickable || !!row.unlisted) && row.ticked === false;
         },
         change(row, changes) {
             this.$emit('change', row.name, changes);

@@ -8995,7 +8995,8 @@ async def test_selection_on_a_draft_names_and_links_by_name(plugin, client):
         tag="field",
     )
     named = _last(plugin, "make_stub_from_text")["data"]
-    (new,) = named["preview"]["new_names"]
+    # the reply listed no names: "Old Bridge" is an unticked row
+    (new,) = [n for n in named["preview"]["new_names"] if n["ticked"]]
     assert (new["name"], new["kind"], new["tag"]) == ("Frost Field", "place", "field")
     start = text.index("Old Bridge")
     await _act(

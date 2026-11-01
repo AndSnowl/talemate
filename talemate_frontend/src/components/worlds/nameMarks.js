@@ -41,7 +41,8 @@ function swapAll(edited, from, to) {
 
 // What picking `name` for `words` (Name it…, languages 4a revised)
 // changes on a draft: the words swapped wherever the draft writes them
-// (`swapAll`); a new-name row holding them renamed; with `flagged` and no
+// (`swapAll`); a new-name row holding them renamed (and, with `flagged`,
+// ticked); with `flagged` and no
 // such row, a ticked new row for the name (it's a new place, person or
 // thing); and the marks on those words dropped.
 export function pickName(edited, words, name, { flagged = false, kind = 'place' } = {}) {
@@ -52,7 +53,8 @@ export function pickName(edited, words, name, { flagged = false, kind = 'place' 
             const renamed = swapName(row.name, words, name);
             if (renamed !== row.name) {
                 found = true;
-                return { ...row, name: renamed };
+                // naming a flagged word asks for its stub: an unticked row is ticked
+                return flagged ? { ...row, name: renamed, ticked: true } : { ...row, name: renamed };
             }
             return row;
         });
