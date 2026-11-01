@@ -267,3 +267,26 @@ async def test_a_stock_title_label_on_an_epithet_is_only_suspect(world):
     assert [(v.spot.name, v.action) for v in verdicts if v.spot.name == "Watchful"] == [
         ("Watchful", "suspect")
     ]
+
+
+def test_a_plural_frame_name_judges_only_its_name(world):
+    """Owner's run: "Duchies of the Greywash Coast" was judged as
+    "Duchies of the Greywash"; plural frame and kind words frame a name
+    too, and the whole form keeps them."""
+
+    texts = ["It borders the Duchies of the Greywash Coast and the Isles of Vel."]
+    found = spots(
+        world.view(),
+        texts,
+        [("Duchies of the Greywash Coast", "place"), ("Isles of Vel", "place")],
+        set(),
+    )
+    assert _names(found) == ["Greywash", "Vel"]
+    assert found[0].full == "Duchies of the Greywash Coast"
+    found = spots(
+        world.view(),
+        ["The Kingdoms of Ost and the Velmar Coasts."],
+        [("Kingdoms of Ost", "place"), ("Velmar Coasts", "place")],
+        set(),
+    )
+    assert _names(found) == ["Ost", "Velmar"]

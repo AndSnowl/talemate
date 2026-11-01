@@ -28,7 +28,10 @@ PERSON_KINDS = {"character"}
 KIND_WORDS = set(
     "river lake mountains mountain sea coast isles isle island forest marsh "
     "marshes steppe pass bay gulf hills hill valley plains strait straits "
-    "council court guild assembly duma senate hall palace".split()
+    "council court guild assembly duma senate hall palace "
+    # plurals ("the Velmar Coasts", owner's run)
+    "rivers lakes seas coasts islands forests bays gulfs valleys passes "
+    "councils courts guilds assemblies halls palaces".split()
 )
 # words framing a place's or group's name ("the Kingdom of X", "House
 # of X"): they stay as written and only X is judged (final review I3)
@@ -38,7 +41,12 @@ FRAME_WORDS = set(
     "order church khanate dominion march marches state states league "
     "palace hall castle fortress keep tower temple cathedral monastery abbey "
     "gate bridge market square court council guild brotherhood sisterhood "
-    "academy library school college".split()
+    "academy library school college "
+    # plurals ("the Duchies of the Greywash Coast", owner's run)
+    "duchies empires republics tsardoms principalities realms houses "
+    "counties baronies khanates dominions leagues orders churches castles "
+    "fortresses towers temples gates bridges markets academies "
+    "schools colleges".split()
 )
 # names judged in one flag call, as probe 4 did (`BATCH`)
 FLAG_BATCH = 14
