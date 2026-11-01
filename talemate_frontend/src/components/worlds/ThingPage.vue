@@ -562,7 +562,7 @@
                 <!-- 5. Could move here -->
                 <MoveHere :draft="edited" @tick="tickMove" />
                 <!-- 6. New stubs -->
-                <PreviewStubs :rows="edited.new_names || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
+                <PreviewStubs :rows="edited.new_names || []" :marks="edited.marks || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
                 <!-- 7. File into this -->
                 <div v-if="(edited.file_into || []).length" class="mt-3" data-testid="draft-file-into">
                     <div class="suggestion-heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>

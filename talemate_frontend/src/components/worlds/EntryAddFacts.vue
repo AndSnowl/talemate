@@ -127,6 +127,7 @@
                 <div v-if="!draft.rows.length" class="text-caption text-muted">Nothing new from that.</div>
                 <PreviewStubs
                     :rows="draft.edited?.new_names || []"
+                    :marks="draft.edited?.marks || []"
                     tickable
                     @change="(name, change) => worlds.editSmall(draft.key, changeNewName(draft.edited, name, change))"
                 />

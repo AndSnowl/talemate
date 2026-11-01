@@ -66,66 +66,23 @@ function renameRows(rows, from, to, add = null) {
 }
 
 // What a mark's action changes on the draft (`editDraft`'s changes), and
-// the name to add to the world's keep list, if any; null when there's
-// nothing to do (no spare name left to reroll to).
-//
-// Actions: `reroll` (another spare name), `keep_here` (the old name back),
-// `never` (that, and kept in this world from now on); on a suspect one,
-// `replace` (a spare name), `keep` (the mark goes), `never_flag` (that,
-// and kept in this world).
+// the name to add to the world's keep list, if any; null for an action
+// it doesn't know. `keep` drops the mark; `never_flag` drops it and keeps
+// the name in this world from now on (4a revised: nothing is replaced;
+// renaming is Name it…'s).
 export function markEdit(edited, markId, action) {
     const marks = edited?.marks || [];
     const mark = marks.find((m) => m.id === markId);
-    if (!mark) {
+    if (!mark || (action !== 'keep' && action !== 'never_flag')) {
         return null;
     }
-    const others = marks.filter((m) => m.id !== markId);
-    // never a name another mark has (final review I2: two places would
-    // merge)
-    const taken = new Set(others.map((m) => m.name.toLowerCase()));
-    const spares = (mark.spares || []).filter((name) => !taken.has(name.toLowerCase()));
-    if (action === 'reroll' || action === 'replace') {
-        if (!spares.length) {
-            return null;
-        }
-        const next = spares[0];
-        const from = mark.name;
-        const add =
-            action === 'replace' ? { name: next, kind: mark.entry_kind || 'place', replaced: mark.was, from_cleaning: true } : null;
-        const changed = {
-            ...mark,
-            kind: 'replaced',
-            name: next,
-            meaning: '',
-            spares: action === 'reroll' ? [...spares.slice(1), from] : spares.slice(1),
-        };
-        return {
-            changes: {
-                ...swapAll(edited, from, next),
-                ...(edited.new_names ? { new_names: renameRows(edited.new_names, from, next, add) } : {}),
-                marks: marks.map((m) => (m.id === markId ? changed : m)),
-            },
-            keep: null,
-        };
-    }
-    if (action === 'keep_here' || action === 'never') {
-        return {
-            changes: {
-                ...swapAll(edited, mark.name, mark.was),
-                ...(edited.new_names ? { new_names: renameRows(edited.new_names, mark.name, mark.was) } : {}),
-                marks: others,
-            },
-            keep: action === 'never' ? mark.was : null,
-        };
-    }
-    if (action === 'keep' || action === 'never_flag') {
-        return { changes: { marks: others }, keep: action === 'never_flag' ? mark.name : null };
-    }
-    return null;
+    return { changes: { marks: marks.filter((m) => m.id !== markId) }, keep: action === 'never_flag' ? mark.name : null };
 }
 
-// `segments` with each mark's name split out as its own run (`mark`: its
-// id, `markKind`), in plain and fresh runs; a linked or self run is left.
+// `segments` with each mark's words split out as their own run, flagged
+// (`flag`: the mark's id) and otherwise as they were: a plain run stays
+// plain, a fresh one (a new stub) stays fresh. A linked or self run is
+// left as it is.
 export function markSegments(segments, marks) {
     const live = (marks || []).filter((m) => m.name);
     if (!live.length) {
@@ -135,7 +92,7 @@ export function markSegments(segments, marks) {
     const pattern = new RegExp(names.map((m) => `(?<![\\p{L}\\p{N}])${escapeRegExp(m.name)}(?![\\p{L}\\p{N}])`).join('|'), 'gu');
     const byName = new Map(live.map((m) => [m.name, m]));
     return (segments || []).flatMap((segment) => {
-        if (segment.ref || segment.self || segment.mark) {
+        if (segment.ref || segment.self || segment.flag) {
             return [segment];
         }
         const out = [];
@@ -145,7 +102,7 @@ export function markSegments(segments, marks) {
                 out.push({ ...segment, text: segment.text.slice(at, match.index) });
             }
             const mark = byName.get(match[0]);
-            out.push({ text: match[0], ref: null, stub: false, mark: mark.id, markKind: mark.kind });
+            out.push({ ...segment, text: match[0], flag: mark.id });
             at = match.index + match[0].length;
         }
         if (!out.length) {

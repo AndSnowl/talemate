@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
-import { markEdit } from '../src/components/worlds/nameMarks.js';
+import { markEdit, markSegments } from '../src/components/worlds/nameMarks.js';
 import {
     akaAdded,
     akaChanged,
@@ -3950,17 +3950,20 @@ check('a nested draft written in keeps its marks beside the owner-changed ones (
     assert.deepEqual(out.marks.map((m) => m.id), ['b']);
 });
 
-check("reroll never lands on another mark's name (final I2)", () => {
-    const edited = {
-        name: 'T',
-        facts: [{ text: 'From Zizhigrad to Lezhograd.' }],
-        marks: [
-            { id: 'a', kind: 'replaced', name: 'Zizhigrad', was: 'Kiev', spares: ['Lezhograd', 'Sovyetsk'] },
-            { id: 'b', kind: 'replaced', name: 'Lezhograd', was: 'Pskov', spares: [] },
-        ],
-    };
-    const { changes } = markEdit(edited, 'a', 'reroll');
-    assert.equal(changes.facts[0].text, 'From Sovyetsk to Lezhograd.');
+check('a flagged fresh name stays fresh and carries its flag (4a revised)', () => {
+    const marks = [{ id: 'm', name: 'Novgorod', part: 'Novgorod', why: 'a real city' }];
+    const segments = markSegments([{ text: 'Trade with Novgorod.', ref: null, stub: false }], marks);
+    const fresh = markSegments([{ text: 'Novgorod', ref: null, stub: false, fresh: true, kind: 'place' }], marks);
+    assert.deepEqual(segments.map((s) => [s.text, s.flag || null]), [['Trade with ', null], ['Novgorod', 'm'], ['.', null]]);
+    assert.deepEqual([fresh[0].fresh, fresh[0].flag, fresh[0].kind], [true, 'm', 'place']);
+});
+
+check('keep and never_flag drop only the mark (4a revised)', () => {
+    const edited = { facts: [{ text: 'Trade with Novgorod.' }], marks: [{ id: 'm', name: 'Novgorod', why: 'x' }] };
+    const kept = markEdit(edited, 'm', 'keep');
+    assert.deepEqual(kept, { changes: { marks: [] }, keep: null });
+    assert.deepEqual(markEdit(edited, 'm', 'never_flag'), { changes: { marks: [] }, keep: 'Novgorod' });
+    assert.equal(markEdit(edited, 'm', 'reroll'), null);
 });
 
 if (failures.length) {

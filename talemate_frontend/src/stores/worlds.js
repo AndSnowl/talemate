@@ -702,6 +702,9 @@ export const useWorldsStore = defineStore('worlds', {
         // languages 4a: the name lists' rows (`{name, kind, scope, off}`),
         // the app's and this world's, for the Names page
         nameLists: [],
+        // languages 4a revised: the Name it… panel's request, while it's
+        // open (`{words, languageId, kind, target, markId}`), else null
+        nameIt: null,
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
@@ -1282,6 +1285,16 @@ export const useWorldsStore = defineStore('worlds', {
             if (result.keep) {
                 this.nameListEdit('add', 'keep', result.keep);
             }
+        },
+
+        // open the Name it… panel for `request` (`{words, languageId, kind,
+        // target: {draftKey}|{smallKey}|{thingId}|{input}, markId?}`)
+        openNameIt(request) {
+            this.nameIt = { ...request };
+        },
+
+        closeNameIt() {
+            this.nameIt = null;
         },
 
         // the draft's Languages rows changed: cleaned again with them

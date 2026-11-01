@@ -13,8 +13,8 @@
             @tick="change(row, { ticked: $event })"
         >
             <span class="stub-name">{{ row.name }}</span>
-            <!-- a name cleaning gave it (languages 4a) -->
-            <span v-if="row.replaced" class="text-caption text-muted ml-2" data-testid="new-name-replaced">replaced {{ row.replaced }}</span>
+            <!-- a name cleaning flagged (languages 4a) -->
+            <span v-if="flagOf(row)" class="text-caption flagged-why ml-2" data-testid="new-name-flagged">flagged: {{ flagOf(row).why }}</span>
             <template v-if="!plain(row) && !row.same_target_id" #end>
                 <v-select
                     :model-value="row.kind"
@@ -102,6 +102,8 @@ export default {
     components: { ReferenceMenu, SameThingAsk, SuggestionRow },
     props: {
         rows: { type: Array, required: true },
+        // the draft's flagged names (languages 4a)
+        marks: { type: Array, default: () => [] },
         tickable: { type: Boolean, default: false },
     },
     emits: ['change'],
@@ -117,6 +119,9 @@ export default {
         },
     },
     methods: {
+        flagOf(row) {
+            return this.marks.find((m) => m.name === row.name || m.part === row.name) || null;
+        },
         // whether its row asks "same as X?" (the AI's few candidates)
         asksSame(row) {
             return !this.plain(row) && !row.same_target_id && !!(row.same_as && row.same_as.length);
@@ -166,6 +171,9 @@ export default {
 </script>
 
 <style scoped>
+.flagged-why {
+    color: rgb(var(--v-theme-warning));
+}
 .same-room {
     margin-top: 8px;
 }

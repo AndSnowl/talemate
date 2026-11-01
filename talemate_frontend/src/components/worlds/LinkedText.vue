@@ -50,7 +50,7 @@
             <StubRepointButton v-else-if="repointStub && !stubOf(segment).ignored" :stub="stubOf(segment)" />
         </StubCard>
     </v-menu><v-menu
-        v-else-if="segment.mark"
+        v-else-if="segment.flag"
         :model-value="openCard === index"
         open-on-hover
         :open-delay="250"
@@ -61,11 +61,11 @@
     >
         <template #activator="{ props }"><span
             v-bind="props"
-            class="name-mark"
-            :class="segment.markKind"
-            data-testid="name-mark"
+            class="flagged"
+            :class="{ 'linked-stub': segment.fresh, fresh: segment.fresh }"
+            data-testid="name-flag"
         >{{ segment.text }}</span></template>
-        <NameMarkCard :mark-id="segment.mark" @done="setCard(index, false)" />
+        <FlagCard :mark-id="segment.flag" :new-stub="segment.fresh ? segment.kind || 'name' : ''" @done="setCard(index, false)" />
     </v-menu><span
         v-else-if="segment.fresh"
         class="linked-stub fresh"
@@ -99,7 +99,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { canExpand } from './worldKinds.js';
-import NameMarkCard from './NameMarkCard.vue';
+import FlagCard from './FlagCard.vue';
 import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 import StubCard from './StubCard.vue';
@@ -113,8 +113,9 @@ import StubRepointButton from './StubRepointButton.vue';
 // race or mix stub, which can't be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
 // only made on accept. A `self` run is the page's own name (ruling H7):
 // in the link colour, titled "this page", not clickable, since it links
-// nothing. A `mark` run is a name cleaning replaced (dotted) or found
-// suspect (wavy), with its card on hover (`NameMarkCard`, languages 4a).
+// nothing. A `flag`ged run is a name cleaning doubts (languages 4a): a
+// wavy underline on top of its own look (a fresh one stays stub-styled),
+// with its card on hover (`FlagCard`).
 // With no segments, `text` shows as it is.
 //
 // With `repoint` (an own fact on its thing's page), an entry link gets a
@@ -137,7 +138,7 @@ import StubRepointButton from './StubRepointButton.vue';
 // row (its fact menu).
 export default {
     name: 'LinkedText',
-    components: { NameMarkCard, NameModeMenu, ReferenceMenu, StubCard, StubRepointButton },
+    components: { FlagCard, NameModeMenu, ReferenceMenu, StubCard, StubRepointButton },
     props: {
         segments: { type: Array, default: null },
         text: { type: String, default: '' },
@@ -269,16 +270,11 @@ export default {
     cursor: help;
 }
 
-.name-mark {
-    text-decoration: underline dotted rgb(var(--v-theme-link));
-    text-decoration-thickness: 2px;
-    text-underline-offset: 3px;
-    cursor: help;
-}
-
-.name-mark.suspect {
+.flagged {
     text-decoration: underline wavy rgb(var(--v-theme-warning));
     text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+    cursor: help;
 }
 
 .link-card {
