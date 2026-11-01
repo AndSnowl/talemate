@@ -56,7 +56,7 @@
 1. **Name it… on words that appear in a draft's text and in a new stub row with different case or a possessive** ("Greywash's"). Every place is changed, and the stub row is renamed, not duplicated. Task 4.
 2. **Rerolling when a rule's pattern space is small** (a rule with three literal names). A batch shows what exists (fewer than 10), Reroll never errors, and names already in the world are left out. Task 3.
 3. **From a meaning with words the dictionary lacks.** New words are coined with their meaning and saved only when the owner picks. Cancelling saves nothing. Task 3.
-4. **Renaming a saved entry to a name another entry has.** It's refused with the existing "name in use" message, and nothing changes. Task 6.
+4. **Renaming a saved entry to a name another entry has.** It's refused with the existing "name in use" message, and nothing changes. Task 4.
 5. **The flag card on a name that's both a new stub and flagged, after the owner keeps it.** The stub look stays, only the underline goes, and the stub is still made on accept. Task 2.
 
 ---
