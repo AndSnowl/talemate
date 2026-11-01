@@ -14,7 +14,7 @@ from talemate.languages.models import DictionaryEntry, GeneratorDef, Language
 
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_clean_names import _card
-from e2e.worlds.test_drafts import _draft, _draft_fact, _select
+from e2e.worlds.test_drafts import _draft, _draft_fact, _select, _wait_sent
 from e2e.worlds.test_new_scene import SEND_SPY_JS
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
@@ -229,3 +229,46 @@ def test_the_reference_menu_offers_name_it_not_make_a_name(app, page):
     expect(menu.get_by_test_id("menu-name-it")).to_be_visible(timeout=TIMEOUT_MS)
     expect(menu.get_by_test_id("menu-make-name")).to_have_count(0)
     expect(menu.get_by_text(re.compile("Reroll this part"))).to_have_count(0)
+
+
+def test_name_it_on_linked_words_renames_that_entry(
+    app, page, fixed_preview, fixed_clean
+):
+    """Final review 4: Name it… on part of a linked name in a draft renames
+    the entry, the rest of its name kept, and the draft's words follow."""
+
+    _world(
+        app,
+        page,
+        "Name it linked",
+        things=[{"kind": "place", "name": "Duchies of the Greywash Coast"}],
+    )
+    fixed_preview(
+        {
+            "name": "Tsardom of Otsyenya",
+            "facts": [
+                {
+                    "category": "history",
+                    "text": "It borders the Duchies of the Greywash Coast.",
+                }
+            ],
+            "names": [],
+            "prose": {},
+        }
+    )
+    fixed_clean(CLEAN)
+    draft = _draft(page, "place", "Tsardom of Otsyenya, a cold realm")
+    fact = _draft_fact(draft, "It borders")
+    _select(page, fact.locator(".fact-text").first, "Greywash")
+    page.get_by_test_id("selection-name-it").click()
+    panel = _panel(page)
+    expect(panel.get_by_test_id("name-it-effect")).to_contain_text(
+        "Duchies of the Greywash Coast"
+    )
+    picked = _names(panel)[0]
+    panel.get_by_test_id("name-it-name").first.click()
+    expect(fact).to_contain_text(
+        f"the Duchies of the {picked} Coast", timeout=TIMEOUT_MS
+    )
+    sent = _wait_sent(page, "name_it_rename")
+    assert sent["name"] == f"Duchies of the {picked} Coast"

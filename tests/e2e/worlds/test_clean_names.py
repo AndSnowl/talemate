@@ -285,6 +285,37 @@ def test_a_stub_draft_shows_the_language_it_inherits(
     expect(draft.get_by_test_id("draft-pick-language")).to_have_count(0)
 
 
+def test_a_flagged_own_name_shows_under_the_heading(
+    app, page, fixed_preview, fixed_clean
+):
+    """Final review 6: the draft's own name on a list is flagged where the
+    owner sees it, and Name it… renames the draft."""
+
+    _world(app, page, "Own name flag")
+    fixed_preview(
+        {
+            "name": "Novgorod",
+            "facts": [{"category": "description", "text": "Novgorod trades furs."}],
+            "names": [],
+            "prose": {},
+        }
+    )
+    fixed_clean(CLEAN)
+    draft = _draft(page, "place", "Tsardom of Moscavia's fur town")
+    flag = draft.get_by_test_id("draft-name-flag")
+    expect(flag).to_contain_text("Novgorod", timeout=TIMEOUT_MS)
+    flag.get_by_test_id("draft-name-flag-name-it").click()
+    panel = page.get_by_test_id("name-it")
+    first = panel.get_by_test_id("name-it-name").first
+    expect(first).to_be_visible(timeout=TIMEOUT_MS)
+    picked = first.inner_text().strip()
+    first.click()
+    expect(draft.get_by_test_id("draft-name").locator("input")).to_have_value(
+        picked, timeout=TIMEOUT_MS
+    )
+    expect(draft.get_by_test_id("draft-name-flag")).to_have_count(0)
+
+
 # --- Add facts ----------------------------------------------------------------
 
 

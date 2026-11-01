@@ -185,7 +185,7 @@ import { toRaw } from 'vue';
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
-import { markEdit, pickName } from '../components/worlds/nameMarks.js';
+import { markEdit, pickName, swapName } from '../components/worlds/nameMarks.js';
 import {
     factsKey,
     groupDraftKey,
@@ -709,7 +709,10 @@ export const useWorldsStore = defineStore('worlds', {
         // shown (`[{name, meaning}]`), and From a meaning's candidates
         nameItRules: [],
         nameItBatch: [],
-        nameItMeaning: { pending: false, candidates: [], error: null },
+        nameItMeaning: { pending: false, candidates: [], error: null, languageId: null },
+        // the words a rename's pick adds to its language, once the rename
+        // is written (a refused one adds none: final review 3)
+        nameItRenameWords: null,
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
@@ -1301,7 +1304,7 @@ export const useWorldsStore = defineStore('worlds', {
         closeNameIt() {
             this.nameIt = null;
             this.nameItBatch = [];
-            this.nameItMeaning = { pending: false, candidates: [], error: null };
+            this.nameItMeaning = { pending: false, candidates: [], error: null, languageId: null };
         },
 
         nameItLoadRules(languageId) {
@@ -1318,29 +1321,41 @@ export const useWorldsStore = defineStore('worlds', {
 
         nameItFromMeaning(languageId, text) {
             if (!languageId || !text.trim()) return;
-            this.nameItMeaning = { pending: true, candidates: [], error: null };
+            this.nameItMeaning = { pending: true, candidates: [], error: null, languageId };
             this.request('name_it_meaning', { language_id: languageId, text: text.trim() });
         },
 
         // a name picked in the panel: put where the request asked (a page
         // draft, a small draft, an entry, or a text box's callback), and
-        // its word added to the language with its meaning
-        pickNameIt(languageId, name, meaning = '') {
+        // its word added to the language with its meaning, and `newWords`
+        // (`[{word, meaning}]`, a meaning's coined parts) too; for an entry,
+        // only once its rename is written
+        pickNameIt(languageId, name, meaning = '', newWords = []) {
             const request = this.nameIt;
             if (!request) return;
             const target = request.target || {};
             const options = { flagged: !!request.markId, kind: request.kind || 'place' };
+            const words = languageId ? [...newWords.map((part) => [part.word, part.meaning]), [name, meaning]] : [];
+            let renaming = false;
             if (target.draftKey && this.draft?.key === target.draftKey) {
                 this.editDraft(pickName(this.draft.edited, request.words, name, options));
             } else if (target.smallKey && this.smallDrafts[target.smallKey]?.edited) {
                 this.editSmall(target.smallKey, pickName(this.smallDrafts[target.smallKey].edited, request.words, name, options));
-            } else if (target.thingId) {
+            }
+            // an entry (its page, or linked words on a draft: then both)
+            if (target.thingId) {
+                renaming = true;
+                // part of an entry's name (linked words): the rest is kept
+                const full = target.fullName ? swapName(target.fullName, request.words, name) : name;
+                this.nameItRenameWords = words.length ? { languageId, words } : null;
                 this.pending = { ...this.pending, name_it_rename: true };
-                this.request('name_it_rename', { thing_id: target.thingId, name });
-            } else if (typeof target.onPick === 'function') {
+                this.request('name_it_rename', { thing_id: target.thingId, name: full });
+            } else if (!target.draftKey && !target.smallKey && typeof target.onPick === 'function') {
                 target.onPick(name);
             }
-            if (languageId) this.addLanguageWord(languageId, name, meaning);
+            if (!renaming) {
+                for (const [word, wordMeaning] of words) this.addLanguageWord(languageId, word, wordMeaning);
+            }
             this.closeNameIt();
         },
 
@@ -2685,13 +2700,23 @@ export const useWorldsStore = defineStore('worlds', {
                     if (this.nameIt) this.nameItBatch = data.names || [];
                     break;
                 case 'name_it_meaning':
-                    this.nameItMeaning = { pending: false, candidates: data.candidates || [], error: null };
+                    // dropped once the panel closed or asked again elsewhere
+                    if (this.nameIt && this.nameItMeaning.pending) {
+                        this.nameItMeaning = { ...this.nameItMeaning, pending: false, candidates: data.candidates || [], error: null };
+                    }
                     break;
                 case 'name_it_meaning_failed':
-                    this.nameItMeaning = { pending: false, candidates: [], error: message.message || 'No names came back.' };
+                    if (this.nameIt && this.nameItMeaning.pending) {
+                        this.nameItMeaning = { ...this.nameItMeaning, pending: false, candidates: [], error: message.message || 'No names came back.' };
+                    }
                     break;
                 case 'name_it_rename':
                     this.pending = { ...this.pending, name_it_rename: false };
+                    if (this.nameItRenameWords) {
+                        const { languageId, words } = this.nameItRenameWords;
+                        this.nameItRenameWords = null;
+                        for (const [word, wordMeaning] of words) this.addLanguageWord(languageId, word, wordMeaning);
+                    }
                     if (data.id === this.selectedThingId) {
                         this.thing = data;
                     } else {
@@ -2854,6 +2879,8 @@ export const useWorldsStore = defineStore('worlds', {
                             this.setError(message.error.message);
                         }
                         this.pending = {};
+                        // a refused rename saves none of its words
+                        this.nameItRenameWords = null;
                         // the failed request may be the delete (or its
                         // check): close its dialog, so the error shows
                         this.deleteCheck = null;

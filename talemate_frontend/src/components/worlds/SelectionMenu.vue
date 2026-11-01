@@ -122,6 +122,9 @@ export default {
         draft: { type: Boolean, default: false },
         blocked: { type: String, default: '' },
         exclude: { type: Array, default: () => [] },
+        // the link run the words lie in (`{ref, text, stub}`), if any:
+        // Name it… then names that entry
+        link: { type: Object, default: null },
     },
     emits: ['update:modelValue', 'stub', 'expand', 'link'],
     setup() {
@@ -155,6 +158,18 @@ export default {
             this.close();
         },
         nameIt() {
+            if (this.link) {
+                const entry = this.worlds.referenceTargets.find((t) => t.id === this.link.ref);
+                this.worlds.openNameIt({
+                    words: this.shownWords,
+                    kind: entry?.kind || 'place',
+                    stub: entry ? entry.stub : this.link.stub,
+                    // the draft's words follow, as the entry is renamed
+                    target: { thingId: this.link.ref, fullName: entry?.name || this.link.text, draftKey: this.worlds.draft?.key },
+                });
+                this.close();
+                return;
+            }
             this.worlds.openNameIt({
                 words: this.shownWords,
                 languageId: (this.worlds.draft?.edited?.languages || [])[0]?.language || null,

@@ -118,6 +118,7 @@ import {
     elsewhereSegments,
     factDraftSegments,
     freshSegments,
+    linkAt,
     holdFact,
     moveFactTo,
     namedSegments,
@@ -4005,6 +4006,88 @@ check('naming a flagged unticked row ticks it (4a revised, Task 7)', () => {
     const edited = { name: 'T', facts: [{ text: 'Trade with Novgorod.' }], new_names: [{ name: 'Novgorod', kind: 'place', ticked: false, unlisted: true }], marks: [] };
     const changes = pickName(edited, 'Novgorod', 'Sovyetsk', { flagged: true, kind: 'place' });
     assert.deepEqual(changes.new_names, [{ name: 'Sovyetsk', kind: 'place', ticked: true, unlisted: true }]);
+});
+
+check('pickName renames a "For other pages" row\'s target and its new stub (final review 1)', () => {
+    const edited = {
+        name: 'T',
+        facts: [],
+        new_names: [],
+        elsewhere: [{ text: 'Greywash is a port.', target_name: 'Greywash', new: { name: 'Greywash', kind: 'place', written: [], aka: [] } }],
+    };
+    const changes = pickName(edited, 'Greywash', 'Velmar', { flagged: true, kind: 'place' });
+    const row = changes.elsewhere[0];
+    assert.equal(row.text, 'Velmar is a port.');
+    assert.equal(row.target_name, 'Velmar');
+    assert.equal(row.new.name, 'Velmar');
+});
+
+check('pickName renames a row\'s written forms and other names, in any case (final review 2)', () => {
+    const edited = {
+        name: 'T',
+        facts: [{ text: 'Ships sail from Greywash.' }],
+        new_names: [
+            { name: 'Kingdom of Greywash', kind: 'place', written: ['Greywash'], aka: [{ name: 'the Greywash Realm' }] },
+            { name: 'greywash shore', kind: 'place', written: [], aka: [] },
+        ],
+    };
+    const changes = pickName(edited, 'Greywash', 'Velmar', { flagged: true, kind: 'place' });
+    assert.deepEqual(
+        changes.new_names.map((r) => [r.name, r.written, r.aka.map((a) => a.name)]),
+        [
+            ['Kingdom of Velmar', ['Velmar'], ['the Velmar Realm']],
+            ['Velmar shore', [], []],
+        ],
+    );
+});
+
+check('a refused Name it rename saves no word (final review 3)', () => {
+    const { store, sent } = freshStore();
+    const words = () => sent.filter((m) => m.action === 'language_add_word').map((m) => m.word ?? m.data?.word);
+    store.openNameIt({ words: 'Tsargrad', target: { thingId: 't1' } });
+    store.pickNameIt('l1', 'Velmar', 'grey hill', [{ word: 'velm', meaning: 'grey' }]);
+    assert.deepEqual(words(), []);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Velmar is already the name of Velmar' } });
+    store.handleMessage(reply('name_it_rename', { id: 't1', kind: 'place', name: 'Tsargrad' }));
+    assert.deepEqual(words(), []);
+    store.openNameIt({ words: 'Tsargrad', target: { thingId: 't1' } });
+    store.pickNameIt('l1', 'Khvod', 'lake', [{ word: 'khvod', meaning: 'lake' }]);
+    store.handleMessage(reply('name_it_rename', { id: 't1', kind: 'place', name: 'Khvod' }));
+    assert.deepEqual(words(), ['khvod', 'Khvod']);
+});
+
+check('a From-a-meaning reply after the panel closed is dropped (final review 5)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    store.nameItFromMeaning('l1', 'lakeland');
+    store.closeNameIt();
+    store.handleMessage(reply('name_it_meaning', { candidates: [{ name: 'Khvodakhan', built_from: [] }] }));
+    assert.deepEqual(store.nameItMeaning.candidates, []);
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    store.nameItFromMeaning('l1', 'lakeland');
+    store.handleMessage(reply('name_it_meaning', { candidates: [{ name: 'Khvodakhan', built_from: [] }] }));
+    assert.deepEqual(store.nameItMeaning.candidates.map((c) => c.name), ['Khvodakhan']);
+    assert.equal(store.nameItMeaning.languageId, 'l1');
+});
+
+check('linkAt finds the link run a selection lies in (final review 4)', () => {
+    const segments = [
+        { text: 'It borders ', ref: null },
+        { text: 'Duchies of the Greywash Coast', ref: 'd1', stub: true },
+        { text: '.', ref: null },
+    ];
+    assert.deepEqual(linkAt(segments, 11, 40), { ref: 'd1', text: 'Duchies of the Greywash Coast', stub: true });
+    assert.deepEqual(linkAt(segments, 26, 34), { ref: 'd1', text: 'Duchies of the Greywash Coast', stub: true });
+    assert.equal(linkAt(segments, 3, 20), null);
+    assert.equal(linkAt(segments, 0, 2), null);
+});
+
+check('Name it on part of a linked name renames the entry in full (final review 4)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Greywash', target: { thingId: 'd1', fullName: 'Duchies of the Greywash Coast' } });
+    store.pickNameIt(null, 'Velmar');
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name ?? asked.data?.name, 'Duchies of the Velmar Coast');
 });
 
 if (failures.length) {

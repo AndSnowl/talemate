@@ -57,6 +57,14 @@
                 ></v-select>
                 <v-chip v-else size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
                 <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
+                <!-- the draft's own name flagged (final review 6): its
+                     facts show it as the entry itself, unmarked -->
+                <div v-if="draft && nameFlag" class="w-100 d-flex align-center flex-wrap ga-2 text-body-2" data-testid="draft-name-flag">
+                    <span class="name-flagged">{{ nameFlag.name }}</span>
+                    <span class="text-muted">flagged: {{ nameFlag.why }}</span>
+                    <v-btn size="x-small" variant="outlined" color="accent" prepend-icon="mdi-rename" data-testid="draft-name-flag-name-it" @click="nameItOwnName">Name it…</v-btn>
+                    <v-btn size="x-small" variant="text" data-testid="draft-name-flag-keep" @click="worlds.markAction(nameFlag.id, 'keep')">Keep it</v-btn>
+                </div>
                 <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
                 <!-- its other names (edited under Other names) -->
@@ -623,6 +631,7 @@
             :before="selection?.before || ''"
             :draft="draft"
             :blocked="selection?.blocked || ''"
+            :link="selection?.link || null"
             :exclude="thing && thing.id ? [thing.id] : []"
             @stub="makeStub(false, $event)"
             @expand="makeStub(true, $event)"
@@ -654,6 +663,7 @@ import {
     editFact,
     filingKey,
     holdFact,
+    linkAt,
     moveFactTo,
     removeFact as removeDraftFact,
     removeFiling,
@@ -900,6 +910,11 @@ export default {
         };
     },
     computed: {
+        // a mark on the draft's own name (final review 6)
+        nameFlag() {
+            const name = (this.edited?.name || '').toLowerCase();
+            return (this.edited?.marks || []).find((m) => m.name && name.includes(m.name.toLowerCase())) || null;
+        },
         // the Change it… panel belongs on this page: its language's, or
         // the entry it was asked from
         changeHere() {
@@ -1477,6 +1492,16 @@ export default {
             const at = date ? { instant: date.instant, precision: date.precision } : null;
             this.worlds.viewThingAt(at);
         },
+        nameItOwnName() {
+            const mark = this.nameFlag;
+            this.worlds.openNameIt({
+                words: mark.part || mark.name,
+                languageId: (this.edited.languages || [])[0]?.language || (this.edited.inherited_languages || [])[0]?.language_id || null,
+                kind: this.edited.kind,
+                markId: mark.id,
+                target: { draftKey: this.worlds.draft?.key },
+            });
+        },
         nameItThing() {
             const own = this.thing.languages_own || [];
             const seen = (this.thing.languages_view || []).map((r) => ({ language: r.language_id }));
@@ -1676,6 +1701,8 @@ export default {
                 words,
                 before,
                 target: [x, y],
+                // linked words: Name it… names that entry (final review 4)
+                link: linkAt(row.view?.segments, start, end),
                 blocked: row.serverIndex === null ? 'This fact was written or changed here: its words can be linked once it\'s accepted.' : '',
             };
             this.selecting = true;
@@ -1716,6 +1743,10 @@ export default {
 </script>
 
 <style scoped>
+.name-flagged {
+    text-decoration: underline wavy rgb(var(--v-theme-warning));
+    text-underline-offset: 3px;
+}
 .draft-name {
     max-width: 340px;
 }

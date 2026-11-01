@@ -16,6 +16,29 @@ export function swapName(text, from, to) {
     return (text || '').replace(wordPattern(from), () => to);
 }
 
+// `swapName` in any case ("greywash" in a row the model wrote in lower case)
+function swapAnyCase(text, from, to) {
+    const pattern = new RegExp(wordPattern(from).source, 'giu');
+    return (text || '').replace(pattern, () => to);
+}
+
+// A new-name row with `from` swapped for `to` in its name, its written
+// forms and its other names, and whether it held them (final review 2)
+function renameRow(row, from, to) {
+    const name = swapAnyCase(row.name, from, to);
+    const written = (row.written || []).map((form) => swapAnyCase(form, from, to));
+    const aka = (row.aka || []).map((entry) => ({ ...entry, name: swapAnyCase(entry?.name, from, to) }));
+    const found =
+        name !== row.name ||
+        written.some((form, i) => form !== row.written[i]) ||
+        aka.some((entry, i) => entry.name !== row.aka[i]?.name);
+    if (!found) return { row, found };
+    const renamed = { ...row, name };
+    if (row.written) renamed.written = written;
+    if (row.aka) renamed.aka = aka;
+    return { row: renamed, found };
+}
+
 // The draft's texts with `from` swapped for `to`: those it has of a page
 // draft's name, facts, summary and "For other pages" rows, a fact draft's
 // facts, a group draft's rows (each one's name and line).
@@ -31,7 +54,14 @@ function swapAll(edited, from, to) {
         changes.summary = swapName(edited.summary, from, to);
     }
     if (edited.elsewhere) {
-        changes.elsewhere = edited.elsewhere.map((row) => ({ ...row, text: swapName(row.text, from, to) }));
+        // its target and the stub it would make go by the name too (final
+        // review 1): else accept still makes a stub of the old name
+        changes.elsewhere = edited.elsewhere.map((row) => ({
+            ...row,
+            text: swapName(row.text, from, to),
+            ...(row.target_name != null ? { target_name: swapAnyCase(row.target_name, from, to) } : {}),
+            ...(row.new ? { new: renameRow(row.new, from, to).row } : {}),
+        }));
     }
     if (edited.rows) {
         changes.rows = edited.rows.map((row) => ({ ...row, name: swapName(row.name, from, to), line: swapName(row.line, from, to) }));
@@ -50,11 +80,11 @@ export function pickName(edited, words, name, { flagged = false, kind = 'place' 
     if (edited.new_names) {
         let found = false;
         const rows = edited.new_names.map((row) => {
-            const renamed = swapName(row.name, words, name);
-            if (renamed !== row.name) {
+            const renamed = renameRow(row, words, name);
+            if (renamed.found) {
                 found = true;
                 // naming a flagged word asks for its stub: an unticked row is ticked
-                return flagged ? { ...row, name: renamed, ticked: true } : { ...row, name: renamed };
+                return flagged ? { ...renamed.row, ticked: true } : renamed.row;
             }
             return row;
         });

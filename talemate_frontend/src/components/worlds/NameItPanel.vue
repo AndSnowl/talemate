@@ -122,9 +122,10 @@ export default {
         effect() {
             const target = this.request?.target || {};
             if (target.thingId) {
+                const old = target.fullName || this.request.words;
                 return this.request.stub
-                    ? `renames it everywhere; “${this.request.words}” is forgotten`
-                    : `renames it everywhere; “${this.request.words}” stays as another name`;
+                    ? `renames it everywhere; “${old}” is forgotten`
+                    : `renames it everywhere; “${old}” stays as another name`;
             }
             if (target.draftKey || target.smallKey) {
                 return 'in this draft: every place it is written';
@@ -148,6 +149,8 @@ export default {
         languageId(id, before) {
             if (id && id !== before && this.request) {
                 this.ruleId = null;
+                // a meaning's candidates are that language's (final review 5)
+                this.worlds.nameItMeaning = { pending: false, candidates: [], error: null, languageId: null };
                 this.worlds.nameItLoadRules(id);
             }
         },
@@ -179,10 +182,8 @@ export default {
         },
         // a name from a meaning: its new words go into the language too
         pickCandidate(candidate) {
-            for (const part of candidate.built_from || []) {
-                if (part.new) this.worlds.addLanguageWord(this.languageId, part.word, part.meaning);
-            }
-            this.pick(candidate.name, this.meaningOf(candidate));
+            const coined = (candidate.built_from || []).filter((part) => part.new);
+            this.worlds.pickNameIt(this.worlds.nameItMeaning.languageId || this.languageId, candidate.name, this.meaningOf(candidate), coined);
         },
         pick(name, meaning) {
             this.worlds.pickNameIt(this.languageId, name, meaning || '');

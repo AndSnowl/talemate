@@ -125,6 +125,21 @@ export function freshSegments(segments, newNames = [], selected = []) {
     return (segments || []).flatMap((segment) => (segment.ref || segment.self || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
 }
 
+// The link run (`{ref, text, stub}`) the characters `start`..`end` of
+// `segments`' text lie wholly in, or null: Name it… on linked words names
+// that entry (final review 4).
+export function linkAt(segments, start, end) {
+    let at = 0;
+    for (const segment of segments || []) {
+        const from = at;
+        at += (segment.text || '').length;
+        if (start >= from && end <= at && end > start) {
+            return segment.ref ? { ref: segment.ref, text: segment.text, stub: !!segment.stub } : null;
+        }
+    }
+    return null;
+}
+
 // A "+ Add facts…" draft fact's segments (as the server linked it) with
 // the draft's ticked new names (`newNames`, ruling H8) marked `fresh`:
 // those become stubs when it's written; an unticked one stays plain.
