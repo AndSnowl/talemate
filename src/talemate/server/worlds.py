@@ -561,6 +561,7 @@ from talemate.worldplay.repoint import (
     move_fact,
     renamed_words,
     repoint_stub,
+    rename_everywhere,
     retitle,
     target_name,
 )
@@ -6259,6 +6260,20 @@ class WorldsPlugin(Plugin):
                 "names": names,
             },
         )
+
+    async def handle_name_it_rename(self, data: dict):
+        """Rename an entry or stub to a name Name it… picked
+        (`repoint.rename_everywhere`), and answer with its page:
+        `name_it_rename {...thing}`. A name another thing has is refused."""
+
+        world = self._require_world()
+        thing_id = str(data.get("thing_id") or "")
+        name = str(data.get("name") or "").strip()
+        if not name:
+            raise ValueError("a name can't be blank")
+        with world.revision(Source.manual(note="renamed with Name it")) as rev:
+            rename_everywhere(rev, world, thing_id, name)
+        self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
 
     async def handle_name_it_meaning(self, data: dict):
         """Names for a meaning the owner typed, in the background (new words

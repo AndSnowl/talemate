@@ -39,30 +39,32 @@ function swapAll(edited, from, to) {
     return changes;
 }
 
-// The new names with `from` swapped for `to` in them; a stub cleaning made
-// that's back to its old name is dropped, and one back to the name it
-// replaced forgets it did. With `add` (a suspect name replaced that no row
-// had), a new row for it.
-function renameRows(rows, from, to, add = null) {
-    let found = false;
-    const out = [];
-    for (const row of rows || []) {
-        const name = swapName(row.name, from, to);
-        if (name === row.name) {
-            out.push(row);
-            continue;
+// What picking `name` for `words` (Name it…, languages 4a revised)
+// changes on a draft: the words swapped wherever the draft writes them
+// (`swapAll`); a new-name row holding them renamed; with `flagged` and no
+// such row, a ticked new row for the name (it's a new place, person or
+// thing); and the marks on those words dropped.
+export function pickName(edited, words, name, { flagged = false, kind = 'place' } = {}) {
+    const changes = swapAll(edited, words, name);
+    if (edited.new_names) {
+        let found = false;
+        const rows = edited.new_names.map((row) => {
+            const renamed = swapName(row.name, words, name);
+            if (renamed !== row.name) {
+                found = true;
+                return { ...row, name: renamed };
+            }
+            return row;
+        });
+        if (!found && flagged) {
+            rows.push({ name, kind, ticked: true });
         }
-        found = true;
-        if (row.from_cleaning && name === row.replaced) {
-            continue;
-        }
-        const replaced = row.replaced || row.name;
-        out.push({ ...row, name, replaced: name === replaced ? '' : replaced });
+        changes.new_names = rows;
     }
-    if (!found && add) {
-        out.push(add);
+    if (edited.marks) {
+        changes.marks = edited.marks.filter((m) => m.part !== words && m.name !== words && !wordPattern(words).test(m.name));
     }
-    return out;
+    return changes;
 }
 
 // What a mark's action changes on the draft (`editDraft`'s changes), and

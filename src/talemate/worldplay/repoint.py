@@ -1614,3 +1614,30 @@ def move_fact(
         category=category,
     )
     return new_id
+
+
+def rename_everywhere(rev: Revision, world: World, thing_id: str, name: str) -> None:
+    """Rename `thing_id` to `name` (Name it…, languages 4a revised), in
+    `rev`: a stub forgets its old name; anything else keeps it as a common
+    other name (`retitle`). Every link to it that showed the old name
+    shows the new one. Refused (`ValueError`) when another thing already
+    goes by `name`."""
+
+    view = world.view()
+    state = view.thing(thing_id)
+    if state is None:
+        raise KeyError(f"no such thing: {thing_id}")
+    name = " ".join(name.split())
+    old = view.name_of(thing_id) or ""
+    if state.is_stub:
+        refuse_name_in_use(view, name, {thing_id})
+        rev.set_field(thing_id, "name", name, None)
+    else:
+        retitle(rev, world, thing_id, name)
+    shown = f"[[thing:{thing_id}|{old}]]"
+    for _owner, fact in view.referencing(thing_id):
+        if shown in fact.text:
+            rev.correct_fact(
+                fact.fact_id,
+                text=fact.text.replace(shown, f"[[thing:{thing_id}|{name}]]"),
+            )

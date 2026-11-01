@@ -85,3 +85,45 @@ async def test_name_it_actions_answer(plugin):
         "meaning": "grey",
         "new": False,
     }
+
+
+async def _rename_world(plugin):
+    await _act(plugin, "create_world", name="Test")
+    with plugin.world.revision(Source.manual()) as rev:
+        city = rev.create_thing("place", {"name": "Tsargrad"})
+        stub = rev.create_thing("place", {"name": "Novgorod", "stub": {"ignored": False}})
+        rev.create_thing("place", {"name": "Velgrad"})
+        realm = rev.create_thing("place", {"name": "Otsyenya"})
+        rev.add_fact(realm, "general", f"Its capital is [[thing:{city}|Tsargrad]].")
+    return city, stub, realm
+
+
+async def test_renaming_an_entry_keeps_the_old_name_as_another_name(plugin):
+    city, _stub, realm = await _rename_world(plugin)
+    await _act(plugin, "name_it_rename", thing_id=city, name="Khyagovsk")
+    view = plugin.world.view()
+    assert view.name_of(city) == "Khyagovsk"
+    assert [a["name"] for a in view.thing(city).fields["aka"]] == ["Tsargrad"]
+    # the words linking it say the new name
+    [fact] = view.thing(realm).facts
+    assert fact.text == f"Its capital is [[thing:{city}|Khyagovsk]]."
+
+
+async def test_renaming_a_stub_forgets_the_old_name(plugin):
+    _city, stub, _realm = await _rename_world(plugin)
+    await _act(plugin, "name_it_rename", thing_id=stub, name="Sovyetsk")
+    view = plugin.world.view()
+    assert view.name_of(stub) == "Sovyetsk"
+    assert not view.thing(stub).fields.get("aka")
+
+
+async def test_a_name_in_use_is_refused(plugin):
+    city, _stub, _realm = await _rename_world(plugin)
+    head = plugin.world.head_rev()
+    await _act(plugin, "name_it_rename", thing_id=city, name="Velgrad")
+    errors = [
+        m
+        for m in plugin.websocket_handler.messages
+        if m.get("action") == "operation_done" and "error" in m
+    ]
+    assert errors and plugin.world.head_rev() == head

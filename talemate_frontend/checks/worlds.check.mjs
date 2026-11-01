@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
-import { markEdit, markSegments } from '../src/components/worlds/nameMarks.js';
+import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
 import {
     akaAdded,
     akaChanged,
@@ -3956,6 +3956,29 @@ check('a flagged fresh name stays fresh and carries its flag (4a revised)', () =
     const fresh = markSegments([{ text: 'Novgorod', ref: null, stub: false, fresh: true, kind: 'place' }], marks);
     assert.deepEqual(segments.map((s) => [s.text, s.flag || null]), [['Trade with ', null], ['Novgorod', 'm'], ['.', null]]);
     assert.deepEqual([fresh[0].fresh, fresh[0].flag, fresh[0].kind], [true, 'm', 'place']);
+});
+
+check('pickName changes every place and renames the stub row (4a revised)', () => {
+    const edited = {
+        name: 'Tsardom',
+        facts: [{ text: 'Along the Duchies of the Greywash Coast.' }, { text: "Greywash's tides are cold." }],
+        elsewhere: [{ text: 'Greywash trades salt.' }],
+        new_names: [{ name: 'Duchies of the Greywash Coast', kind: 'place' }],
+        marks: [{ id: 'm', name: 'Duchies of the Greywash Coast', part: 'Greywash', why: 'x' }],
+    };
+    const changes = pickName(edited, 'Greywash', 'Kolvagorsk', { flagged: true, kind: 'place' });
+    assert.deepEqual(changes.facts.map((f) => f.text), ['Along the Duchies of the Kolvagorsk Coast.', "Kolvagorsk's tides are cold."]);
+    assert.equal(changes.elsewhere[0].text, 'Kolvagorsk trades salt.');
+    assert.deepEqual(changes.new_names.map((n) => n.name), ['Duchies of the Kolvagorsk Coast']);
+    assert.deepEqual(changes.marks, []);
+});
+
+check('pickName adds a stub row for a flagged name (4a revised)', () => {
+    const edited = { name: 'T', facts: [{ text: 'Trade with Novgorod.' }], new_names: [], marks: [{ id: 'm', name: 'Novgorod', part: 'Novgorod', why: 'x' }] };
+    const changes = pickName(edited, 'Novgorod', 'Sovyetsk', { flagged: true, kind: 'place' });
+    assert.deepEqual(changes.new_names, [{ name: 'Sovyetsk', kind: 'place', ticked: true }]);
+    const plain = pickName({ ...edited, marks: [] }, 'Novgorod', 'Sovyetsk', { flagged: false, kind: 'place' });
+    assert.deepEqual(plain.new_names, []);
 });
 
 check('keep and never_flag drop only the mark (4a revised)', () => {
