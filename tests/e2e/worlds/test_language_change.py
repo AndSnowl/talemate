@@ -332,9 +332,9 @@ def test_fill_them_in_starts_a_names_change(app, page, fake_claude_mode):
     fake_claude_mode("names")
     thing = _language_page(app, page, "Fill names")
     thing.get_by_test_id("language-tab-language").click()
-    thing.get_by_test_id("language-chapters").get_by_test_id(
-        "language-chapter"
-    ).filter(has_text="Name rules").first.click()
+    thing.get_by_test_id("language-chapters").get_by_test_id("language-chapter").filter(
+        has_text="Name rules"
+    ).first.click()
     card = thing.get_by_test_id("name-grammar")
     card.get_by_test_id("name-grammar-fill").click()
     panel = page.get_by_test_id("language-change")

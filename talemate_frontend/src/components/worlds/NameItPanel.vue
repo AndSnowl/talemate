@@ -45,6 +45,7 @@
                     data-testid="name-it-rule"
                 ></v-select>
                 <v-select
+                    v-if="!composed"
                     v-model="pattern"
                     :items="patternItems"
                     label="Pattern"
@@ -55,11 +56,23 @@
                     :disabled="!ruleId"
                     data-testid="name-it-pattern"
                 ></v-select>
-                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">Reroll</v-btn>
+                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll unpinned' : 'Reroll' }}</v-btn>
+                <v-btn
+                    v-if="composed && request.target?.thingId"
+                    color="accent"
+                    variant="text"
+                    size="small"
+                    prepend-icon="mdi-creation"
+                    :loading="worlds.nameItBuilding"
+                    data-testid="name-it-suggest"
+                    @click="worlds.nameItSuggest(languageId, ruleId, request.target.thingId)"
+                >Suggest from its facts</v-btn>
             </div>
             <div v-if="!languageId" class="text-body-2 text-muted mt-2">Pick the language to name it in.</div>
 
-            <NameRolls class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
+            <!-- a composed rule: the builder, part by part (languages 4b-1) -->
+            <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
+            <NameRolls v-else class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
             <div v-if="meaningShown" class="text-caption text-muted mt-1">{{ meaningShown }}</div>
 
             <v-divider class="my-3"></v-divider>
@@ -106,6 +119,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import NameBuilder from './NameBuilder.vue';
 import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
@@ -117,7 +131,7 @@ const BUCKETS = { character: 'people', being: 'people', place: 'places' };
 // (`worlds.pickNameIt`) and adds the word to the language.
 export default {
     name: 'NameItPanel',
-    components: { NameRolls },
+    components: { NameBuilder, NameRolls },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -139,6 +153,11 @@ export default {
         },
         ruleItems() {
             return this.worlds.nameItRules.map((r) => ({ title: r.name, value: r.id }));
+        },
+        // the picked rule is made of parts (languages 4b-1)
+        composed() {
+            const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
+            return !!(rule && (rule.parts || []).length);
         },
         patternItems() {
             const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
@@ -196,6 +215,10 @@ export default {
         },
         ruleId() {
             this.pattern = null;
+            // another rule: the builder starts again, no pins
+            this.worlds.nameItParts = null;
+            this.worlds.nameItPartPinned = {};
+            this.worlds.nameItPartChosen = {};
             this.roll();
         },
         pattern() {
@@ -227,10 +250,13 @@ export default {
             this.worlds.nameIt = { ...this.worlds.nameIt, words: this.parts.slice(from, to + 1).join(' ') };
         },
         roll() {
-            this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
+            if (this.composed) this.worlds.nameItRollParts(this.languageId, this.ruleId);
+            else this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
         },
+        // a composed rule's meaning parts take the meaning; else names
+        // built from it alone
         find() {
-            this.worlds.nameItFromMeaning(this.languageId, this.meaning);
+            this.worlds.nameItFromMeaning(this.languageId, this.meaning, this.composed ? this.ruleId : null);
         },
         meaningOf(candidate) {
             return (candidate.built_from || []).map((p) => p.meaning).join(' ');

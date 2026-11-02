@@ -4156,6 +4156,52 @@ check('a composed rule\'s parts read as the server labels them (4b-1)', () => {
     assert.equal(partLabel({ kind: 'meaning', slot: 'describing_noun', of: true, forms: ['the'] }), 'a description · of · the');
 });
 
+const OWL_PARTS = {
+    shape: 0,
+    parts: [
+        { index: 0, kind: 'rule', label: "Men's names", pinned: false, rolls: [{ text: 'Dorvak', parts: [] }, { text: 'Zemol', parts: [] }] },
+        { index: 1, kind: 'word', label: 'fixed', pinned: false, rolls: [{ text: 'Ul', parts: [] }] },
+        { index: 2, kind: 'meaning', label: 'a meaning · plural', pinned: false, rolls: [{ text: 'Zveski', parts: [{ word: 'zvesk', meaning: 'star', new: false, steps: ['-i more than one'] }] }] },
+        { index: 3, kind: 'meaning', label: 'a meaning', pinned: false, rolls: [] },
+    ],
+};
+
+check('the builder joins chosen parts and drops empty optional ones (4b-1)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    assert.equal(store.nameItBuilt, 'Dorvak Ul Zveski');
+    store.nameItChoosePart(0, 'Zemol');
+    assert.equal(store.nameItBuilt, 'Zemol Ul Zveski');
+    assert.deepEqual(store.nameItBuiltFrom.map((p) => p.word), ['zvesk']);
+});
+
+check('typing a part pins it (4b-1)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItTypePart(0, 'Kodik');
+    assert.deepEqual(store.nameItPartPinned, { 0: 'Kodik' });
+    assert.equal(store.nameItBuilt, 'Kodik Ul Zveski');
+    store.nameItTypePart(0, '');
+    assert.deepEqual(store.nameItPartPinned, {});
+});
+
+check('reroll sends the pinned parts and keeps them (4b-1)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItPinPart(2, 'Zveski');
+    store.nameItRollParts('l1', 'owl');
+    const asked = sent.filter((m) => m.action === 'name_it_parts').at(-1);
+    assert.deepEqual(asked.pinned ?? asked.data?.pinned, { 2: 'Zveski' });
+    assert.equal(asked.shape ?? asked.data?.shape, 0);
+    store.nameItPinPart(2, 'Zveski');
+    assert.deepEqual(store.nameItPartPinned, {});
+    store.closeNameIt();
+    assert.equal(store.nameItParts, null);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

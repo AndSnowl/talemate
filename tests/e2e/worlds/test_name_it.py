@@ -10,7 +10,16 @@ import pytest
 from playwright.sync_api import expect
 
 from talemate.languages.entry import fields_of
-from talemate.languages.models import DictionaryEntry, GeneratorDef, Language
+from talemate.languages.models import (
+    DictionaryEntry,
+    FormChange,
+    GeneratorDef,
+    Language,
+    NameGrammar,
+    NamePart,
+    NameShape,
+    OfRule,
+)
 
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_clean_names import _card
@@ -352,3 +361,159 @@ def test_a_meanings_new_word_shows_other_rolls(
         page.wait_for_timeout(250)
     after = [o.strip() for o in options.all_inner_texts()]
     assert after != before and after[0] == other
+
+
+# --- the builder (languages 4b-1, mockup B) ------------------------------------
+
+VAROVNI = Language(
+    name="Varovni",
+    level="full",
+    categories={"C": "k v d z", "V": "a e i o u"},
+    generators=[
+        GeneratorDef(id="words", name="Words", use="words", patterns=["CVCV"]),
+        GeneratorDef(id="men", name="Men's names", use="character", patterns=["CVCVk"]),
+        GeneratorDef(
+            id="owl",
+            name="Owl-names",
+            use="character",
+            shapes=[
+                NameShape(
+                    parts=[
+                        NamePart(kind="rule", rule="men"),
+                        NamePart(kind="word", word="Ul"),
+                        NamePart(
+                            kind="meaning",
+                            forms=["more_than_one"],
+                            hint="something in the sky",
+                        ),
+                    ]
+                )
+            ],
+        ),
+    ],
+    dictionary=[
+        DictionaryEntry(word="zvesk", meanings=["star"], part="noun"),
+        DictionaryEntry(word="skelt", meanings=["stone"], part="noun"),
+        DictionaryEntry(word="varsa", meanings=["snow"], part="noun"),
+        DictionaryEntry(word="luna", meanings=["moon"], part="noun"),
+    ],
+    name_grammar=NameGrammar(
+        of=OfRule(text="ul"),
+        more_than_one=[
+            FormChange(when="after_vowel", kind="ending", text="ni"),
+            FormChange(kind="ending", text="i"),
+        ],
+    ),
+)
+
+
+def _builder(app, page, stem):
+    """Dorvak's page in a world whose one language has the owl-name rule;
+    Name it… open on it, the owl-name rule picked."""
+
+    name = _world_name(stem)
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Varovni",
+                "fields": {"name": "Varovni", **fields_of(VAROVNI)},
+            },
+            {
+                "kind": "character",
+                "name": "Dorvak",
+                "facts": [
+                    {"category": "personality", "text": "Dorvak watches the stars."}
+                ],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    _open_thing(page, "Dorvak").get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    page.get_by_role("option", name="Owl-names").click()
+    expect(panel.get_by_test_id("name-builder-part")).to_have_count(
+        3, timeout=TIMEOUT_MS
+    )
+    return panel
+
+
+def _rolls(part):
+    return [
+        r.strip() for r in part.get_by_test_id("name-builder-roll").all_inner_texts()
+    ]
+
+
+def test_the_builder_rolls_unpinned_parts(app, page):
+    panel = _builder(app, page, "Builder reroll")
+    parts = panel.get_by_test_id("name-builder-part")
+    first = parts.nth(0)
+    kept = panel.get_by_test_id("name-it-built").inner_text().split()[0]
+    first.get_by_test_id("name-builder-pin").click()
+    meaning_before = _rolls(parts.nth(2))
+    for _ in range(10):
+        panel.get_by_test_id("name-it-reroll").click()
+        page.wait_for_timeout(300)
+        if _rolls(parts.nth(2)) != meaning_before:
+            break
+    assert panel.get_by_test_id("name-it-built").inner_text().split()[0] == kept
+    assert _rolls(first) == [kept]
+
+
+def test_typing_a_part_pins_it(app, page):
+    panel = _builder(app, page, "Builder type")
+    box = (
+        panel.get_by_test_id("name-builder-part")
+        .nth(0)
+        .get_by_test_id("name-builder-type")
+    )
+    box.locator("input").fill("Dorvak")
+    box.locator("input").press("Enter")
+    box.locator("input").blur()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Dorvak Ul", timeout=TIMEOUT_MS
+    )
+    panel.get_by_test_id("name-it-reroll").click()
+    page.wait_for_timeout(500)
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text("Dorvak Ul")
+
+
+def test_use_this_name_renames_the_entry(app, page):
+    panel = _builder(app, page, "Builder use")
+    built = panel.get_by_test_id("name-it-built").inner_text().strip()
+    panel.get_by_test_id("name-it-use").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(built, timeout=TIMEOUT_MS)
+
+
+def test_give_a_meaning_fills_the_meaning_part(app, page):
+    panel = _builder(app, page, "Builder meaning")
+    panel.get_by_test_id("name-it-meaning").locator("input").fill("of the Stars")
+    panel.get_by_test_id("name-it-find").click()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Ul Zveski", timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-working")).to_contain_text("zvesk “star”")
+
+
+def test_suggest_fills_from_facts(app, page, fixed_language):
+    fixed_language({"noun": "snow", "why": "white plumage"})
+    panel = _builder(app, page, "Builder suggest")
+    panel.get_by_test_id("name-it-suggest").click()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Ul Varsani", timeout=TIMEOUT_MS
+    )
+    sent = _wait_sent(page, "name_it_suggest")
+    assert sent["rule_id"] == "owl"
+
+
+def test_a_plain_rule_keeps_the_batch(app, page):
+    panel = _builder(app, page, "Builder plain")
+    panel.get_by_test_id("name-it-rule").click()
+    page.get_by_role("option", name="Men's names").click()
+    expect(panel.get_by_test_id("name-builder")).to_have_count(0, timeout=TIMEOUT_MS)
+    expect(panel.get_by_test_id("name-it-name")).to_have_count(10, timeout=TIMEOUT_MS)

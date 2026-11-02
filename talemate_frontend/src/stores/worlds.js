@@ -716,6 +716,13 @@ export const useWorldsStore = defineStore('worlds', {
         // names pinned in the Name it… batch: kept through a reroll (owner,
         // Test3)
         nameItPinned: [],
+        // the Name it builder (languages 4b-1, mockup B): a composed rule's
+        // parts with their rolls (`{shape, parts}`), the roll chosen and the
+        // text pinned (or typed) for each part, by index
+        nameItParts: null,
+        nameItPartChosen: {},
+        nameItPartPinned: {},
+        nameItBuilding: false,
         // a language's grammar for names in plain words, by its id (the
         // Names chapter, languages 4b-1): `{rows, has_grammar}`
         nameGrammar: {},
@@ -820,6 +827,26 @@ export const useWorldsStore = defineStore('worlds', {
         // what every entry search looks in (`searchEntries`): `{id, name,
         // kind, stub, aka}` of every listed entry, species, race and mix,
         // and every live stub (`aka`: its other names)
+        // the builder's name: each part's chosen text, in order (a part
+        // with nothing, such as an empty optional one, is left out)
+        nameItBuilt: (state) => {
+            if (!state.nameItParts) return '';
+            return state.nameItParts.parts
+                .map((part) => state.nameItPartChosen[part.index] || '')
+                .filter((text) => text.trim())
+                .join(' ');
+        },
+        // what the chosen meaning parts are built from: their words,
+        // meanings, new or not, and the steps applied
+        nameItBuiltFrom: (state) => {
+            if (!state.nameItParts) return [];
+            return state.nameItParts.parts.flatMap((part) => {
+                if (part.kind !== 'meaning') return [];
+                const chosen = state.nameItPartChosen[part.index];
+                const built = part.rolls.find((roll) => roll.text === chosen);
+                return built ? built.parts || [] : [];
+            });
+        },
         // the Name it… batch as shown: the pinned names first, then the
         // roll's others, ten in all
         nameItShown: (state) => {
@@ -1365,6 +1392,62 @@ export const useWorldsStore = defineStore('worlds', {
             if (thingId) this.request('language_name_grammar', { thing_id: thingId });
         },
 
+        // the builder: a composed rule's parts rolled, its pins kept
+        nameItRollParts(languageId, ruleId) {
+            if (!languageId || !ruleId) return;
+            const keep = this.nameItParts && this.nameItParts.rule_id === ruleId && Object.keys(this.nameItPartPinned).length;
+            this.request('name_it_parts', {
+                language_id: languageId,
+                rule_id: ruleId,
+                pinned: { ...this.nameItPartPinned },
+                shape: keep ? this.nameItParts.shape : null,
+            });
+        },
+
+        nameItChoosePart(index, text) {
+            this.nameItPartChosen = { ...this.nameItPartChosen, [index]: text };
+        },
+
+        // pin a part's text through rerolls, or unpin it
+        nameItPinPart(index, text) {
+            const pinned = { ...this.nameItPartPinned };
+            if (pinned[index] === text) delete pinned[index];
+            else pinned[index] = text;
+            this.nameItPartPinned = pinned;
+            if (pinned[index]) this.nameItChoosePart(index, text);
+        },
+
+        // the owner's own word for a part: it's pinned (empty: unpinned)
+        nameItTypePart(index, text) {
+            const pinned = { ...this.nameItPartPinned };
+            if (text && text.trim()) {
+                pinned[index] = text.trim();
+                this.nameItChoosePart(index, text.trim());
+            } else {
+                delete pinned[index];
+            }
+            this.nameItPartPinned = pinned;
+        },
+
+        // ✨ Suggest from its facts: the meaning parts from the entry's facts
+        nameItSuggest(languageId, ruleId, thingId) {
+            if (!languageId || !ruleId || !thingId) return;
+            this.nameItBuilding = true;
+            this.request('name_it_suggest', { language_id: languageId, rule_id: ruleId, thing_id: thingId, pinned: { ...this.nameItPartPinned } });
+        },
+
+        // a builder reply: its parts, each part's first roll chosen (a
+        // pinned part keeps its text)
+        nameItTakeParts(data) {
+            this.nameItBuilding = false;
+            this.nameItParts = { rule_id: data.rule_id, shape: data.shape, parts: data.parts || [] };
+            const chosen = {};
+            for (const part of this.nameItParts.parts) {
+                chosen[part.index] = this.nameItPartPinned[part.index] || part.rolls[0]?.text || '';
+            }
+            this.nameItPartChosen = chosen;
+        },
+
         // pin `item` (`{name, meaning}`) in the batch, or unpin it
         nameItPin(item) {
             const pinned = this.nameItPinned.some((p) => p.name === item.name);
@@ -1374,6 +1457,10 @@ export const useWorldsStore = defineStore('worlds', {
         closeNameIt() {
             this.nameIt = null;
             this.nameItPinned = [];
+            this.nameItParts = null;
+            this.nameItPartChosen = {};
+            this.nameItPartPinned = {};
+            this.nameItBuilding = false;
             this.nameItWordRolls = {};
             this.nameItWordPinned = {};
             this.nameItBatch = [];
@@ -1392,10 +1479,15 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
-        nameItFromMeaning(languageId, text) {
+        // `ruleId`: a composed rule whose meaning parts the meaning fills
+        nameItFromMeaning(languageId, text, ruleId = null) {
             if (!languageId || !text.trim()) return;
             this.nameItMeaning = { pending: true, candidates: [], error: null, languageId };
-            this.request('name_it_meaning', { language_id: languageId, text: text.trim() });
+            this.request('name_it_meaning', {
+                language_id: languageId,
+                text: text.trim(),
+                ...(ruleId ? { rule_id: ruleId, pinned: { ...this.nameItPartPinned } } : {}),
+            });
         },
 
         // a name picked in the panel: put where the request asked (a page
@@ -2768,6 +2860,15 @@ export const useWorldsStore = defineStore('worlds', {
                         this.draftTaken(data, 'replace');
                     }
                     break;
+                case 'name_it_parts':
+                    if (this.nameIt) this.nameItTakeParts(data);
+                    break;
+                case 'name_it_suggest':
+                    if (this.nameIt) this.nameItTakeParts(data);
+                    break;
+                case 'name_it_suggest_failed':
+                    this.nameItBuilding = false;
+                    break;
                 case 'language_name_grammar':
                     this.nameGrammar = { ...this.nameGrammar, [data.thing_id]: { rows: data.rows || [], has_grammar: !!data.has_grammar } };
                     break;
@@ -2787,7 +2888,11 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'name_it_meaning':
                     // dropped once the panel closed or asked again elsewhere
-                    if (this.nameIt && this.nameItMeaning.pending) {
+                    if (this.nameIt && this.nameItMeaning.pending && data.rule_id) {
+                        // a composed rule's meaning parts, built (4b-1)
+                        this.nameItMeaning = { ...this.nameItMeaning, pending: false, candidates: [], error: null };
+                        this.nameItTakeParts(data);
+                    } else if (this.nameIt && this.nameItMeaning.pending) {
                         const candidates = data.candidates || [];
                         this.nameItMeaning = { ...this.nameItMeaning, pending: false, candidates, error: null };
                         // each new word's first rolls: the model's pick and
