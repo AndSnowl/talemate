@@ -713,6 +713,9 @@ export const useWorldsStore = defineStore('worlds', {
         // the words a rename's pick adds to its language, once the rename
         // is written (a refused one adds none: final review 3)
         nameItRenameWords: null,
+        // names pinned in the Name it… batch: kept through a reroll (owner,
+        // Test3)
+        nameItPinned: [],
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
@@ -810,6 +813,14 @@ export const useWorldsStore = defineStore('worlds', {
         // what every entry search looks in (`searchEntries`): `{id, name,
         // kind, stub, aka}` of every listed entry, species, race and mix,
         // and every live stub (`aka`: its other names)
+        // the Name it… batch as shown: the pinned names first, then the
+        // roll's others, ten in all
+        nameItShown: (state) => {
+            const pinned = state.nameItPinned.map((item) => ({ ...item, pinned: true }));
+            const keys = new Set(pinned.map((item) => item.name));
+            const rolled = state.nameItBatch.filter((item) => !keys.has(item.name));
+            return [...pinned, ...rolled.slice(0, Math.max(0, 10 - pinned.length))];
+        },
         referenceTargets: (state) => {
             const byId = new Map();
             for (const things of Object.values(state.things)) {
@@ -1301,8 +1312,15 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameIt = { ...request };
         },
 
+        // pin `item` (`{name, meaning}`) in the batch, or unpin it
+        nameItPin(item) {
+            const pinned = this.nameItPinned.some((p) => p.name === item.name);
+            this.nameItPinned = pinned ? this.nameItPinned.filter((p) => p.name !== item.name) : [...this.nameItPinned, { name: item.name, meaning: item.meaning || '' }];
+        },
+
         closeNameIt() {
             this.nameIt = null;
+            this.nameItPinned = [];
             this.nameItBatch = [];
             this.nameItMeaning = { pending: false, candidates: [], error: null, languageId: null };
         },

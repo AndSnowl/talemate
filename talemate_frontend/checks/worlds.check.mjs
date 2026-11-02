@@ -4104,6 +4104,21 @@ check('dropping a draft\'s other name rewrites its facts to the full name (owner
     assert.deepEqual(setDraftAka(edited, edited.aka), { aka: edited.aka });
 });
 
+check('a pinned name stays through a reroll (owner, Test3)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    const batch = (names) => store.handleMessage(reply('name_it_batch', { names: names.map((name) => ({ name, meaning: '' })) }));
+    batch(['Avo', 'Bel', 'Cor']);
+    store.nameItPin({ name: 'Bel', meaning: '' });
+    batch(['Dun', 'Bel', 'Eth']);
+    assert.deepEqual(store.nameItShown.map((n) => [n.name, !!n.pinned]), [['Bel', true], ['Dun', false], ['Eth', false]]);
+    store.nameItPin({ name: 'Bel', meaning: '' });
+    assert.deepEqual(store.nameItShown.map((n) => n.name), ['Dun', 'Bel', 'Eth']);
+    store.nameItPin({ name: 'Dun', meaning: '' });
+    store.closeNameIt();
+    assert.deepEqual(store.nameItPinned, []);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

@@ -1509,7 +1509,8 @@ export default {
                 words: this.thing.name,
                 languageId: [...own, ...seen][0]?.language || null,
                 kind: this.thing.kind,
-                target: { thingId: this.thing.id },
+                // the panel can rename only part of it (owner, Test3)
+                target: { thingId: this.thing.id, fullName: this.thing.name },
                 stub: !!this.thing.stub,
             });
         },

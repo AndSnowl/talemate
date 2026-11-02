@@ -272,3 +272,45 @@ def test_name_it_on_linked_words_renames_that_entry(
     )
     sent = _wait_sent(page, "name_it_rename")
     assert sent["name"] == f"Duchies of the {picked} Coast"
+
+
+def test_a_pinned_name_stays_through_a_reroll(app, page):
+    """Owner's run (Test3): a name that intrigues stays while rolling on."""
+
+    _world(app, page, "Name it pin", things=[{"kind": "place", "name": "Tsargrad"}])
+    _open_thing(page, "Tsargrad").get_by_test_id("name-it-thing").click()
+    panel = _panel(page)
+    kept = _names(panel)[0]
+    panel.get_by_test_id("name-it-pin").first.click()
+    before = _names(panel)
+    panel.get_by_test_id("name-it-reroll").click()
+    for _ in range(60):
+        if _names(panel) != before:
+            break
+        page.wait_for_timeout(250)
+    after = _names(panel)
+    assert after != before
+    assert after[0] == kept and len(after) == 10
+
+
+def test_name_it_renames_only_the_words_picked(app, page):
+    """Owner's run (Test3): rename only "Vorogovik" in "Cathedral of Saint
+    Vorogovik", the rest kept."""
+
+    _world(
+        app,
+        page,
+        "Name it part",
+        things=[{"kind": "place", "name": "Cathedral of Saint Vorogovik"}],
+    )
+    _open_thing(page, "Cathedral of Saint Vorogovik").get_by_test_id(
+        "name-it-thing"
+    ).click()
+    panel = _panel(page)
+    panel.get_by_test_id("name-it-part").filter(has_text="Vorogovik").click()
+    expect(panel.locator(".words")).to_have_text("Vorogovik")
+    picked = _names(panel)[0]
+    panel.get_by_test_id("name-it-name").first.click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        f"Cathedral of Saint {picked}", timeout=TIMEOUT_MS
+    )

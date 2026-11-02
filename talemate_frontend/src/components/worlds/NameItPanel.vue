@@ -6,6 +6,21 @@
                 <span class="words">{{ request.words || 'a new name' }}</span>
                 <span class="text-caption text-muted" data-testid="name-it-effect">{{ effect }}</span>
             </div>
+            <!-- an entry's name: which of its words to rename (owner, Test3) -->
+            <div v-if="parts.length > 1" class="d-flex align-center flex-wrap ga-1 mt-2" data-testid="name-it-parts">
+                <span class="text-caption text-muted mr-1">Rename</span>
+                <v-chip
+                    v-for="(part, i) in parts"
+                    :key="i"
+                    size="small"
+                    label
+                    :variant="chosen(i) ? 'flat' : 'outlined'"
+                    :color="chosen(i) ? 'accent' : undefined"
+                    data-testid="name-it-part"
+                    @click="togglePart(i)"
+                >{{ part }}</v-chip>
+                <span class="text-caption text-muted ml-1">the rest stays</span>
+            </div>
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
                 <v-select
@@ -46,14 +61,24 @@
 
             <div class="names mt-3">
                 <v-chip
-                    v-for="item in worlds.nameItBatch"
+                    v-for="item in worlds.nameItShown"
                     :key="item.name"
                     class="name"
-                    variant="tonal"
+                    :class="{ pinned: item.pinned }"
+                    :variant="item.pinned ? 'outlined' : 'tonal'"
                     :title="item.meaning || 'no meaning of its own'"
                     data-testid="name-it-name"
                     @click="pick(item.name, item.meaning)"
-                >{{ item.name }}</v-chip>
+                >{{ item.name }}<v-btn
+                        :icon="item.pinned ? 'mdi-pin' : 'mdi-pin-outline'"
+                        variant="text"
+                        size="x-small"
+                        density="compact"
+                        class="ml-1 pin"
+                        :aria-label="(item.pinned ? 'Unpin ' : 'Pin ') + item.name"
+                        data-testid="name-it-pin"
+                        @click.stop="worlds.nameItPin(item)"
+                    ></v-btn></v-chip>
             </div>
             <div v-if="meaningShown" class="text-caption text-muted mt-1">{{ meaningShown }}</div>
 
@@ -99,11 +124,17 @@ export default {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '' };
+        // `picked`: the indices of the entry name's words chosen to rename
+        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [] };
     },
     computed: {
         request() {
             return this.worlds.nameIt;
+        },
+        // an entry's name, word by word, when the panel renames an entry
+        parts() {
+            const full = this.request?.target?.fullName || '';
+            return full.split(/\s+/).filter(Boolean);
         },
         languageItems() {
             return (this.worlds.things.language || []).map((t) => ({ title: t.name, value: t.id }));
@@ -116,7 +147,7 @@ export default {
             return [{ title: 'any', value: null }, ...(rule?.patterns || []).map((p, i) => ({ title: p, value: i }))];
         },
         meaningShown() {
-            const withMeaning = this.worlds.nameItBatch.filter((n) => n.meaning);
+            const withMeaning = this.worlds.nameItShown.filter((n) => n.meaning);
             return withMeaning.length ? withMeaning.map((n) => `${n.name}: ${n.meaning}`).join(' · ') : '';
         },
         effect() {
@@ -136,9 +167,12 @@ export default {
     watch: {
         request: {
             immediate: true,
-            handler(request) {
+            handler(request, before) {
                 if (!request) return;
+                // the same request, its words narrowed (`togglePart`)
+                if (before && request.target === before.target) return;
                 if (!this.worlds.things.language) this.worlds.listThings('language');
+                this.picked = this.indicesOf(request.words || '');
                 this.meaning = '';
                 this.ruleId = null;
                 this.pattern = null;
@@ -171,6 +205,29 @@ export default {
         },
     },
     methods: {
+        // the indices of `words` in the entry's name (all of them if it
+        // isn't found there)
+        indicesOf(words) {
+            const want = words.split(/\s+/).filter(Boolean);
+            for (let at = 0; at + want.length <= this.parts.length; at++) {
+                if (want.every((w, i) => this.parts[at + i] === w)) return want.map((_, i) => at + i);
+            }
+            return this.parts.map((_, i) => i);
+        },
+        chosen(i) {
+            return this.picked.includes(i);
+        },
+        // a word on or off; the words renamed run from the first chosen to
+        // the last
+        togglePart(i) {
+            const all = this.picked.length === this.parts.length;
+            let picked = all ? [i] : this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i];
+            if (!picked.length) picked = this.parts.map((_, j) => j);
+            const from = Math.min(...picked);
+            const to = Math.max(...picked);
+            this.picked = Array.from({ length: to - from + 1 }, (_, j) => from + j);
+            this.worlds.nameIt = { ...this.worlds.nameIt, words: this.parts.slice(from, to + 1).join(' ') };
+        },
         roll() {
             this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
         },
@@ -211,6 +268,9 @@ export default {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+.pin {
+    font-style: normal;
 }
 .name,
 .foreign {
