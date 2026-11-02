@@ -221,8 +221,11 @@ export default {
         },
         stillLines() {
             const found = this.completeness;
-            if (!found) return [];
-            const lines = [];
+            // the grammar for names is offered whatever else is missing
+            // (acceptance run: a complete language hid it)
+            const names = this.namesWanted ? ['Grammar for names: not written yet'] : [];
+            if (!found) return names;
+            const lines = [...names];
             const missing = found.meanings_missing || [];
             if (missing.length) {
                 const shown = missing.slice(0, 6).join(', ') + (missing.length > 6 ? ', …' : '');
