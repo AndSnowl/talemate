@@ -316,6 +316,14 @@ def test_a_flagged_own_name_shows_under_the_heading(
     expect(draft.get_by_test_id("draft-name-flag")).to_have_count(0)
 
 
+def test_a_draft_shows_one_tag(app, page, fixed_preview, fixed_clean):
+    """Owner's run (Test3): the draft's tag showed twice."""
+
+    draft = _cleaned_draft(app, page, fixed_preview, fixed_clean, "One tag")
+    heading = draft.locator('.d-flex:has(> [data-testid="draft-name"])')
+    expect(heading.locator(".tag-chip")).to_have_count(1, timeout=TIMEOUT_MS)
+
+
 # --- Add facts ----------------------------------------------------------------
 
 

@@ -57,15 +57,15 @@
                 ></v-select>
                 <v-chip v-else size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
                 <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
+                <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <!-- the draft's own name flagged (final review 6): its
                      facts show it as the entry itself, unmarked -->
-                <div v-if="draft && nameFlag" class="w-100 d-flex align-center flex-wrap ga-2 text-body-2" data-testid="draft-name-flag">
+                <div v-if="draft && nameFlag" class="w-100 d-flex align-center flex-wrap ga-2 text-body-2 name-flag-row" data-testid="draft-name-flag">
                     <span class="name-flagged">{{ nameFlag.name }}</span>
                     <span class="text-muted">flagged: {{ nameFlag.why }}</span>
                     <v-btn size="x-small" variant="outlined" color="accent" prepend-icon="mdi-rename" data-testid="draft-name-flag-name-it" @click="nameItOwnName">Name it…</v-btn>
                     <v-btn size="x-small" variant="text" data-testid="draft-name-flag-keep" @click="worlds.markAction(nameFlag.id, 'keep')">Keep it</v-btn>
                 </div>
-                <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
                 <!-- its other names (edited under Other names) -->
                 <span v-if="otherNames.length" class="d-inline-flex align-center flex-wrap ga-1" data-testid="thing-other-names">
@@ -1743,6 +1743,10 @@ export default {
 </script>
 
 <style scoped>
+/* under the heading's other parts, on a line of its own */
+.name-flag-row {
+    order: 1;
+}
 .name-flagged {
     text-decoration: underline wavy rgb(var(--v-theme-warning));
     text-underline-offset: 3px;
