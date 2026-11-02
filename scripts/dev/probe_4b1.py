@@ -252,6 +252,125 @@ def stage_b(run: dict, fake: bool, save) -> None:
         save()
 
 
+FUNCTION = {"the", "of", "a", "an"}
+
+COMPOUND_SYSTEM = """\
+You split an English compound word into its parts, for naming. Reply with JSON
+only: {"noun": "<the main noun, singular, lower case>",
+"describing": ["<the other parts, lower case>"]}.
+Examples: Blackwater -> {"noun": "water", "describing": ["black"]};
+lakeland -> {"noun": "land", "describing": ["lake"]}."""
+
+SUGGEST_V2 = """\
+You name things in an invented fantasy world. One part of this entry's name
+means something: {hint}. Read the entry's facts and choose ONE common English
+noun for that part (like star, frost, pine, ember, river). Never a proper
+name, never the entry's own name, never a phrase. Reply with JSON only:
+{{"noun": "<one common noun, singular, lower case>", "why": "<a few words>"}}"""
+
+
+def singular(word: str) -> str:
+    """A plural English noun made singular, simply (stars, woods, hills,
+    moons; berries; foxes)."""
+
+    w = word.lower()
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 4 and w.endswith(("ches", "shes", "xes", "sses")):
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+        return w[:-1]
+    return w
+
+
+def split_text(text: str, compound=None) -> dict:
+    """A meaning's structure read from the English: "of", "the", plural
+    and joined from the words; the last word is the noun, the rest
+    describing; a one-word compound goes to `compound` (the model)."""
+
+    words = [w for w in re.split(r"[\s\-]+", text.strip()) if w]
+    lower = [w.lower() for w in words]
+    of = bool(lower) and lower[0] == "of" or "of" in lower[1:-1]
+    the = "the" in lower
+    content = [w for w in lower if w not in FUNCTION]
+    ending = ""
+    if (
+        content
+        and content[-1] == "land"
+        or (content and content[0] == "land" and "of" in lower)
+    ):
+        ending = "land of"
+        content = [w for w in content if w != "land"]
+        of = False
+    if len(content) == 1 and len(words) == 1 and compound is not None and not ending:
+        got = compound(content[0])
+        if got.get("describing"):
+            return {
+                "noun": singular(got.get("noun", "")),
+                "describing": got["describing"],
+                "joined": True,
+            }
+    if "of" in lower[1:-1]:
+        # "Owl-of-Frost": what follows "of" is its noun
+        at = lower.index("of", 1)
+        content = [w for w in lower[at + 1 :] if w not in FUNCTION]
+    if not content:
+        return {"noun": ""}
+    noun = content[-1]
+    out = {
+        "noun": singular(noun),
+        "describing": content[:-1],
+        "of": of,
+        "the": the,
+        "more_than_one": singular(noun) != noun,
+        "ending": ending,
+    }
+    return out
+
+
+def stage_c(run: dict, fake: bool, save) -> None:
+    """Round 2: the deterministic split (the model only for one-word
+    compounds), and Suggest with a tighter prompt."""
+
+    labels = json.loads(LABELS.read_text())
+    if fake:
+        send = lambda messages: '{"noun": "water", "describing": ["black"]}'  # noqa: E731
+    else:
+        url = ai_helpers.koboldcpp_url()
+        run["model"] = ai_helpers.koboldcpp_model(url)
+        send = lambda messages: chat_messages(url, messages, max_tokens=300)  # noqa: E731
+
+    def compound(word: str) -> dict:
+        return _json(send([{"role": "system", "content": COMPOUND_SYSTEM},
+                           {"role": "user", "content": word}]))  # fmt: skip
+
+    run["split"] = []
+    for item in labels["split"]:
+        got = split_text(item["text"], compound)
+        wants = [item["want"], *item.get("any_of", [])]
+        ok = any(_same(got, want) for want in wants)
+        run["split"].append({"text": item["text"], "got": got, "ok": ok})
+    run["split_score"] = sum(r["ok"] for r in run["split"])
+    save()
+    print("split v2", run["split_score"], "/", len(run["split"]))
+    run["suggest"] = []
+    if "Test3" not in _copies():
+        return
+    view = World.open(_copies()["Test3"]).view()
+    hint = labels["suggest_rule"]["parts"][2].split("hint: ", 1)[1]
+    for state in view.things(facts=False):
+        name = view.name_of(state.id) or ""
+        if name not in labels["suggest"]:
+            continue
+        facts = [f.text for f in view.thing(state.id).facts][:12]
+        reply = send(
+            [{"role": "system", "content": SUGGEST_V2.format(hint=hint)},
+             {"role": "user", "content": f"{name}:\n" + "\n".join(f"- {f}" for f in facts)}]
+        )  # fmt: skip
+        run["suggest"].append({"entry": name, "got": _json(reply)})
+        save()
+
+
 def _name(folder: Path) -> str:
     import sqlite3
 
@@ -266,7 +385,7 @@ def _name(folder: Path) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("out", type=Path)
-    parser.add_argument("--stage", choices=["a", "b"], required=True)
+    parser.add_argument("--stage", choices=["a", "b", "c"], required=True)
     parser.add_argument("--fake", action="store_true")
     args = parser.parse_args()
     out = args.out.resolve()
@@ -276,7 +395,7 @@ def main() -> None:
     def save() -> None:
         out.write_text(json.dumps(results, indent=1, ensure_ascii=False, default=str))
 
-    (stage_a if args.stage == "a" else stage_b)(run, args.fake, save)
+    {"a": stage_a, "b": stage_b, "c": stage_c}[args.stage](run, args.fake, save)
     save()
 
 
