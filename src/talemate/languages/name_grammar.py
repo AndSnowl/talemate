@@ -363,6 +363,7 @@ def _change_words(changes: list[FormChange]) -> str:
         "after_vowel": " after a vowel",
         "after_consonant": " after a consonant",
         "before_vowel": " before a vowel",
+        "plural": " for more than one",
     }
 
     def one(change: FormChange) -> str:
@@ -377,9 +378,9 @@ def _change_words(changes: list[FormChange]) -> str:
         elif change.kind == "swap":
             what = f"-{change.drop.replace('|', '/-')} becomes -{change.text}"
         elif change.kind == "word_before":
-            what = f"“{change.text}” before"
+            what = f"“{change.text}” in front"
         elif change.kind == "word_after":
-            what = f"“{change.text}” after"
+            what = f"“{change.text}” behind"
         else:
             what = "the first part doubled"
         return what + when

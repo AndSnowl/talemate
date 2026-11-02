@@ -371,7 +371,13 @@ VAROVNI = Language(
     categories={"C": "k v d z", "V": "a e i o u"},
     generators=[
         GeneratorDef(id="words", name="Words", use="words", patterns=["CVCV"]),
-        GeneratorDef(id="men", name="Men's names", use="character", patterns=["CVCVk"]),
+        # names made of dictionary words, so the plain batch shows meanings
+        GeneratorDef(
+            id="men",
+            name="Men's names",
+            use="character",
+            patterns=["[zvesk|skelt|luna]CVk"],
+        ),
         GeneratorDef(
             id="owl",
             name="Owl-names",
@@ -440,6 +446,8 @@ def _builder(app, page, stem):
     expect(panel.get_by_test_id("name-builder-part")).to_have_count(
         3, timeout=TIMEOUT_MS
     )
+    # the plain batch's meanings go with it (acceptance run)
+    expect(panel.get_by_test_id("name-it-batch-meanings")).to_have_count(0)
     return panel
 
 
@@ -517,3 +525,4 @@ def test_a_plain_rule_keeps_the_batch(app, page):
     page.get_by_role("option", name="Men's names").click()
     expect(panel.get_by_test_id("name-builder")).to_have_count(0, timeout=TIMEOUT_MS)
     expect(panel.get_by_test_id("name-it-name")).to_have_count(10, timeout=TIMEOUT_MS)
+    expect(panel.get_by_test_id("name-it-batch-meanings")).to_be_visible()

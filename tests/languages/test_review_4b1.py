@@ -169,3 +169,28 @@ def test_article_and_of_words_fit():
 async def test_name_in_x_of_y_still_works():
     found = await translate_text(None, _lang(), "Court of Lakes")
     assert "Korvo" in found.name
+
+
+def test_rows_read_plainly_as_the_acceptance_run_wrote_them():
+    """Acceptance run (Drassonais, Tsevrani): "--ov", "before before a
+    vowel" and "(plural)" in the Names chapter's rows."""
+
+    from talemate.languages.models import Ending
+    from talemate.languages.name_grammar import apply_ending, grammar_rows
+
+    grammar = NameGrammar(
+        the=[
+            FormChange(when="plural", kind="word_before", text="lou"),
+            FormChange(when="before_vowel", kind="word_before", text="l'"),
+            FormChange(kind="word_before", text="lo"),
+        ],
+        endings=[Ending(ending="-ov", meaning="one who does")],
+    )
+    lang = _lang(name_grammar=grammar)
+    rows = {r.key: r for r in grammar_rows(lang)}
+    assert rows["the"].rule == (
+        "“lou” in front for more than one; “l'” in front before a vowel; “lo” in front"
+    )
+    ending = next(r for k, r in rows.items() if k.startswith("ending:"))
+    assert ending.label == "-ov"
+    assert apply_ending(grammar, frozenset("aeiou"), "dyesh", "one who does") == "dyeshov"

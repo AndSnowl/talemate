@@ -73,7 +73,7 @@
             <!-- a composed rule: the builder, part by part (languages 4b-1) -->
             <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
             <NameRolls v-else class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
-            <div v-if="meaningShown" class="text-caption text-muted mt-1">{{ meaningShown }}</div>
+            <div v-if="meaningShown && !composed" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
             <v-divider class="my-3"></v-divider>
             <div class="d-flex align-center flex-wrap ga-2">

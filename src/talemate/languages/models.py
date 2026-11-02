@@ -78,6 +78,12 @@ class Ending(BaseModel):
     example: str = ""
     changes: list[FormChange] = Field(default_factory=list)
 
+    @field_validator("ending")
+    @classmethod
+    def _no_hyphen(cls, value: str) -> str:
+        # written "-ov" or "ov", it's the letters ov (acceptance run)
+        return value.strip().lstrip("-")
+
 
 class OfRule(BaseModel):
     """How "of X" is said: a word (on `word_side` of X) or an ending on X;

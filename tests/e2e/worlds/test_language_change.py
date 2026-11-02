@@ -356,9 +356,9 @@ def test_fill_them_in_is_offered_when_nothing_else_is_missing(app, page):
 
     thing = _language_page(app, page, "Fill names only", depth="naming")
     thing.get_by_test_id("language-tab-language").click()
-    thing.get_by_test_id("language-chapters").get_by_test_id(
-        "language-chapter"
-    ).filter(has_text="Name rules").first.click()
+    thing.get_by_test_id("language-chapters").get_by_test_id("language-chapter").filter(
+        has_text="Name rules"
+    ).first.click()
     thing.get_by_test_id("name-grammar").get_by_test_id("name-grammar-fill").click()
     panel = page.get_by_test_id("language-change")
     expect(panel.get_by_test_id("change-names")).to_be_visible(timeout=TIMEOUT_MS)
