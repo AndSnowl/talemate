@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ValidationError
 
+from talemate.languages.name_grammar import grammar_rows
 from talemate.languages.changes import merge_change
 from talemate.languages.check import CheckReport, check_language
 from talemate.languages.entry import fields_of, language_of, languages, used_words
@@ -77,6 +78,9 @@ class LanguageDiff(BaseModel):
     kept_edits: list[str] = []
     samples_before: dict[str, list[str]] = {}
     samples_after: dict[str, list[str]] = {}
+    # the new version's grammar for names, row by row with examples, when
+    # it changed (languages 4b-1)
+    name_grammar_rows: list[dict] = []
 
 
 class ImportPreview(BaseModel):
@@ -194,6 +198,11 @@ def _diff(
         )
 
     return LanguageDiff(
+        name_grammar_rows=(
+            [r.model_dump() for r in grammar_rows(new)]
+            if old.name_grammar != new.name_grammar
+            else []
+        ),
         words_added=[w for w in new_words if w not in old_words],
         words_removed=[w for w in old_words if w not in new_words],
         words_changed=[

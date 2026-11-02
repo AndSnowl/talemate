@@ -61,7 +61,8 @@ class MakeRequest(BaseModel):
     account."""
 
     # a new language; a change to one; or filling in what one lacks
-    kind: Literal["new", "change", "fill"] = "new"
+    # "names": write the grammar for names from the grammar (languages 4b-1)
+    kind: Literal["new", "change", "fill", "names"] = "new"
     # the language a change or fill is for
     target_id: str | None = None
     text: str

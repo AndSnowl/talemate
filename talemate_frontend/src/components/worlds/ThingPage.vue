@@ -215,7 +215,7 @@
                 <v-tab v-for="tab in LANGUAGE_TABS" :key="tab.value" :value="tab.value" :data-testid="'language-tab-' + tab.value">{{ tab.title }}</v-tab>
             </v-tabs>
             <!-- the Language tab, in chapters; the Lexicon -->
-            <LanguageBook v-if="isLanguage && languageTab === 'language'" class="mt-3" :thing="thing" />
+            <LanguageBook v-if="isLanguage && languageTab === 'language'" class="mt-3" :thing="thing" @fill-names="worlds.openLanguageChange({ targetId: thing.id, names: true })" />
             <LanguageSections v-else-if="isLanguage && languageTab === 'lexicon'" class="mt-3" :thing="thing" tab="lexicon" />
 
             <div v-show="!isLanguage || languageTab === 'about'">

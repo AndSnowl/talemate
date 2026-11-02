@@ -323,3 +323,25 @@ def test_closing_another_languages_panel_keeps_a_finished_change(
     expect(
         page.get_by_test_id("language-change").get_by_test_id("language-diff")
     ).to_contain_text("torg", timeout=TIMEOUT_MS)
+
+
+# --- 4b-1: Fill them in from the grammar --------------------------------------
+
+
+def test_fill_them_in_starts_a_names_change(app, page, fake_claude_mode):
+    fake_claude_mode("names")
+    thing = _language_page(app, page, "Fill names")
+    thing.get_by_test_id("language-tab-language").click()
+    thing.get_by_test_id("language-chapters").get_by_test_id(
+        "language-chapter"
+    ).filter(has_text="Name rules").first.click()
+    card = thing.get_by_test_id("name-grammar")
+    card.get_by_test_id("name-grammar-fill").click()
+    panel = page.get_by_test_id("language-change")
+    panel.get_by_test_id("change-names").click()
+    review = panel.get_by_test_id("review-name-grammar")
+    expect(review).to_contain_text("vel → velen", timeout=LONG_MS)
+    panel.get_by_test_id("language-accept").click()
+    expect(page.get_by_test_id("language-change")).to_have_count(0, timeout=TIMEOUT_MS)
+    row = card.get_by_test_id("name-grammar-row").filter(has_text='"the"')
+    expect(row).to_contain_text("vel → velen", timeout=TIMEOUT_MS)

@@ -105,6 +105,7 @@
                     <ul class="report-list text-body-2">
                         <li v-for="(line, index) in stillLines" :key="index">{{ line }}</li>
                     </ul>
+                    <v-btn v-if="namesWanted" size="small" color="primary" variant="tonal" :disabled="running || otherBusy" data-testid="change-names" @click="fillNames">Fill in: the grammar for names</v-btn>
                     <v-btn v-if="fillStep" size="small" color="primary" variant="tonal" :disabled="running || otherBusy" data-testid="change-fill" @click="fill">Fill in next: {{ fillStep }}</v-btn>
                 </div>
             </div>
@@ -240,6 +241,13 @@ export default {
             if ((found.grammar_topics_missing || []).length) return 'grammar';
             return null;
         },
+        // offered when the panel was opened for it, or the language has none
+        namesWanted() {
+            if (!this.targetId) return false;
+            if (this.draft?.names) return true;
+            const target = this.targetId === this.thing.id ? this.thing : null;
+            return !!target && target.kind === 'language' && !target.fields?.rules?.name_grammar;
+        },
         canStart() {
             return !!this.draft.text.trim() && !this.running && !this.otherBusy;
         },
@@ -285,7 +293,7 @@ export default {
             return {
                 kind,
                 target_id: this.targetId,
-                text: kind === 'fill' ? '' : this.draft.text.trim(),
+                text: kind === 'fill' || kind === 'names' ? '' : this.draft.text.trim(),
                 context_ids: this.contextIds,
                 route: this.route,
                 ...(this.route === 'claude_code' ? { claude_model: this.claudeModel } : {}),
@@ -299,6 +307,11 @@ export default {
         fill() {
             if (this.briefOnly) this.copyBrief('fill');
             else this.start('fill');
+        },
+        // the grammar for names from the grammar (languages 4b-1)
+        fillNames() {
+            if (this.briefOnly) this.copyBrief('names');
+            else this.start('names');
         },
         copyBrief(kind) {
             this.copied = false;

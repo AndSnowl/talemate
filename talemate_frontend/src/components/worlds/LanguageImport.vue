@@ -61,6 +61,15 @@
                 <div v-if="grammarChanged" data-testid="change-diff-grammar"><span class="text-caption text-muted">Grammar:</span> {{ grammarChanged }}</div>
                 <div v-if="(preview.diff.rules_removed || []).length"><span class="text-caption text-muted">Name rules removed:</span> {{ preview.diff.rules_removed.join(', ') }}</div>
                 <div v-if="preview.diff.generators_changed" class="text-caption text-muted">The name rules change: compare the sample names above.</div>
+                <!-- the new grammar for names, each rule with its example (languages 4b-1) -->
+                <div v-if="(preview.diff.name_grammar_rows || []).length" class="mt-1" data-testid="review-name-grammar">
+                    <div class="text-caption text-muted">Grammar for names</div>
+                    <div v-for="row in preview.diff.name_grammar_rows" :key="row.key" class="d-flex flex-wrap ga-2">
+                        <span>{{ row.label }}</span><span class="text-muted">{{ row.rule }}</span>
+                        <span v-if="row.error" class="text-error">can't build: {{ row.error }}</span>
+                        <i v-else-if="row.example">{{ row.example }}</i>
+                    </div>
+                </div>
                 <div v-if="preview.diff.sound_after != null" class="sound-change" data-testid="change-diff-sound">
                     <div class="text-caption text-muted">How it sounds, before and after</div>
                     <div class="ba"><div>{{ preview.diff.sound_before }}</div><div>{{ preview.diff.sound_after }}</div></div>

@@ -2181,11 +2181,13 @@ export const useWorldsStore = defineStore('worlds', {
 
         // the Change it… panel, on a language's page or an entry's; `prefill`
         // starts the request ("Change the Verbs section: ")
-        openLanguageChange({ targetId = null, originId = null, prefill = '' } = {}) {
+        // `names`: opened for the grammar for names (languages 4b-1), its
+        // "Fill in: the grammar for names" offered first
+        openLanguageChange({ targetId = null, originId = null, prefill = '', names = false } = {}) {
             const same = this.languageChange && this.languageChange.targetId === targetId && this.languageChange.originId === originId;
             this.languageChange = same
-                ? { ...this.languageChange, text: prefill || this.languageChange.text }
-                : { targetId, originId, text: prefill, contextIds: originId ? [originId] : null, route: null, claudeModel: null };
+                ? { ...this.languageChange, text: prefill || this.languageChange.text, names: names || this.languageChange.names }
+                : { targetId, originId, text: prefill, contextIds: originId ? [originId] : null, route: null, claudeModel: null, names };
             if (targetId) this.loadLanguageRelated(targetId);
             // the panel puts the cursor at the end of its request
             this.languageChangeFocus += 1;

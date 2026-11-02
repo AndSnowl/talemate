@@ -68,8 +68,21 @@ from `talemate.languages.models.LanguageFile`). The shape:
       {"id": "words", "name": "Words", "use": "words", "patterns": ["CVC", "CVCVC"]},
       {"id": "men", "name": "Men's names", "use": "character", "patterns": ["CVCVC"]},
       {"id": "women", "name": "Women's names", "use": "character", "patterns": ["CVCVCa"]},
-      {"id": "places", "name": "Places", "use": "place", "patterns": ["CVCVC(ov)"]}
+      {"id": "places", "name": "Places", "use": "place", "patterns": ["CVCVC(ov)"]},
+      {"id": "from-a-place", "name": "Names from a place", "use": "character",
+       "shapes": [{"parts": [{"kind": "rule", "rule": "men"},
+                             {"kind": "meaning", "of": true, "hint": "the place they come from"}]}]}
     ],
+    "name_grammar": {
+      "describing": "before",
+      "of": {"how": "word", "text": "da", "word_side": "before"},
+      "the": [{"when": "after_vowel", "kind": "ending", "text": "t"},
+              {"kind": "ending", "text": "ot"}],
+      "more_than_one": [{"when": "ends:a|o", "kind": "swap", "drop": "a|o", "text": "i"},
+                        {"kind": "ending", "text": "y"}],
+      "endings": [{"ending": "enka", "meaning": "small, dear"},
+                  {"ending": "stvo", "meaning": "land of"}]
+    },
     "grammar": [
       {"title": "Nouns", "topic": "nouns",
        "text": "Plain words on how nouns work: gender, plurals, how 'the' is shown.",
@@ -130,6 +143,21 @@ from `talemate.languages.models.LanguageFile`). The shape:
   categories (`"A": "dusk thorn ash raven"`, `"B": "hollow field mere
   ford"`), use a pattern like `"AB"`, and give every part's meaning in
   the dictionary.
+- **The grammar for names** (`name_grammar`) is what the app builds names
+  with: where describing words go (`describing`), how "of" is said (`of`: a
+  word or an ending), how "the" and "more than one" are made, and the endings
+  with a meaning from the word-building table. Each form is a list of
+  changes tried in order; the first whose `when` holds is used: `ending`
+  (adds `text`), `swap` (drops one of the `|`-listed endings in `drop`, adds
+  `text`), `word_before`, `word_after`, `double` (the first syllable
+  doubled); `when` is `""`, `after_vowel`, `after_consonant`, `before_vowel`,
+  `plural` or `ends:a|o`. Every rule must rebuild the examples your own
+  tables give ("kor → koren, kori").
+- **Composed name rules** (`shapes` instead of `patterns`) write naming
+  customs as parts: another rule (`rule`), a fixed word (`word`), or a
+  meaning (`meaning`, with `forms`, `of` and a `hint` for what it takes).
+  Use them for customs the grammar describes, like an owl-name after the
+  given name ("[Men's names] Ul [a meaning · plural]").
 - `reference/rule-syntax.md` has the full pattern syntax. The weight
   marker is a number (`r*2`), never a literal `*n`; `|` only appears
   inside `[...]`.
