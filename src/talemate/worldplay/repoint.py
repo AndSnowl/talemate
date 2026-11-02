@@ -1645,9 +1645,10 @@ def rename_everywhere(rev: Revision, world: World, thing_id: str, name: str) -> 
 
 def drop_other_names(rev: Revision, world: World, thing_id: str, aka: object) -> None:
     """Set `thing_id`'s other names to `aka`, in `rev`. A link to it that
-    showed one of the names dropped shows its main name instead (owner,
-    languages 4a revised: "Drassone" leaves the Principality of Drassone's
-    facts, free for its capital)."""
+    showed one of the names dropped, and the dropped name written plain in
+    its own facts, show its main name instead (owner, languages 4a
+    revised: "Drassone" leaves the Principality of Drassone's facts, free
+    for its capital)."""
 
     view = world.view()
     state = view.thing(thing_id)
@@ -1659,15 +1660,12 @@ def drop_other_names(rev: Revision, world: World, thing_id: str, aka: object) ->
         if isinstance(entry, dict)
     }
     name = view.name_of(thing_id) or ""
-    dropped = (
-        {
-            name_key(str(entry.get("name") or ""))
-            for entry in state.fields.get("aka") or []
-            if isinstance(entry, dict)
-        }
-        - kept
-        - {name_key(name), ""}
-    )
+    written = [
+        str(entry.get("name") or "")
+        for entry in state.fields.get("aka") or []
+        if isinstance(entry, dict)
+    ]
+    dropped = {name_key(w) for w in written} - kept - {name_key(name), ""}
     rev.set_field(thing_id, "aka", aka, None)
     if not dropped:
         return
@@ -1678,7 +1676,25 @@ def drop_other_names(rev: Revision, world: World, thing_id: str, aka: object) ->
             return f"[[thing:{thing_id}|{name}]]"
         return match.group(0)
 
-    for _owner, fact in view.referencing(thing_id):
+    corrected: dict[str, str] = {}
+    for _owner, fact in view.referencing(thing_id, any_date=True):
         text = link.sub(shown, fact.text)
         if text != fact.text:
-            rev.correct_fact(fact.fact_id, text=text)
+            corrected[fact.fact_id] = text
+    # its own facts write it plain ("Drassone is cold"): outside links, and
+    # outside the full name itself, those words say the full name
+    plain = [w for w in written if name_key(w) in dropped]
+    word = re.compile(
+        r"(?<!\w)(?:" + "|".join(re.escape(w) for w in plain) + r")(?!\w)"
+    )
+    keep = re.compile(r"(\[\[[^\]]*\]\]|" + re.escape(name) + ")")
+    for fact in state.facts:
+        text = corrected.get(fact.fact_id, fact.text)
+        pieces = keep.split(text)
+        text = "".join(
+            piece if i % 2 else word.sub(name, piece) for i, piece in enumerate(pieces)
+        )
+        if text != fact.text:
+            corrected[fact.fact_id] = text
+    for fact_id, text in corrected.items():
+        rev.correct_fact(fact_id, text=text)

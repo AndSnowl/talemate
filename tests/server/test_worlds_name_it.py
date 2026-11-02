@@ -148,6 +148,7 @@ async def test_removing_an_other_name_rewrites_its_links_to_the_full_name(plugin
                 ],
             },
         )
+        rev.add_fact(land, "general", "Drassone is cold; the Principality is old.")
         river = rev.create_thing("place", {"name": "Vell"})
         rev.add_fact(
             river,
@@ -168,6 +169,9 @@ async def test_removing_an_other_name_rewrites_its_links_to_the_full_name(plugin
         f"The Vell flows through [[thing:{land}|Principality of Drassone]] and"
         f" [[thing:{land}|the Principality]]."
     )
+    # its own facts write it plain: those words say the full name too
+    [own] = view.thing(land).facts
+    assert own.text == "Principality of Drassone is cold; the Principality is old."
 
 
 async def test_a_batch_echoes_its_slot(plugin):
