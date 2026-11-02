@@ -1,0 +1,16 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+Split this English compound word into its parts, for naming something in an invented language: {{ word }}
+
+Give its main noun (singular, lower case) and the other parts (lower case).
+Examples: Blackwater is water with black; lakeland is land with lake; Stormwatch is watch with storm. A word that isn't a compound is its own noun, with no other parts.
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"noun": "water", "describing": ["black"]}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

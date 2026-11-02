@@ -1,0 +1,20 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+You name things in an invented fantasy world, in {{ language }}. One part of this entry's name means something{% if hint %}: {{ hint }}{% endif %}.
+
+Read the entry's facts and choose ONE common English noun for that part (like star, frost, pine, ember, river). Never a proper name, never the entry's own name, never a phrase.
+
+{{ name }}:
+{% for fact in facts -%}
+- {{ fact }}
+{% endfor %}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"noun": "frost", "why": "She was born in the coldest winter on record."}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

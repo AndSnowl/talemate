@@ -233,6 +233,12 @@ async def translate_text(
     and picked by the model (its new words in `new_words`). Nothing is
     saved."""
 
+    if language.name_grammar is not None and not re.search(r"\s(of)\s", text.lower()):
+        # a language with grammar for names builds it (languages 4b-1):
+        # "white lake" in its order and forms; "X of Y" keeps the old way
+        built = await _translate_built(client, language, text, what=what, reply=reply)
+        if built is not None:
+            return built
     by_word = {e.word.lower(): e.word for e in language.dictionary}
     by_meaning = {m.lower(): e.word for e in language.dictionary for m in e.meanings}
     meaning_of_word = {
@@ -301,6 +307,30 @@ async def translate_text(
         name=" ".join(w[:1].upper() + w[1:] for w in out),
         new_words=new_words,
         parts=parts,
+    )
+
+
+async def _translate_built(
+    client, language: Language, text: str, *, what: str, reply: str | None
+) -> NameInResult | None:
+    from talemate.languages.name_grammar import build_phrase
+    from talemate.languages.naming_meaning import read_english, resolve_words
+
+    phrase = read_english(text)
+    if not phrase.noun:
+        return None
+    meanings = [*phrase.describing, phrase.noun]
+    words, new, options = await resolve_words(
+        client, language, meanings, what=what or text, reply=reply
+    )
+    built = build_phrase(language, phrase, words, frozenset(new))
+    return NameInResult(
+        name=built.text,
+        new_words=[{"word": w, "meaning": m} for m, w in words.items() if w in new],
+        parts=[
+            {**p, **({"options": options[p["word"]]} if p["word"] in options else {})}
+            for p in built.parts
+        ],
     )
 
 

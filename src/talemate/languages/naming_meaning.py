@@ -1,0 +1,452 @@
+"""Names from a meaning or from an entry's facts (languages 4b-1): the
+English read in code (probe 4b-1: "of", "the", plural, the last word as
+the noun), the model asked only to split a one-word compound, to pick a
+coined word, or to suggest a meaning from facts; the name engine builds
+the words. Nothing is saved: coined words are saved when the owner picks
+a name."""
+
+from __future__ import annotations
+
+import random
+import re
+from collections.abc import Callable
+
+from talemate.languages.composed import PartRoll, roll_parts
+from talemate.languages.entry import language_of
+from talemate.languages.generator import roll
+from talemate.languages.models import Language, NamePart
+from talemate.languages.name_grammar import (
+    Built,
+    MeaningPhrase,
+    build_phrase,
+    lookup_word,
+)
+from talemate.languages.naming import PROMPT_KIND, _reply_object, pick
+from talemate.prompts.base import Prompt
+from talemate.world.view import WorldView
+from talemate.worldplay import prose_gen
+from talemate.worldplay.ai import world_ai_call
+
+__all__ = [
+    "give_meaning",
+    "read_english",
+    "resolve_words",
+    "singular",
+    "split_meaning",
+    "suggest_for",
+    "suggest_phrases",
+]
+
+# coined words offered for a new word: the model's pick and the others
+CANDIDATES = 8
+_FUNCTION = {"the", "of", "a", "an"}
+
+
+def _object(reply: str) -> dict:
+    """The JSON object in a reply (the prompt starts it with "{")."""
+
+    return _reply_object(reply if reply.lstrip().startswith("{") else "{" + reply)
+
+
+def singular(word: str) -> str:
+    """A plural English noun made singular, simply: stars, woods; berries;
+    foxes, marshes."""
+
+    w = word.lower()
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 4 and w.endswith(("ches", "shes", "xes", "sses")):
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+        return w[:-1]
+    return w
+
+
+def read_english(
+    text: str, compound: Callable[[str], dict] | None = None
+) -> MeaningPhrase:
+    """A meaning's structure read from the English (probe 4b-1, 19/20):
+    "of" and "the" from its words, the last content word as the noun (made
+    singular, and more than one when it was plural), the words after "of"
+    in "Owl-of-Frost", "land" as the "land of" ending; a one-word compound
+    ("Blackwater") goes to `compound`, the model."""
+
+    words = [w for w in re.split(r"[\s\-]+", text.strip()) if w]
+    lower = [w.lower() for w in words]
+    of = bool(lower) and (lower[0] == "of" or "of" in lower[1:-1])
+    the = "the" in lower
+    content = [w for w in lower if w not in _FUNCTION]
+    ending = ""
+    if content and (content[-1] == "land" or (content[0] == "land" and "of" in lower)):
+        ending = "land of"
+        content = [w for w in content if w != "land"]
+        of = False
+    if len(words) == 1 and len(content) == 1 and compound is not None and not ending:
+        got = compound(content[0]) or {}
+        describing = [
+            str(d).lower() for d in got.get("describing") or [] if str(d).strip()
+        ]
+        if describing and got.get("noun"):
+            return MeaningPhrase(
+                noun=singular(str(got["noun"])), describing=describing, joined=True
+            )
+    if "of" in lower[1:-1]:
+        at = lower.index("of", 1)
+        content = [w for w in lower[at + 1 :] if w not in _FUNCTION]
+    if not content:
+        return MeaningPhrase(noun="")
+    noun = content[-1]
+    return MeaningPhrase(
+        noun=singular(noun),
+        describing=content[:-1],
+        of=of,
+        the=the,
+        more_than_one=singular(noun) != noun,
+        ending=ending,
+    )
+
+
+async def _compound_reply(client, word: str) -> str:
+    prose_gen.require_client(client)
+    with world_ai_call():
+        _response, extracted = await Prompt.request(
+            "world.name-compound", client, PROMPT_KIND, vars={"word": word}
+        )
+    return extracted["response"]
+
+
+async def split_meaning(
+    client,
+    language: Language,
+    text: str,
+    slots: list[NamePart],
+    *,
+    reply: str | None = None,
+) -> list[MeaningPhrase]:
+    """The owner's meaning as phrases, one a meaning part (`slots`; none:
+    one phrase for the whole text). Several parts share the meaning out by
+    "," or "and"; a part left over gets an empty noun (it keeps its roll).
+    The owner's words win over a slot's settings. Only a one-word
+    compound asks the model (one call)."""
+
+    pieces = [text]
+    if len(slots) > 1:
+        pieces = [p for p in re.split(r",|\band\b", text) if p.strip()]
+    asked: dict[str, dict] = {}
+
+    async def ask(word: str) -> dict:
+        if reply is not None:
+            return _object(reply)
+        if client is None:
+            return {}
+        return _object(await _compound_reply(client, word))
+
+    phrases: list[MeaningPhrase] = []
+    for piece in pieces[: max(1, len(slots))]:
+        single = re.fullmatch(r"\s*([^\W\d_]+)\s*", piece)
+        if single and single.group(1).lower() not in asked:
+            asked[single.group(1).lower()] = await ask(single.group(1))
+        phrases.append(read_english(piece, compound=lambda w: asked.get(w.lower(), {})))
+    while len(phrases) < len(slots):
+        phrases.append(MeaningPhrase(noun=""))
+    return phrases
+
+
+async def resolve_words(
+    client,
+    language: Language,
+    meanings: list[str],
+    *,
+    what: str = "",
+    reply: str | None = None,
+    rng: random.Random | None = None,
+) -> tuple[dict[str, str], set[str], dict[str, list[str]]]:
+    """Each meaning's word: the dictionary's, else coined from the word
+    rules, the model picking among `CANDIDATES` rolls. Returns the words,
+    the coined ones, and each coined word's options (the pick first)."""
+
+    rng = rng if rng is not None else random.Random()
+    word_rules = language.word_generator()
+    taken = {e.word.lower() for e in language.dictionary}
+    words: dict[str, str] = {}
+    new: set[str] = set()
+    options: dict[str, list[str]] = {}
+    for meaning in meanings:
+        if not meaning or meaning in words:
+            continue
+        entry = lookup_word(language, meaning)
+        if entry is not None:
+            words[meaning] = entry.word.lower()
+            continue
+        if word_rules is None:
+            raise ValueError("this language has no word rules to make new words")
+        rolled = [
+            c.lower()
+            for c in roll(
+                language, word_rules.id, count=CANDIDATES, rng=rng, exclude=taken
+            )
+        ]
+        if not rolled:
+            raise ValueError("the language's word rules made no new words")
+        chosen, _why = await pick(
+            client,
+            language,
+            rolled,
+            f'the word for "{meaning}" ({what or meaning})',
+            reply=reply,
+        )
+        chosen = chosen.lower()
+        taken.add(chosen)
+        words[meaning] = chosen
+        new.add(chosen)
+        options[chosen] = [chosen, *[c for c in rolled if c != chosen]]
+    return words, new, options
+
+
+def _meanings(phrase: MeaningPhrase) -> list[str]:
+    return [m for m in [*phrase.describing, phrase.noun] if m]
+
+
+def _with_options(built: Built, options: dict[str, list[str]]) -> list[dict]:
+    return [
+        {
+            **part,
+            **({"options": options[part["word"]]} if part["word"] in options else {}),
+        }
+        for part in built.parts
+    ]
+
+
+def _phrase_rolls(
+    language: Language,
+    phrase: MeaningPhrase,
+    words: dict[str, str],
+    new: set[str],
+    options: dict[str, list[str]],
+) -> list[Built]:
+    """The phrase built, then built again with each other option of its
+    first coined word (the rolls a meaning part shows)."""
+
+    first = build_phrase(language, phrase, words, frozenset(new))
+    first.parts = _with_options(first, options)
+    rolls = [first]
+    coined = next((m for m, w in words.items() if w in options), None)
+    if coined is not None:
+        for other in options[words[coined]][1:]:
+            alt = build_phrase(
+                language, phrase, {**words, coined: other}, frozenset({*new, other})
+            )
+            if alt.text not in {r.text for r in rolls}:
+                rolls.append(alt)
+    return rolls
+
+
+async def _fill_parts(
+    client,
+    language: Language,
+    rule_id: str,
+    phrases: dict[int, MeaningPhrase],
+    *,
+    pinned: dict[int, str] | None,
+    shape: int | None,
+    what: str,
+    reply: str | None,
+) -> dict:
+    shape, parts = roll_parts(language, rule_id, pinned=pinned, shape=shape)
+    out: list[PartRoll] = []
+    for part in parts:
+        phrase = phrases.get(part.index)
+        if (
+            part.kind == "meaning"
+            and not part.pinned
+            and phrase is not None
+            and phrase.noun
+        ):
+            words, new, options = await resolve_words(
+                client, language, _meanings(phrase), what=what, reply=reply
+            )
+            part = part.model_copy(
+                update={"rolls": _phrase_rolls(language, phrase, words, new, options)}
+            )
+        out.append(part)
+    return {"shape": shape, "parts": [p.model_dump() for p in out]}
+
+
+def _meaning_slots(
+    language: Language, rule_id: str, shape: int | None
+) -> list[tuple[int, NamePart]]:
+    generator = next((g for g in language.generators if g.id == rule_id), None)
+    if generator is None or not generator.shapes:
+        return []
+    shape = shape if shape is not None and 0 <= shape < len(generator.shapes) else 0
+    return [
+        (i, p)
+        for i, p in enumerate(generator.shapes[shape].parts)
+        if p.kind == "meaning"
+    ]
+
+
+async def give_meaning(
+    view: WorldView,
+    client,
+    language_id: str,
+    text: str,
+    *,
+    rule_id: str | None = None,
+    pinned: dict[int, str] | None = None,
+    shape: int | None = None,
+    reply: str | None = None,
+) -> dict:
+    """Names for the owner's meaning. With a composed rule (`rule_id`):
+    `{shape, parts}`, its meaning parts built from the meaning (each
+    coined word's other options as more rolls), the rest rolled, pins
+    kept. Without: `{candidates: [{name, built_from}]}`, the phrase built
+    in the language's order and, with more than one word, joined too."""
+
+    state = view.thing(language_id)
+    if state is None or state.kind != "language":
+        raise ValueError("there's no such language")
+    language = language_of(state)
+    if rule_id:
+        slots = _meaning_slots(language, rule_id, shape)
+        if slots and shape is None:
+            shape = 0
+        phrases = await split_meaning(
+            client, language, text, [p for _i, p in slots], reply=reply
+        )
+        found = {i: phrase for (i, _p), phrase in zip(slots, phrases)}
+        return await _fill_parts(
+            client,
+            language,
+            rule_id,
+            found,
+            pinned=pinned,
+            shape=shape,
+            what=text,
+            reply=reply,
+        )
+    (phrase,) = await split_meaning(client, language, text, [], reply=reply)
+    if not phrase.noun:
+        return {"candidates": []}
+    words, new, options = await resolve_words(
+        client, language, _meanings(phrase), what=text, reply=reply
+    )
+    built = build_phrase(language, phrase, words, frozenset(new))
+    candidates = [{"name": built.text, "built_from": _with_options(built, options)}]
+    if phrase.describing and not phrase.joined and not phrase.of:
+        joined = build_phrase(
+            language, phrase.model_copy(update={"joined": True}), words, frozenset(new)
+        )
+        if joined.text != built.text:
+            candidates.insert(
+                0, {"name": joined.text, "built_from": _with_options(joined, options)}
+            )
+    return {"candidates": candidates}
+
+
+async def _suggest_reply(
+    client, language: Language, name: str, facts: list[str], hint: str
+) -> str:
+    prose_gen.require_client(client)
+    with world_ai_call():
+        _response, extracted = await Prompt.request(
+            "world.name-suggest",
+            client,
+            PROMPT_KIND,
+            vars={
+                "language": language.name,
+                "name": name,
+                "facts": facts,
+                "hint": hint,
+            },
+        )
+    return extracted["response"]
+
+
+async def suggest_phrases(
+    client,
+    language: Language,
+    parts: list[NamePart],
+    facts: list[str],
+    *,
+    name: str = "",
+    reply: str | None = None,
+) -> list[MeaningPhrase | None]:
+    """A meaning from the entry's facts for each meaning part (None for
+    the other parts): ONE common noun the model picks (probe 4b-1), made
+    singular; the part's own forms, "of", joining and ending."""
+
+    out: list[MeaningPhrase | None] = []
+    for part in parts:
+        if part.kind != "meaning":
+            out.append(None)
+            continue
+        if reply is None:
+            reply_text = await _suggest_reply(client, language, name, facts, part.hint)
+        else:
+            reply_text = reply
+        noun = str(_object(reply_text).get("noun") or "").strip().split()
+        out.append(
+            MeaningPhrase(
+                noun=singular(noun[-1]) if noun else "",
+                of=part.of,
+                the="the" in part.forms,
+                more_than_one="more_than_one" in part.forms,
+                joined=part.joined,
+                ending=part.ending,
+            )
+        )
+    return out
+
+
+async def suggest_for(
+    view: WorldView,
+    client,
+    language_id: str,
+    rule_id: str,
+    thing_id: str,
+    *,
+    pinned: dict[int, str] | None = None,
+    shape: int | None = None,
+    reply: str | None = None,
+) -> dict:
+    """✨ Suggest from its facts: `{shape, parts}` with each meaning part
+    built from the meaning the model suggests for the entry; a rule with
+    no meaning parts has the model pick from a batch of its rolls."""
+
+    state = view.thing(language_id)
+    thing = view.thing(thing_id)
+    if state is None or state.kind != "language" or thing is None:
+        raise ValueError("there's no such entry or language")
+    language = language_of(state)
+    name = view.name_of(thing_id) or ""
+    facts = [f.text for f in thing.facts][:20]
+    slots = _meaning_slots(language, rule_id, shape)
+    if not slots:
+        shape_used, parts = roll_parts(language, rule_id, pinned=pinned, shape=shape)
+        out = []
+        for part in parts:
+            texts = [b.text for b in part.rolls]
+            if part.kind == "rule" and not part.pinned and len(texts) > 1:
+                chosen, _why = await pick(client, language, texts, name, reply=reply)
+                part = part.model_copy(
+                    update={"rolls": sorted(part.rolls, key=lambda b: b.text != chosen)}
+                )
+            out.append(part)
+        return {"shape": shape_used, "parts": [p.model_dump() for p in out]}
+    if shape is None:
+        shape = 0
+    phrases = await suggest_phrases(
+        client, language, [p for _i, p in slots], facts, name=name, reply=reply
+    )
+    found = {i: phrase for (i, _p), phrase in zip(slots, phrases) if phrase is not None}
+    return await _fill_parts(
+        client,
+        language,
+        rule_id,
+        found,
+        pinned=pinned,
+        shape=shape,
+        what=name,
+        reply=reply,
+    )

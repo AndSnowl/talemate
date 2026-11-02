@@ -436,7 +436,9 @@ from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
 from talemate.languages import naming_panel
+from talemate.languages.composed import roll_parts
 from talemate.languages.name_grammar import grammar_rows
+from talemate.languages.naming_meaning import give_meaning, suggest_for
 from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.cleaning import model as clean_model
 from talemate.worldplay.cleaning import (
@@ -6305,18 +6307,74 @@ class WorldsPlugin(Plugin):
             rename_everywhere(rev, world, thing_id, name)
         self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
 
+    @staticmethod
+    def _pins(data: dict) -> dict[int, str]:
+        """The builder's pinned (or typed) parts, by index."""
+
+        return {
+            int(index): str(text)
+            for index, text in (data.get("pinned") or {}).items()
+            if str(text).strip()
+        }
+
+    @staticmethod
+    def _shape(data: dict) -> int | None:
+        shape = data.get("shape")
+        return int(shape) if shape is not None else None
+
+    async def handle_name_it_parts(self, data: dict):
+        """A rule's parts, each with its rolls, for the Name it builder
+        (languages 4b-1); no model: `{language_id, rule_id, shape, parts}`.
+        Pinned parts keep their text."""
+
+        state = self._language_entry(data.get("language_id"))
+        rule_id = str(data.get("rule_id") or "")
+        view = self._require_world().view()
+        taken = frozenset(
+            str(t.fields.get("name") or "").lower() for t in view.things(facts=False)
+        )
+        shape, parts = roll_parts(
+            language_of(state),
+            rule_id,
+            pinned=self._pins(data),
+            shape=self._shape(data),
+            exclude=taken,
+        )
+        self._reply(
+            "name_it_parts",
+            {
+                "language_id": state.id,
+                "rule_id": rule_id,
+                "shape": shape,
+                "parts": [p.model_dump() for p in parts],
+            },
+        )
+
     async def handle_name_it_meaning(self, data: dict):
         """Names for a meaning the owner typed, in the background (new words
-        are picked by the model): `{language_id, text, candidates}`."""
+        are picked by the model). With `rule_id`, the rule's meaning parts
+        are built from it (`{language_id, text, rule_id, shape, parts}`);
+        without, `{language_id, text, candidates}` (languages 4b-1: built
+        in the language's order and forms)."""
 
         state = self._language_entry(data.get("language_id"))
         text = str(data.get("text") or "").strip()
         if not text:
             raise ValueError("type what it should mean")
+        rule_id = str(data.get("rule_id") or "") or None
         view = self._require_world().view()
         client, reply = self._language_reply()
         self._spawn(
-            naming_panel.from_meaning(view, client, state.id, text, reply=reply),
+            give_meaning(
+                view,
+                client,
+                state.id,
+                text,
+                rule_id=rule_id,
+                pinned=self._pins(data),
+                shape=self._shape(data),
+                reply=reply,
+            ),
             self.create_task_done_callback(
                 "name_it_meaning",
                 "name_it_meaning_failed",
@@ -6324,9 +6382,45 @@ class WorldsPlugin(Plugin):
                 success_data=lambda found: {
                     "language_id": state.id,
                     "text": text,
-                    "candidates": found,
+                    "rule_id": rule_id,
+                    **found,
                 },
                 failure_data={"language_id": state.id, "text": text},
+            ),
+        )
+
+    async def handle_name_it_suggest(self, data: dict):
+        """✨ Suggest from its facts, in the background: the rule's parts
+        with its meaning parts built from what the model suggests for the
+        entry (`{language_id, rule_id, thing_id, shape, parts}`)."""
+
+        state = self._language_entry(data.get("language_id"))
+        rule_id = str(data.get("rule_id") or "")
+        thing_id = str(data.get("thing_id") or "")
+        view = self._require_world().view()
+        client, reply = self._language_reply()
+        self._spawn(
+            suggest_for(
+                view,
+                client,
+                state.id,
+                rule_id,
+                thing_id,
+                pinned=self._pins(data),
+                shape=self._shape(data),
+                reply=reply,
+            ),
+            self.create_task_done_callback(
+                "name_it_suggest",
+                "name_it_suggest_failed",
+                "Error suggesting a name",
+                success_data=lambda found: {
+                    "language_id": state.id,
+                    "rule_id": rule_id,
+                    "thing_id": thing_id,
+                    **found,
+                },
+                failure_data={"language_id": state.id, "thing_id": thing_id},
             ),
         )
 

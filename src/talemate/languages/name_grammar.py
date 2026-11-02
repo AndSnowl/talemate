@@ -253,7 +253,8 @@ def build_phrase(
         for d in phrase.describing
     ]
     if grammar is None:
-        text = " ".join([*(d["word"] for d in describing), noun])
+        words_in_order = [*(d["word"] for d in describing), noun]
+        text = "".join(words_in_order) if phrase.joined else " ".join(words_in_order)
         return Built(text=_capitalise(text), parts=[*describing, noun_part])
 
     head = noun
@@ -272,7 +273,14 @@ def build_phrase(
     forms: list[Form] = []
     if phrase.more_than_one:
         forms.append("more_than_one")
-    if phrase.the or (phrase.of and grammar.of is not None and grammar.of.the):
+    # with "of", "the" is the language's (its of-rule), not the English
+    # idiom's: "of the Stars" is Ul Zveski in Varovni
+    the = (
+        (grammar.of.the if grammar.of is not None else phrase.the)
+        if phrase.of
+        else phrase.the
+    )
+    if the:
         forms.append("the")
     for form in forms:
         before = head
