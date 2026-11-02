@@ -21,13 +21,44 @@ There are two checks, as before. **The owner** judges whether each step looks an
 
 ## Real runs, with the owner's go-ahead
 
-In the owner's fresh test app (Test, Test2, Test3, Moscavia), after the update:
-- [ ] **Fill them in** on Varovni (Test2) and Tsevrani (Test3), agent route. Check the built examples against their own tables.
-- [ ] **Add an owl-name rule** to Varovni by hand: [People (male)] + Ul + [a meaning · plural].
-- [ ] **Give a meaning** "of the Stars" on that rule, from a character's Name it….
-- [ ] **Suggest from its facts** on a Test3 character.
-- [ ] **Reroll** with a part pinned.
+In the owner's fresh test app, world Test3, after the update (worlds backed up first, backend restarted alone). These ran in Test3 instead of Test2: Test2 has no character with facts, and Drassonais tests the plural "the" gap the probe found.
+- [x] **Fill them in** on Tsevrani and Drassonais, on the agent route (Claude Code).
+- [x] **A home-name rule built by hand** on Drassonais, from its own custom ("Families are named for their home: di plus a place"): [Men's names] + [a meaning · of].
+- [x] **Give a meaning** "of the Forest" on that rule, from Eilhaud of Drassone's Name it…. "Use this name" was never pressed.
+- [x] **Suggest from its facts** on Eilhaud (12 facts).
+- [x] **Reroll** with a part pinned.
 
-## Results
+## Results (2026-11-02)
 
-To be filled in after the runs.
+Screenshots and raw records are in the plan's workspace: `real-runs.json` and `real-*.png`.
+
+**Fill them in.**
+- **Tsevrani (72 s):**
+  - describing words before the noun;
+  - "of" is the word tre;
+  - "the" is -k after a vowel, else -ek (dyesh → dyeshek), and -k on a plural;
+  - more than one: -a/-o become -y, else -y (dyesh → dyeshy);
+  - five endings: -ov one who does, -yk small, -ya land of, -de place, -yn one who is.
+  - Its noun table matches.
+- **Drassonais (43 s):**
+  - describing words after the noun;
+  - "of" is the word di;
+  - main word first when joining;
+  - "the" is **lou for more than one**, l' before a vowel, else lo, which is the probe's plural gap, now expressed;
+  - more than one: -s;
+  - four endings (-el, -aud, -auve, -ais).
+  - Its table matches.
+
+**The home-name rule** showed its parts as "Men's names" and "a meaning · of".
+
+**The builder on Eilhaud:**
+- **Give a meaning "of the Forest" → "… Di Sauvaire",** at once (sauvaire is in the dictionary). That is the very example Drassonais's own prose gives: "di Sauvaire, 'of the Forest'".
+- **Suggest (6 s, Skyfall)** chose "owl" and coined *osre*: "Nesnhaud Di Osre", with "osre (new word, saved if you pick it)".
+- **Reroll with the given name pinned** kept "Nesnhaud" in all three rolls: Di Drassone, Di Nazic, Di Brumic.
+
+**Found and fixed during the runs:**
+- "Fill in: the grammar for names" was hidden on a language with nothing else missing (Tsevrani). It now always shows under Still to fill in.
+- The rows read "--ov", "“l'” before before a vowel" and "(plural)". They now read "-ov", "“l'” in front before a vowel" and "for more than one".
+- The plain batch's meaning line stayed under the builder.
+
+**Noted:** a composed rule's sample names show "Roll to see names." after its parts are edited, until Roll is pressed.
