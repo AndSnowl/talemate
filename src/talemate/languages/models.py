@@ -19,6 +19,12 @@ __all__ = [
     "GeneratorDef",
     "Phrase",
     "DictionaryEntry",
+    "Ending",
+    "FormChange",
+    "NameGrammar",
+    "NamePart",
+    "NameShape",
+    "OfRule",
     "SimilarLink",
     "Language",
     "LanguageFile",
@@ -47,13 +53,102 @@ GENERATOR_USES: frozenset[str] = frozenset(
 )
 
 
+class FormChange(BaseModel):
+    """One way a word changes for a form or an ending (languages 4b-1):
+    an ending added (`text`, after `drop` letters are taken off), a word
+    put before or after it, or its first part doubled; only `when` its
+    condition holds (`name_grammar.parse_condition`)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    when: str = ""
+    kind: Literal["ending", "swap", "word_before", "word_after", "double"] = "ending"
+    text: str = ""
+    drop: str = ""
+
+
+class Ending(BaseModel):
+    """A meaningful ending ("-nya", land of). No `changes` means the plain
+    ending added."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ending: str
+    meaning: str
+    example: str = ""
+    changes: list[FormChange] = Field(default_factory=list)
+
+
+class OfRule(BaseModel):
+    """How "of X" is said: a word (on `word_side` of X) or an ending on X;
+    the of-phrase goes `place`d before or after the thing it belongs to;
+    with `the`, X takes "the"."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    how: Literal["word", "ending"] = "word"
+    text: str
+    word_side: Literal["before", "after"] = "before"
+    place: Literal["before", "after"] = "after"
+    the: bool = False
+
+
+class NameGrammar(BaseModel):
+    """A language's grammar for names (languages 4b-1): word order, the
+    forms "the" and "more than one", and its meaningful endings. The name
+    engine (`name_grammar`) applies it; the model never does."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    describing: Literal["before", "after"] = "before"
+    of: OfRule | None = None
+    joining: Literal["describing_first", "main_first"] = "describing_first"
+    clip_first: bool = False
+    the: list[FormChange] = Field(default_factory=list)
+    more_than_one: list[FormChange] = Field(default_factory=list)
+    endings: list[Ending] = Field(default_factory=list)
+
+
+class NamePart(BaseModel):
+    """One part of a composed name rule: another rule, a fixed word, or a
+    meaning part (words of the language built from a meaning)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["rule", "word", "meaning"]
+    rule: str = ""
+    word: str = ""
+    slot: Literal["noun", "describing_noun"] = "noun"
+    forms: list[Literal["the", "more_than_one"]] = Field(default_factory=list)
+    of: bool = False
+    joined: bool = False
+    # an ending's meaning ("land of") the meaning part takes
+    ending: str = ""
+    # what the model looks for, for Suggest ("something in the sky")
+    hint: str = ""
+    optional: bool = False
+    label: str = ""
+
+
+class NameShape(BaseModel):
+    """One way a composed rule's name goes, its parts in order; shapes are
+    picked by `weight`, as patterns are."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    parts: list[NamePart]
+    weight: int = 1
+
+
 class GeneratorDef(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str
     name: str
     use: str
-    patterns: list[str]
+    patterns: list[str] = Field(default_factory=list)
+    # a composed rule's shapes (languages 4b-1), instead of patterns
+    shapes: list[NameShape] = Field(default_factory=list)
     reject: list[str] = Field(default_factory=list)
     capitalize: bool = True
     min_length: int = 2
@@ -245,6 +340,9 @@ class Language(BaseModel):
     # lower-case; "" for none
     flavour: str = ""
     similar: list[SimilarLink] = Field(default_factory=list)
+    # the grammar for names (languages 4b-1); None: names are built in the
+    # owner's word order, as in 4a
+    name_grammar: NameGrammar | None = None
 
     @field_validator("grammar", mode="before")
     @classmethod
