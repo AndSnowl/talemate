@@ -44,28 +44,40 @@ __all__ = [
 Form = Literal["the", "more_than_one"]
 _FORM_LABELS = {"the": "the", "more_than_one": "more than one"}
 
-Condition = Callable[[str, frozenset[str]], bool]
+# a condition tests a word, the language's vowels, and whether the word
+# was made more than one ("plural")
+Condition = Callable[..., bool]
 
 
 def parse_condition(when: str) -> Condition:
-    """`when` as a test of a word and the language's vowels: "" always,
-    "after_vowel" and "after_consonant" (the word's end), "before_vowel"
-    (its start), "ends:a|o" (it ends with one of those letters). Raises
-    `ValueError` for anything else."""
+    """`when` as a test of a word, the language's vowels and whether the
+    word was made more than one: "" always, "after_vowel" and
+    "after_consonant" (the word's end), "before_vowel" (its start),
+    "plural" (it was made more than one: Drassonais lou, not lo),
+    "ends:a|o" (it ends with one of those letters). Raises `ValueError`
+    for anything else."""
 
     when = (when or "").strip()
     if not when:
-        return lambda word, vowels: True
+        return lambda word, vowels, plural=False: True
     if when == "after_vowel":
-        return lambda word, vowels: bool(word) and word[-1].lower() in vowels
+        return lambda word, vowels, plural=False: (
+            bool(word) and word[-1].lower() in vowels
+        )
     if when == "after_consonant":
-        return lambda word, vowels: bool(word) and word[-1].lower() not in vowels
+        return lambda word, vowels, plural=False: (
+            bool(word) and word[-1].lower() not in vowels
+        )
     if when == "before_vowel":
-        return lambda word, vowels: bool(word) and word[0].lower() in vowels
+        return lambda word, vowels, plural=False: (
+            bool(word) and word[0].lower() in vowels
+        )
+    if when == "plural":
+        return lambda word, vowels, plural=False: plural
     if when.startswith("ends:"):
         endings = tuple(e.strip().lower() for e in when[5:].split("|") if e.strip())
         if endings:
-            return lambda word, vowels: word.lower().endswith(endings)
+            return lambda word, vowels, plural=False: word.lower().endswith(endings)
     raise ValueError(f"unknown condition: {when!r}")
 
 
@@ -154,21 +166,29 @@ def _apply_change(change: FormChange, word: str, vowels: frozenset[str]) -> str:
     raise ValueError(f"unknown change: {change.kind!r}")
 
 
-def _apply_changes(changes: list[FormChange], vowels: frozenset[str], word: str) -> str:
+def _apply_changes(
+    changes: list[FormChange], vowels: frozenset[str], word: str, plural: bool = False
+) -> str:
     """The first change whose condition holds, applied; none: as it is."""
 
     for change in changes:
-        if parse_condition(change.when)(word, vowels):
+        if parse_condition(change.when)(word, vowels, plural):
             return _apply_change(change, word, vowels)
     return word
 
 
 def apply_form(
-    grammar: NameGrammar, vowels: frozenset[str], word: str, form: Form
+    grammar: NameGrammar,
+    vowels: frozenset[str],
+    word: str,
+    form: Form,
+    *,
+    plural: bool = False,
 ) -> str:
-    """`word` in `form` ("the" or "more_than_one") by `grammar`."""
+    """`word` in `form` ("the" or "more_than_one") by `grammar`; `plural`:
+    the word was made more than one (for "the" that differs then)."""
 
-    return _apply_changes(getattr(grammar, form), vowels, word)
+    return _apply_changes(getattr(grammar, form), vowels, word, plural)
 
 
 def _ending(grammar: NameGrammar, meaning: str) -> Ending:
@@ -256,10 +276,21 @@ def build_phrase(
         forms.append("the")
     for form in forms:
         before = head
-        head = apply_form(grammar, vowels, head, form)
+        head = apply_form(
+            grammar,
+            vowels,
+            head,
+            form,
+            plural=form == "the" and phrase.more_than_one,
+        )
         if head != before:
-            added = head[len(before) :] if head.startswith(before) else head
-            noun_part["steps"].append(f"-{added} {_FORM_LABELS[form]}")
+            if head.startswith(before):
+                step = f"-{head[len(before) :]}"
+            elif head.endswith(before):
+                step = f"{head[: -len(before)].strip()} before"
+            else:
+                step = head
+            noun_part["steps"].append(f"{step} {_FORM_LABELS[form]}")
     if phrase.joined or not describing:
         text_words = [head]
     elif grammar.describing == "before":

@@ -123,8 +123,9 @@
                     <div v-if="ruleForm" class="d-flex align-center flex-wrap ga-2 mb-2" data-testid="language-rule-form">
                         <v-text-field v-model="ruleForm.name" label="Name" density="compact" variant="outlined" hide-details class="small-field"></v-text-field>
                         <v-select v-model="ruleForm.use" :items="useItems" label="Makes names for" density="compact" variant="outlined" hide-details class="small-field"></v-select>
-                        <v-text-field v-model="ruleForm.pattern" label="First pattern" density="compact" variant="outlined" hide-details class="pattern-field font-mono"></v-text-field>
-                        <v-btn size="small" color="accent" variant="flat" :disabled="!ruleForm.name.trim() || !ruleForm.pattern.trim()" @click="saveRule">Add</v-btn>
+                        <v-text-field v-if="!ruleForm.composed" v-model="ruleForm.pattern" label="First pattern" density="compact" variant="outlined" hide-details class="pattern-field font-mono"></v-text-field>
+                        <v-checkbox v-model="ruleForm.composed" label="made of parts" density="compact" hide-details data-testid="language-rule-composed"></v-checkbox>
+                        <v-btn size="small" color="accent" variant="flat" :disabled="!ruleForm.name.trim() || (!ruleForm.composed && !ruleForm.pattern.trim())" @click="saveRule">Add</v-btn>
                         <v-btn size="small" variant="text" @click="ruleForm = null">Cancel</v-btn>
                     </div>
                     <div v-if="!local.generators.length" class="text-body-2 text-muted">This language has no name rules yet.</div>
@@ -135,7 +136,40 @@
                             <v-btn icon="mdi-dice-multiple-outline" size="x-small" variant="text" density="comfortable" color="accent" aria-label="Roll" title="Roll new sample names" @click="reroll(null, gen.id)"></v-btn>
                         </div>
                         <div class="names" data-testid="language-samples">{{ (samples[gen.id] || []).slice(0, 12).join(', ') || 'Roll to see names.' }}</div>
-                        <div class="d-flex align-center flex-wrap ga-2">
+                        <!-- a composed rule (languages 4b-1): its parts, in order -->
+                        <div v-if="gen.shapes && gen.shapes.length" class="d-flex align-center flex-wrap ga-2">
+                            <span class="text-caption text-muted">Parts</span>
+                            <v-chip
+                                v-for="(part, pi) in gen.shapes[0].parts"
+                                :key="'part' + pi"
+                                size="small"
+                                label
+                                :variant="part.kind === 'rule' ? 'tonal' : 'outlined'"
+                                :color="part.kind === 'meaning' ? 'foreign' : undefined"
+                                :class="{ 'part-fixed': part.kind === 'word' }"
+                                data-testid="rule-part"
+                                @click="editPart(g, pi)"
+                            >{{ rulePartLabel(part, local.generators) }}</v-chip>
+                            <v-btn variant="text" size="small" color="accent" prepend-icon="mdi-plus" data-testid="rule-part-add" @click="addPart(g)">Part</v-btn>
+                            <span v-if="gen.shapes.length > 1" class="text-caption text-muted">and {{ gen.shapes.length - 1 }} more shape{{ gen.shapes.length > 2 ? 's' : '' }} (Advanced edit)</span>
+                        </div>
+                        <div v-if="partForm && partForm.g === g" class="part-form d-flex align-center flex-wrap ga-2 mt-1" data-testid="rule-part-form">
+                            <v-select v-model="partForm.part.kind" :items="PART_KINDS" density="compact" variant="outlined" hide-details class="small-field"></v-select>
+                            <v-select v-if="partForm.part.kind === 'rule'" v-model="partForm.part.rule" :items="ruleItems(gen.id)" label="Rule" density="compact" variant="outlined" hide-details class="small-field"></v-select>
+                            <v-text-field v-if="partForm.part.kind === 'word'" v-model="partForm.part.word" label="Word" density="compact" variant="outlined" hide-details class="small-field"></v-text-field>
+                            <template v-if="partForm.part.kind === 'meaning'">
+                                <v-select v-model="partForm.part.slot" :items="SLOTS" density="compact" variant="outlined" hide-details class="small-field"></v-select>
+                                <v-checkbox v-model="partForm.part.forms" value="more_than_one" label="more than one" density="compact" hide-details></v-checkbox>
+                                <v-checkbox v-model="partForm.part.forms" value="the" label="“the”" density="compact" hide-details></v-checkbox>
+                                <v-checkbox v-model="partForm.part.of" label="“of”" density="compact" hide-details></v-checkbox>
+                                <v-text-field v-model="partForm.part.hint" label="Hint for Suggest" placeholder="something in the sky" density="compact" variant="outlined" hide-details class="pattern-field"></v-text-field>
+                            </template>
+                            <v-checkbox v-model="partForm.part.optional" label="optional" density="compact" hide-details></v-checkbox>
+                            <v-btn size="small" color="accent" variant="flat" @click="savePart">Save</v-btn>
+                            <v-btn size="small" variant="text" color="delete" @click="removePart">Remove</v-btn>
+                            <v-btn size="small" variant="text" @click="partForm = null">Cancel</v-btn>
+                        </div>
+                        <div v-else-if="!(gen.shapes && gen.shapes.length)" class="d-flex align-center flex-wrap ga-2">
                             <span class="text-caption text-muted">Patterns</span>
                             <template v-for="(pattern, i) in gen.patterns" :key="'p' + i">
                                 <v-text-field
@@ -392,6 +426,18 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import LanguageImport from './LanguageImport.vue';
+import { newPart, partLabel as rulePartLabel } from './nameParts.js';
+
+// a composed rule's part kinds and meaning slots (languages 4b-1)
+const PART_KINDS = [
+    { title: 'another rule', value: 'rule' },
+    { title: 'a fixed word', value: 'word' },
+    { title: 'a meaning', value: 'meaning' },
+];
+const SLOTS = [
+    { title: 'a noun', value: 'noun' },
+    { title: 'describing word + noun', value: 'describing_noun' },
+];
 
 const DEPTHS = [
     { title: 'Description only', value: 'description' },
@@ -473,7 +519,7 @@ export default {
         chapter: { type: String, default: 'overview' },
     },
     setup() {
-        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS, PART_ITEMS };
+        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS, PART_ITEMS, PART_KINDS, SLOTS };
     },
     data() {
         return {
@@ -494,6 +540,8 @@ export default {
             phraseForm: { id: null, category: '', original: '', translation: '', usage: '', breakdown: [] },
             relForm: null,
             ruleForm: null,
+            // the part being edited in a composed rule: {g, pi, part}
+            partForm: null,
             editingPattern: null,
             newPattern: null,
             advanced: false,
@@ -693,14 +741,44 @@ export default {
             this.saveField('similar', this.similar.filter((_, i) => i !== index));
         },
         startRule() {
-            this.ruleForm = { name: '', use: 'places', pattern: '' };
+            this.ruleForm = { name: '', use: 'places', pattern: '', composed: false };
+        },
+        rulePartLabel,
+        // the rules a part may name: every rule but this one
+        ruleItems(own) {
+            return this.local.generators.filter((g) => g.id !== own).map((g) => ({ title: g.name, value: g.id }));
+        },
+        editPart(g, pi) {
+            const part = this.local.generators[g].shapes[0].parts[pi];
+            this.partForm = { g, pi, part: { ...newPart(part.kind), ...JSON.parse(JSON.stringify(part)) } };
+        },
+        addPart(g) {
+            this.partForm = { g, pi: null, part: newPart('meaning') };
+        },
+        savePart() {
+            const { g, pi, part } = this.partForm;
+            const parts = this.local.generators[g].shapes[0].parts;
+            if (pi == null) parts.push(part);
+            else parts.splice(pi, 1, part);
+            this.partForm = null;
+            this.saveRules();
+        },
+        removePart() {
+            const { g, pi } = this.partForm;
+            if (pi != null) this.local.generators[g].shapes[0].parts.splice(pi, 1);
+            this.partForm = null;
+            this.saveRules();
         },
         saveRule() {
             const form = this.ruleForm;
             const base = form.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'rule';
             let id = base;
             for (let n = 2; this.local.generators.some((g) => g.id === id); n += 1) id = `${base}-${n}`;
-            this.local.generators.push({ id, name: form.name.trim(), use: form.use, patterns: [form.pattern.trim()] });
+            this.local.generators.push(
+                form.composed
+                    ? { id, name: form.name.trim(), use: form.use, patterns: [], shapes: [{ parts: [newPart('meaning')], weight: 1 }] }
+                    : { id, name: form.name.trim(), use: form.use, patterns: [form.pattern.trim()] },
+            );
             this.ruleForm = null;
             this.saveRules();
         },
@@ -930,6 +1008,9 @@ export default {
     margin: 2px 0 6px;
     font-style: italic;
     color: rgb(var(--v-theme-foreign));
+}
+.part-fixed {
+    border-style: dashed;
 }
 .pat {
     font-family: monospace;

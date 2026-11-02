@@ -576,7 +576,7 @@ def _built_words(language: Language) -> frozenset[str]:
                     {
                         plural,
                         apply_form(grammar, vowels, word, "the"),
-                        apply_form(grammar, vowels, plural, "the"),
+                        apply_form(grammar, vowels, plural, "the", plural=True),
                     }
                 )
                 for ending in grammar.endings:

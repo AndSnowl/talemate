@@ -211,3 +211,26 @@ def test_grammar_rows_build_examples():
     ending = next(r for r in rows if r.key == "ending:ets")
     assert ending.example == "skelt → skeltets" and "one from" in ending.rule
     assert grammar_rows(_lang(None)) == []
+
+
+def test_the_can_differ_for_more_than_one():
+    """Probe 4b-1: Drassonais "the" is lo for one and lou for more than
+    one (the `plural` condition)."""
+
+    grammar = NameGrammar(
+        describing="after",
+        more_than_one=[FormChange(kind="ending", text="s")],
+        the=[
+            FormChange(when="plural", kind="word_before", text="lou"),
+            FormChange(when="before_vowel", kind="word_before", text="l'"),
+            FormChange(kind="word_before", text="lo"),
+        ],
+    )
+    assert apply_form(grammar, VOWELS, "chinou", "the") == "lo chinou"
+    assert apply_form(grammar, VOWELS, "chinous", "the", plural=True) == "lou chinous"
+    built = build_phrase(
+        _lang(grammar),
+        MeaningPhrase(noun="dog", the=True, more_than_one=True),
+        {"dog": "chinou"},
+    )
+    assert built.text == "Lou Chinous"

@@ -716,6 +716,9 @@ export const useWorldsStore = defineStore('worlds', {
         // names pinned in the Name it… batch: kept through a reroll (owner,
         // Test3)
         nameItPinned: [],
+        // a language's grammar for names in plain words, by its id (the
+        // Names chapter, languages 4b-1): `{rows, has_grammar}`
+        nameGrammar: {},
         // From a meaning's new words, by part index: their rolls and pins,
         // shared by the name's forms (owner, Test3)
         nameItWordRolls: {},
@@ -1356,6 +1359,10 @@ export const useWorldsStore = defineStore('worlds', {
             if (languageId && rule) {
                 this.request('name_it_batch', { language_id: languageId, rule_id: rule.id, pattern: null, count: 8, slot: `word:${index}` });
             }
+        },
+
+        loadNameGrammar(thingId) {
+            if (thingId) this.request('language_name_grammar', { thing_id: thingId });
         },
 
         // pin `item` (`{name, meaning}`) in the batch, or unpin it
@@ -2758,6 +2765,9 @@ export const useWorldsStore = defineStore('worlds', {
                     if (this.draft?.key === data.draft_key) {
                         this.draftTaken(data, 'replace');
                     }
+                    break;
+                case 'language_name_grammar':
+                    this.nameGrammar = { ...this.nameGrammar, [data.thing_id]: { rows: data.rows || [], has_grammar: !!data.has_grammar } };
                     break;
                 case 'name_it_rules':
                     if (this.nameIt) this.nameItRules = data.rules || [];

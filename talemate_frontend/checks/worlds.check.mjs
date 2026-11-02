@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
+import { partLabel } from '../src/components/worlds/nameParts.js';
 import {
     akaAdded,
     akaChanged,
@@ -4144,6 +4145,15 @@ check('a meaning\'s new word rolls like the batch, once for both forms (owner, T
     store.handleMessage(reply('name_it_batch', { slot: 'word:1', names: [{ name: 'Tova', meaning: '' }] }));
     assert.deepEqual(store.nameItWordShown(1).map((n) => [n.name, !!n.pinned]), [['lusa', true], ['tova', false]]);
     assert.deepEqual(store.nameItBatch, []);
+});
+
+check('a composed rule\'s parts read as the server labels them (4b-1)', () => {
+    const generators = [{ id: 'men', name: "Men's names" }];
+    assert.equal(partLabel({ kind: 'rule', rule: 'men' }, generators), "Men's names");
+    assert.equal(partLabel({ kind: 'rule', rule: 'gone' }, generators), '(missing rule)');
+    assert.equal(partLabel({ kind: 'word', word: 'Ul' }), 'Ul');
+    assert.equal(partLabel({ kind: 'meaning', forms: ['more_than_one'] }), 'a meaning · plural');
+    assert.equal(partLabel({ kind: 'meaning', slot: 'describing_noun', of: true, forms: ['the'] }), 'a description · of · the');
 });
 
 if (failures.length) {

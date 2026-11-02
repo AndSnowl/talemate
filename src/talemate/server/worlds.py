@@ -436,6 +436,7 @@ from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
 from talemate.languages import naming_panel
+from talemate.languages.name_grammar import grammar_rows
 from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.cleaning import model as clean_model
 from talemate.worldplay.cleaning import (
@@ -6230,6 +6231,22 @@ class WorldsPlugin(Plugin):
         if state is None or state.kind != "language":
             raise ValueError("there's no such language")
         return state
+
+    async def handle_language_name_grammar(self, data: dict):
+        """A language's grammar for names in plain words, for the Names
+        chapter (languages 4b-1): `{thing_id, has_grammar, rows}`, each row
+        with the example the engine builds from it (or why it can't)."""
+
+        state = self._language_entry(data.get("thing_id"))
+        language = language_of(state)
+        self._reply(
+            "language_name_grammar",
+            {
+                "thing_id": state.id,
+                "has_grammar": language.name_grammar is not None,
+                "rows": [r.model_dump() for r in grammar_rows(language)],
+            },
+        )
 
     async def handle_name_it_rules(self, data: dict):
         """A language's rules and their patterns, for the Name it… panel:
