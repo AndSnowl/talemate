@@ -562,6 +562,7 @@ from talemate.worldplay.repoint import (
     move_fact,
     renamed_words,
     repoint_stub,
+    drop_other_names,
     rename_everywhere,
     retitle,
     target_name,
@@ -5748,6 +5749,9 @@ class WorldsPlugin(Plugin):
                     rev.remove_field_value(
                         payload.thing_id, payload.field, _date_in(payload.valid_from)
                     )
+            elif payload.field == "aka" and payload.valid_from is None:
+                # a dropped other name leaves the links that showed it
+                drop_other_names(rev, world, payload.thing_id, payload.value)
             else:
                 rev.set_field(
                     payload.thing_id,

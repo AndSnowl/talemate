@@ -1641,3 +1641,44 @@ def rename_everywhere(rev: Revision, world: World, thing_id: str, name: str) -> 
                 fact.fact_id,
                 text=fact.text.replace(shown, f"[[thing:{thing_id}|{name}]]"),
             )
+
+
+def drop_other_names(rev: Revision, world: World, thing_id: str, aka: object) -> None:
+    """Set `thing_id`'s other names to `aka`, in `rev`. A link to it that
+    showed one of the names dropped shows its main name instead (owner,
+    languages 4a revised: "Drassone" leaves the Principality of Drassone's
+    facts, free for its capital)."""
+
+    view = world.view()
+    state = view.thing(thing_id)
+    if state is None:
+        raise KeyError(f"no such thing: {thing_id}")
+    kept = {
+        name_key(str(entry.get("name") or ""))
+        for entry in (aka if isinstance(aka, list) else [])
+        if isinstance(entry, dict)
+    }
+    name = view.name_of(thing_id) or ""
+    dropped = (
+        {
+            name_key(str(entry.get("name") or ""))
+            for entry in state.fields.get("aka") or []
+            if isinstance(entry, dict)
+        }
+        - kept
+        - {name_key(name), ""}
+    )
+    rev.set_field(thing_id, "aka", aka, None)
+    if not dropped:
+        return
+    link = re.compile(r"\[\[thing:" + re.escape(thing_id) + r"\|([^\]]*)\]\]")
+
+    def shown(match: re.Match) -> str:
+        if name_key(match.group(1)) in dropped:
+            return f"[[thing:{thing_id}|{name}]]"
+        return match.group(0)
+
+    for _owner, fact in view.referencing(thing_id):
+        text = link.sub(shown, fact.text)
+        if text != fact.text:
+            rev.correct_fact(fact.fact_id, text=text)

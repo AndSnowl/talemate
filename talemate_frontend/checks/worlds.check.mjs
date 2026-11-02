@@ -4090,6 +4090,20 @@ check('Name it on part of a linked name renames the entry in full (final review 
     assert.equal(asked.name ?? asked.data?.name, 'Duchies of the Velmar Coast');
 });
 
+check('dropping a draft\'s other name rewrites its facts to the full name (owner, Test3)', () => {
+    const edited = {
+        name: 'Principality of Drassone',
+        aka: [{ name: 'Drassone', tag: 'common', everyday: true }, { name: 'Drass', tag: 'common' }],
+        facts: [{ text: 'Drassone is cold; Drass is its old name.' }],
+        elsewhere: [{ text: 'Vell flows into Drassone.' }],
+    };
+    const changes = setDraftAka(edited, [{ name: 'Drass', tag: 'common' }]);
+    assert.deepEqual(changes.aka, [{ name: 'Drass', tag: 'common' }]);
+    assert.equal(changes.facts[0].text, 'Principality of Drassone is cold; Drass is its old name.');
+    assert.equal(changes.elsewhere[0].text, 'Vell flows into Principality of Drassone.');
+    assert.deepEqual(setDraftAka(edited, edited.aka), { aka: edited.aka });
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

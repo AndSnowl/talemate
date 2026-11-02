@@ -20,7 +20,7 @@
 // selection names, `index`) hold.
 
 import { kindInfo } from './worldKinds.js';
-import { markSegments } from './nameMarks.js';
+import { markSegments, swapName } from './nameMarks.js';
 
 // the articles a name may lead with (`talemate.world.names.ARTICLES`)
 const ARTICLES = ['the', 'a', 'an'];
@@ -632,8 +632,21 @@ export function setDraftNumber(edited, field, value) {
 // the draft's other names, after one of the list helpers above
 // (`akaAdded`, `akaChanged`, `akaEveryday`, `akaRemoved`) made the new
 // list from `edited.aka`.
+// a dropped other name leaves the draft's text: each place it's written
+// says the full name instead (owner, Test3: "Drassone" freed for a city)
 export function setDraftAka(edited, aka) {
-    return { aka };
+    const kept = new Set((aka || []).map((entry) => nameKey(entry?.name)));
+    const dropped = (edited?.aka || [])
+        .map((entry) => entry?.name || '')
+        .filter((name) => name && !kept.has(nameKey(name)) && nameKey(name) !== nameKey(edited.name));
+    if (!dropped.length || !edited.name) {
+        return { aka };
+    }
+    const rewrite = (text) => dropped.reduce((out, name) => swapName(out, name, edited.name), text || '');
+    const changes = { aka };
+    if (edited.facts) changes.facts = edited.facts.map((fact) => ({ ...fact, text: rewrite(fact.text) }));
+    if (edited.elsewhere) changes.elsewhere = edited.elsewhere.map((row) => ({ ...row, text: rewrite(row.text) }));
+    return changes;
 }
 
 // a new name's kind, tag, "same as…" or "in…" (`change`)

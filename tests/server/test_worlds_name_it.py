@@ -129,3 +129,42 @@ async def test_a_name_in_use_is_refused(plugin):
         if m.get("action") == "operation_done" and "error" in m
     ]
     assert errors and plugin.world.head_rev() == head
+
+
+async def test_removing_an_other_name_rewrites_its_links_to_the_full_name(plugin):
+    """Owner's run (Test3): removing "Drassone" from the Principality of
+    Drassone's other names rewrites the facts that wrote it to the full
+    name, so "Drassone" is free for the capital."""
+
+    await _act(plugin, "create_world", name="Test")
+    with plugin.world.revision(Source.manual()) as rev:
+        land = rev.create_thing(
+            "place",
+            {
+                "name": "Principality of Drassone",
+                "aka": [
+                    {"name": "Drassone", "tag": "common", "everyday": True},
+                    {"name": "the Principality", "tag": "common", "everyday": False},
+                ],
+            },
+        )
+        river = rev.create_thing("place", {"name": "Vell"})
+        rev.add_fact(
+            river,
+            "general",
+            f"The Vell flows through [[thing:{land}|Drassone]] and"
+            f" [[thing:{land}|the Principality]].",
+        )
+    await _act(
+        plugin,
+        "set_field",
+        thing_id=land,
+        field="aka",
+        value=[{"name": "the Principality", "tag": "common", "everyday": False}],
+    )
+    view = plugin.world.view()
+    [fact] = view.thing(river).facts
+    assert fact.text == (
+        f"The Vell flows through [[thing:{land}|Principality of Drassone]] and"
+        f" [[thing:{land}|the Principality]]."
+    )
