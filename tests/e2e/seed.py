@@ -308,6 +308,12 @@ try:
                     if isinstance(names, list)
                     else ids[names]
                 )
+            # its Languages rows: earlier language things, by name
+            if thing.get("languages"):
+                fields["languages"] = [
+                    {**row, "language": ids[row["language"]]}
+                    for row in thing["languages"]
+                ]
             # the entries it's filed in: earlier things, by name
             if thing.get("filings"):
                 fields["filings"] = [
@@ -376,7 +382,8 @@ def seed_fm_world(
 
     ``things`` items are ``{"kind", "name", "born": year|None, "fields":
     {field: value}|None, "links": {field: name | [names]}|None, "stub":
-    "live"|"ignored"|None, "filings": [{"target": name, "role", "since":
+    "live"|"ignored"|None, "languages": [{"language": name, "role"}]|None,
+    "filings": [{"target": name, "role", "since":
     year|None, "until": year|None, "within": name|None}]|None, "facts":
     [{"category", "text", "since": year|None, "until": year|None,
     "origin": dict|None}]}``, written in one revision, in order. An
@@ -431,6 +438,8 @@ FIXED_GROUP_SYNOPSIS_FILE = "e2e-fixed-group-synopsis.json"
 FIXED_GROUP_ADD_FILE = "e2e-fixed-group-add.json"
 # language naming (definitions and picks, languages 3a)
 FIXED_LANGUAGE_FILE = "e2e-fixed-language.json"
+# canned replies for cleaning a draft's names (languages 4a)
+FIXED_CLEAN_FILE = "e2e-fixed-clean.json"
 
 
 def set_fixed_reply(root: Path, file_name: str, reply: dict) -> None:

@@ -60,6 +60,15 @@
                     :disabled="!!blocked"
                     @click="searchLink"
                 ></v-list-item>
+                <v-list-item
+                    v-if="draft"
+                    prepend-icon="mdi-rename"
+                    title="Name it…"
+                    subtitle="a name from a language, for these words"
+                    role="menuitem"
+                    data-testid="selection-name-it"
+                    @click="nameIt"
+                ></v-list-item>
                 <v-divider></v-divider>
                 <v-list-item
                     prepend-icon="mdi-comment-question-outline"
@@ -84,6 +93,7 @@
 </template>
 
 <script>
+import { useWorldsStore } from '@/stores/worlds.js';
 import { normaliseTag } from './entryPage.js';
 import { STUB_KINDS, canExpand, kindInfo } from './worldKinds.js';
 import NameModeMenu from './NameModeMenu.vue';
@@ -112,8 +122,14 @@ export default {
         draft: { type: Boolean, default: false },
         blocked: { type: String, default: '' },
         exclude: { type: Array, default: () => [] },
+        // the link run the words lie in (`{ref, text, stub}`), if any:
+        // Name it… then names that entry
+        link: { type: Object, default: null },
     },
     emits: ['update:modelValue', 'stub', 'expand', 'link'],
+    setup() {
+        return { worlds: useWorldsStore() };
+    },
     data() {
         return { kind: 'lore', tag: '', linking: false, choosing: false, chosen: null };
     },
@@ -139,6 +155,27 @@ export default {
         },
         act(action) {
             this.$emit(action, { kind: this.kind, tag: normaliseTag(this.tag) || null });
+            this.close();
+        },
+        nameIt() {
+            if (this.link) {
+                const entry = this.worlds.referenceTargets.find((t) => t.id === this.link.ref);
+                this.worlds.openNameIt({
+                    words: this.shownWords,
+                    kind: entry?.kind || 'place',
+                    stub: entry ? entry.stub : this.link.stub,
+                    // the draft's words follow, as the entry is renamed
+                    target: { thingId: this.link.ref, fullName: entry?.name || this.link.text, draftKey: this.worlds.draft?.key },
+                });
+                this.close();
+                return;
+            }
+            this.worlds.openNameIt({
+                words: this.shownWords,
+                languageId: (this.worlds.draft?.edited?.languages || [])[0]?.language || null,
+                kind: this.kind || 'place',
+                target: { draftKey: this.worlds.draft?.key },
+            });
             this.close();
         },
         searchLink() {

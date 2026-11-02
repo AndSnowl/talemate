@@ -67,7 +67,7 @@ DUELIST_REPLY = json.dumps(
 async def test_preview_parses_facts(at_313):
     client = MockClient("test")
     async with MockClientContext():
-        _queue(DUELIST_REPLY, "Corvin Ash is lean and scarred.", "Corvin Ash is quiet.")
+        _queue(DUELIST_REPLY)
         preview = await preview_thing(
             at_313, "character", "a disgraced duelist", {}, client
         )
@@ -91,13 +91,10 @@ async def test_preview_parses_facts(at_313):
     ]
     # born is derived from the age against the world's current year
     assert preview.fields["born"] == WorldDate.of(313 - 41)
-    assert preview.prose == {
-        "description": "Corvin Ash is lean and scarred.",
-        "personality": "Corvin Ash is quiet.",
-    }
+    assert preview.prose == {}
 
-    # one creation call, then one prose call per section
-    assert len(client.prompt_history) == 3
+    # one creation call; the draft writes no prose
+    assert len(client.prompt_history) == 1
     create_prompt = str(client.prompt_history[0]["prompt"])
     assert "a disgraced duelist" in create_prompt
     assert "appearance, personality, background" in create_prompt
@@ -110,39 +107,6 @@ async def test_preview_parses_facts(at_313):
     # an inherent trait (species, a born appearance, lifelong temperament)
     # gets an open start rather than being dated to the present year
     assert "inherent trait" in create_prompt
-
-
-async def test_preview_prose_sections_get_identity_background(at_313):
-    """Review-round fix: `preview_thing` called `render_section` with no
-    `background`, so a section generated from one category of facts alone
-    could drift off who it's about (the owl-to-human drift `daf21459`
-    fixed for `regenerate_prose`/`generate_section`, which already passes
-    the thing's other facts and core fields as background). A preview has
-    facts and fields, not a `ThingState`, so the same background must come
-    from a helper both callers can use.
-
-    Personality's background leaves out the appearance fact (acceptance
-    probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md)
-    but keeps identity (name, born) and his other facts (here, the
-    background fact), so a fresh preview agrees with a later
-    regeneration."""
-
-    client = MockClient("test")
-    async with MockClientContext():
-        _queue(DUELIST_REPLY, "Corvin Ash is lean and scarred.", "Corvin Ash is quiet.")
-        await preview_thing(at_313, "character", "a disgraced duelist", {}, client)
-
-    # [0] is the create call, [1] description, [2] personality
-    personality_prompt = str(client.prompt_history[2]["prompt"])
-    # the personality section's own facts don't mention his name/born --
-    # without identity background, nothing here would
-    assert "Named Corvin Ash." in personality_prompt
-    assert "Born in" in personality_prompt
-    assert "for consistency only" in personality_prompt
-    # his background fact survives as context
-    assert "Exiled from Ashenmere for killing a younger opponent." in personality_prompt
-    # his appearance fact is left out of personality's background entirely
-    assert "A long scar across his sword hand." not in personality_prompt
 
 
 async def test_preview_does_not_write(at_313):
@@ -196,12 +160,12 @@ async def test_preview_place_has_one_section(at_313):
         }
     )
     async with MockClientContext():
-        _queue(reply, "Lowmere is half under water.")
+        _queue(reply)
         preview = await preview_thing(
             at_313, "place", "a half-flooded town", {}, client
         )
 
-    assert preview.prose == {"description": "Lowmere is half under water."}
+    assert preview.prose == {}
     assert preview.facts[1].since == WorldDate.of(301)
 
 
@@ -619,7 +583,7 @@ def probe_world(at_313, monkeypatch):
 async def test_preview_species_numbers(at_313):
     client = MockClient("test")
     async with MockClientContext():
-        _queue(_reply("heritage-species-owlfolk-reply.txt"), "Owl-folk is small.")
+        _queue(_reply("heritage-species-owlfolk-reply.txt"))
         preview = await preview_thing(
             at_313,
             "species",
@@ -645,7 +609,7 @@ async def test_preview_species_numbers(at_313):
         "general",
     }
     assert all(f.since is None and f.overrides == [] for f in preview.facts)
-    assert preview.prose == {"description": "Owl-folk is small."}
+    assert preview.prose == {}
 
     create_prompt = str(client.prompt_history[0]["prompt"])
     assert "You create a new species" in create_prompt
@@ -687,11 +651,7 @@ async def test_preview_drops_bad_numbers(at_313):
 async def test_preview_character_maps_override_labels(probe_world):
     client = MockClient("test")
     async with MockClientContext():
-        _queue(
-            _reply("heritage-character-snowy-reply.txt"),
-            "Thistledown is white.",
-            "Thistledown is chatty.",
-        )
+        _queue(_reply("heritage-character-snowy-reply.txt"))
         preview = await preview_thing(
             probe_world.world,
             "character",
@@ -723,55 +683,6 @@ async def test_preview_character_maps_override_labels(probe_world):
     # Snowy's white plumage overrides Owl-folk's mottled one: not inherited
     assert "mottled" not in create_prompt
     assert '"overrides": []' in create_prompt
-
-    # the description section is the character's own appearance facts plus
-    # the inherited physical ones, less the yellow eyes the preview overrides
-    description_prompt = str(client.prompt_history[1]["prompt"])
-    assert "taloned feet that serve as hands" in description_prompt
-    assert "bright yellow eyes" not in description_prompt
-    assert "Heritage: Snowy, Owl-folk." in description_prompt
-
-
-async def test_preview_personality_excludes_inherited_physical(probe_world):
-    """Review-round fix: `_preview_prose`'s `exclude_by_kind` branch (the
-    personality background leaving out an inherited `physical`/`variation`
-    fact) had no test exercising it with any inherited fact actually
-    present. The preview inherits Snowy's and Owl-folk's own facts, none of
-    them overridden here, so both an un-overridden inherited physical fact
-    ("the largest owl-folk") and the overridden one ("bright yellow eyes")
-    must be absent from the personality prompt, while the inherited
-    instinct facts and the heritage line -- not excluded -- still get
-    through (acceptance probe:
-    docs/superpowers/probes/2026-10-21-personality-and-actions.md)."""
-
-    client = MockClient("test")
-    async with MockClientContext():
-        _queue(
-            _reply("heritage-character-snowy-reply.txt"),
-            "Thistledown is white.",
-            "Thistledown is chatty.",
-        )
-        await preview_thing(
-            probe_world.world,
-            "character",
-            "A Snowy owl-folk courier with blue eyes, twenty-two, who carries "
-            "letters between mountain villages and talks too much.",
-            {"heritage": probe_world.snowy},
-            client,
-        )
-
-    # [0] is the create call, [1] description, [2] personality
-    personality_prompt = str(client.prompt_history[2]["prompt"])
-    # an inherited physical fact that isn't overridden by this preview
-    assert "the largest owl-folk" not in personality_prompt
-    # the one the preview does override -- absent either way, but still
-    # worth checking since it was the review's own example
-    assert "bright yellow eyes" not in personality_prompt
-    # instinct facts aren't excluded -- they're personality's own inherited
-    # category -- and the heritage line keeps identity in view
-    assert "Owl-folk are instinctively crepuscular" in personality_prompt
-    assert "hunt by day as readily as by dusk" in personality_prompt
-    assert "Heritage: Snowy, Owl-folk." in personality_prompt
 
 
 async def test_preview_lists_what_it_inherits(probe_world):
@@ -879,7 +790,7 @@ async def test_preview_mix_empty_prompt_ok(probe_world):
     facts = probe_world.facts
     client = MockClient("test")
     async with MockClientContext():
-        _queue(_reply("heritage-mix-halforc-reply.txt"), "Half-orc is a blend.")
+        _queue(_reply("heritage-mix-halforc-reply.txt"))
         preview = await preview_thing(
             probe_world.world,
             "mix",
@@ -916,13 +827,6 @@ async def test_preview_mix_empty_prompt_ok(probe_world):
     assert "- F3 (Human, physical): Humans have bare skin." in create_prompt
     assert "- F7 (Orc, physical): Orcs have grey-green skin." in create_prompt
     assert "Invent one if the prompt doesn't give it." in create_prompt
-
-    # the prose sees both parents' facts as background, less the ones the
-    # mix's own facts override (its skin fact overrides Lowlander's skin)
-    prose_prompt = str(client.prompt_history[1]["prompt"])
-    assert "Orcs have coarse black hair." in prose_prompt
-    assert "Heritage: Lowlander, Human, Orc." in prose_prompt
-    assert "Lowlanders have olive skin." not in prose_prompt
 
 
 async def test_preview_mix_uses_the_decided_name(probe_world):
@@ -1017,7 +921,7 @@ async def test_preview_race_gets_species_as_inherited(probe_world):
     facts = probe_world.facts
     client = MockClient("test")
     async with MockClientContext():
-        _queue(_reply("heritage-race-snowy-reply.txt"), "Snowy Owl-folk are white.")
+        _queue(_reply("heritage-race-snowy-reply.txt"))
         preview = await preview_thing(
             probe_world.world,
             "race",
@@ -1048,11 +952,6 @@ async def test_preview_race_gets_species_as_inherited(probe_world):
     )
     assert '"name": "wingspan", "min": 0' in create_prompt
     assert '"no_longer_true": []' in create_prompt
-
-    # the preview's prose sees the species' facts as background
-    prose_prompt = str(client.prompt_history[1]["prompt"])
-    assert "taloned feet that serve as hands" in prose_prompt
-    assert "Heritage: Owl-folk." in prose_prompt
 
 
 async def test_preview_race_attaches_top_level_labels(probe_world):
@@ -1508,20 +1407,20 @@ async def test_picks_add_named_context(at_1020):
 
 
 @pytest.mark.parametrize(
-    "kind, fact, prose_section",
+    "kind, fact",
     [
-        ("event", {"category": "summary", "text": "The dam broke."}, "description"),
-        ("item", {"category": "power", "text": "It hums near water."}, "description"),
+        ("event", {"category": "summary", "text": "The dam broke."}),
+        ("item", {"category": "power", "text": "It hums near water."}),
     ],
 )
-async def test_event_and_item_creatable(at_1020, kind, fact, prose_section):
+async def test_event_and_item_creatable(at_1020, kind, fact):
     world = at_1020
     reply = json.dumps({"name": "The Thing", "facts": [fact], "names": []})
     client = MockClient("test")
     when = WorldDate.of(1001).model_dump()
     fields = {"when": when} if kind == "event" else {}
     async with MockClientContext():
-        _queue(reply, "The Thing is old.")
+        _queue(reply)
         preview = await preview_thing(world, kind, f"a {kind}", fields, client)
     prompt = str(client.prompt_history[0]["prompt"])
     assert f"You create a new {kind}" in prompt
@@ -1530,7 +1429,7 @@ async def test_event_and_item_creatable(at_1020, kind, fact, prose_section):
         # a date field reads as a date, not as its raw value
         assert f"- when: {world.calendar.format(WorldDate.of(1001))}" in prompt
         assert "instant" not in prompt
-    assert preview.prose == {prose_section: "The Thing is old."}
+    assert preview.prose == {}
 
     thing_id = accept_preview(world, preview)
     state = world.view(None).thing(thing_id)
@@ -1899,7 +1798,7 @@ async def test_preview_finds_prompt_names_the_picks_miss(at_1020):
     async def preview(**extra):
         client = MockClient("test")
         async with MockClientContext():
-            _queue(reply, "Pines.")
+            _queue(reply)
             result = await preview_thing(world, "place", prompt, {}, client, **extra)
         return result, str(client.prompt_history[0]["prompt"])
 
@@ -2063,7 +1962,7 @@ def _priestess_reply(into: list) -> str:
 async def _preview_priestess(world, prompt: str, into: list, **extra):
     client = MockClient("test")
     async with MockClientContext():
-        _queue(_priestess_reply(into), "She is tall.", "She is patient.")
+        _queue(_priestess_reply(into))
         preview = await preview_thing(world, "character", prompt, {}, client, **extra)
     return preview, str(client.prompt_history[0]["prompt"])
 
@@ -2835,7 +2734,7 @@ async def test_accept_summary_skips_beliefs(world):
     )
     client = MockClient("test")
     async with MockClientContext():
-        _queue(reply, "The White Dawn is a faith.")
+        _queue(reply)
         preview = await preview_thing(
             world, "lore", "a dawn faith", {}, client, hint="religion"
         )
@@ -2853,7 +2752,7 @@ async def test_accept_summary_skips_beliefs(world):
         }
     )
     async with MockClientContext():
-        _queue(reply, "The Pale Rite is a faith.")
+        _queue(reply)
         preview = await preview_thing(
             world, "lore", "a rite of ash", {}, client, hint="religion"
         )
@@ -3162,3 +3061,124 @@ async def test_in_new_name_the_world_has_files_in_that_entry(at_1020):
     ]
     assert not [t for t in view.things() if t.is_stub]
     assert view.thing(court).kind == "lore"
+
+
+async def test_the_create_prompt_carries_the_narrator_rule_with_a_language(at_313):
+    """4a revised: with a language in the world, the prompt says to keep
+    titles and descriptions English and names the languages."""
+
+    from talemate.languages.entry import fields_of
+    from talemate.languages.models import Language
+
+    with at_313.revision(Source.manual()) as rev:
+        rev.create_thing(
+            "language",
+            {
+                "name": "Otsyenyan",
+                **fields_of(Language(name="Otsyenyan", level="description")),
+            },
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY)
+        await preview_thing(at_313, "character", "a disgraced duelist", {}, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "Titles and descriptions stay English" in prompt
+    assert "Otsyenyan is a language, not a thing" in prompt
+
+
+async def test_no_narrator_rule_without_a_language(at_313):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY)
+        await preview_thing(at_313, "character", "a disgraced duelist", {}, client)
+    assert "Titles and descriptions stay English" not in str(
+        client.prompt_history[0]["prompt"]
+    )
+
+
+# --- names the reply didn't list (languages 4a revised, Task 7) --------------
+
+EARED_FACT = (
+    "Eared Owl-folk roost across the countries of Velmora, Ashenmark, and"
+    " the Duchies of the Greywash Coast."
+)
+
+
+def _eared_reply(names):
+    return json.dumps(
+        {
+            "name": "Eared Owl-folk",
+            "facts": [{"category": "origin", "text": EARED_FACT}],
+            "names": names,
+        }
+    )
+
+
+async def _eared(probe_world, names):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(_eared_reply(names))
+        return await preview_thing(
+            probe_world.world,
+            "race",
+            "Eared owl-folk",
+            {"species": probe_world.owl_folk},
+            client,
+        )
+
+
+async def test_names_the_reply_left_out_come_as_unticked_rows(probe_world):
+    """Every race draft in the owner's world listed no names: its facts'
+    unknown names come as unticked, unlisted New stubs rows."""
+
+    preview = await _eared(probe_world, [])
+    rows = [(n.name, n.kind, n.ticked, n.unlisted) for n in preview.new_names]
+    assert rows == [
+        ("Velmora", "place", False, True),
+        ("Ashenmark", "place", False, True),
+        ("Duchies of the Greywash Coast", "place", False, True),
+    ]
+
+
+async def test_a_reply_that_lists_names_gets_no_unlisted_rows(probe_world):
+    """A reply that lists names left the rest out on purpose (a title, a
+    demonym): only the listed ones are rows."""
+
+    preview = await _eared(
+        probe_world, [{"name": "Velmora", "kind": "place", "tag": "country"}]
+    )
+    rows = [(n.name, n.ticked, n.unlisted) for n in preview.new_names]
+    assert rows == [("Velmora", True, False)]
+
+
+async def test_accept_makes_stubs_only_for_ticked_rows(probe_world):
+    preview = await _eared(probe_world, [])
+    names = [
+        n.model_copy(update={"ticked": True}) if n.name == "Ashenmark" else n
+        for n in preview.new_names
+    ]
+    thing_id = accept_preview(
+        probe_world.world, preview.model_copy(update={"new_names": names})
+    )
+    view = probe_world.world.view()
+    places = {view.name_of(t.id) for t in view.things("place", facts=False)}
+    assert "Ashenmark" in places
+    assert not places & {"Velmora", "Duchies of the Greywash Coast"}
+    (fact,) = view.thing(thing_id).facts
+    assert "|Ashenmark]]" in fact.text and "Velmora," in fact.text
+
+
+async def test_the_race_prompt_asks_for_the_places_its_facts_name(probe_world):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(_eared_reply([]))
+        await preview_thing(
+            probe_world.world,
+            "race",
+            "Eared owl-folk",
+            {"species": probe_world.owl_folk},
+            client,
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "A race's facts may still name places" in prompt

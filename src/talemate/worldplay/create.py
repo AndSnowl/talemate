@@ -181,6 +181,7 @@ from talemate.world.names import (
     find_names,
     unknown_proper_phrases,
 )
+from talemate.world.names import TITLE_WORDS as NAME_TITLE_WORDS
 from talemate.world.store import Source, World
 from talemate.world.view import FactState, ThingState, WorldView
 from talemate.worldplay import prose_gen
@@ -188,6 +189,7 @@ from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
 from talemate.worldplay.decide import Verdict, preview_label, same_thing
 from talemate.worldplay.held import held_text
+from talemate.languages.cleaning.marks import Mark
 from talemate.worldplay.links import (
     FALLBACK_KIND,
     NameFiling,
@@ -509,6 +511,15 @@ class CreatePreview(BaseModel):
     # (ruling F26): only these link where they're written without a
     # capital; the router keeps only those its own copy of the draft holds
     selected_names: list[str] = Field(default_factory=list)
+    # the draft's Languages rows (languages 4a): found from the owner's
+    # words (`"from_words": true`) or the owner's own; written on accept
+    languages: list[dict] = Field(default_factory=list)
+    # the languages it takes from where it's filed, or from the stub it
+    # expands (languages 4a revised), as a page's inherited rows: shown
+    # when it has none of its own
+    inherited_languages: list[dict] = Field(default_factory=list)
+    # the names cleaning flagged (`cleaning.marks.Mark`)
+    marks: list[Mark] = Field(default_factory=list)
     # words the owner linked on the draft with "add as another name" (P4):
     # accept teaches each its pick's target as a common other name; the
     # router keeps only those its own copy of the draft holds
@@ -1066,6 +1077,36 @@ def _written_forms(
     if not parts:
         return None
     return [max(parts, key=len)]
+
+
+def _unlisted_names(
+    view: WorldView,
+    texts: list[str],
+    own_names: list[str],
+    kept: list[NewName],
+    picked: Sequence[str] = (),
+) -> list[NewName]:
+    """The names `texts` write that the world hasn't
+    (`unknown_proper_phrases`), each an unticked place row for the owner
+    to tick, for a reply that listed none: a race draft's often doesn't
+    (languages 4a revised, the owner's Eared Owl-folk). A reply that
+    lists names is trusted to have left the rest out on purpose. A title word on its own ("Tsar")
+    is left out."""
+
+    taken = {name_key(n) for n in [*own_names, *picked] if n.strip()}
+    for name in kept:
+        taken |= {name_key(name.name), *map(name_key, name.written)}
+    rows: list[NewName] = []
+    for text in texts:
+        for unknown in unknown_proper_phrases(view, text):
+            key = name_key(unknown.text)
+            if not key or key in taken or key in NAME_TITLE_WORDS:
+                continue
+            taken.add(key)
+            rows.append(
+                NewName(name=unknown.text, kind="place", ticked=False, unlisted=True)
+            )
+    return rows
 
 
 def _new_names(
@@ -2870,6 +2911,17 @@ def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
     return None
 
 
+def language_names(view: WorldView) -> list[str]:
+    """The world's languages' names, for the narrator rule in prompts
+    (languages 4a revised)."""
+
+    return sorted(
+        str(t.fields.get("name") or "")
+        for t in view.things("language", facts=False)
+        if t.fields.get("name")
+    )
+
+
 async def preview_thing(
     world: World,
     kind: str,
@@ -3053,6 +3105,9 @@ async def preview_thing(
         known.append(("tag", known_tag))
 
     template_vars: dict[str, Any] = {
+        # the narrator rule (languages 4a revised): with languages in the
+        # world, titles and descriptions stay English
+        "language_names": language_names(view),
         "kind": kind,
         "prompt": prompt,
         "categories": categories,
@@ -3203,6 +3258,12 @@ async def preview_thing(
         list(picks),
         treated_as_new,
     )
+    if not listed_names(raw_names):
+        # a reply that listed no names at all (every race draft of the
+        # owner's): its facts' unknown names, unticked
+        stub_names += _unlisted_names(
+            view, [f.text for f in facts], own_names, stub_names, picks
+        )
     if kind == "character" and "born" not in fields and age is not None:
         # an age older than the calendar itself is clamped to year 1
         fields["born"] = WorldDate.of(max(1, now_year - age))
@@ -3300,9 +3361,9 @@ async def preview_thing(
         as_new=treated_as_new,
     )
 
-    prose = await _preview_prose(
-        view, calendar, kind, name, facts, fields, rows, sources, client
-    )
+    # the description is written on accept, not in the draft (languages
+    # 4a: the owner always edits a draft, which would leave it stale)
+    prose: dict[str, str] = {}
 
     # the model's verdict on the top candidate, a hint (ruling C2): only
     # when both sides have facts, after the preview's own calls
@@ -3339,7 +3400,7 @@ async def preview_thing(
         same_as=len(same_as),
         verdict=verdict is not None,
     )
-    return CreatePreview(
+    preview = CreatePreview(
         kind=kind,
         prompt=prompt,
         fields=fields,
@@ -3364,6 +3425,9 @@ async def preview_thing(
         file_into=file_into,
         move_here=move_here,
     )
+    from talemate.worldplay.cleaning import clean_preview
+
+    return await clean_preview(world, preview, client)
 
 
 _TAG_RE = re.compile(r'"tag"\s*:\s*"((?:[^"\\]|\\.)*)"')
@@ -3579,7 +3643,7 @@ def _accept_new(
         skip.add(fold.stub_id)
     elsewhere = live_elsewhere(view, preview.elsewhere, skip, notes)
     before = world.head_rev()
-    new_names = list(preview.new_names)
+    new_names = [n for n in preview.new_names if n.ticked]
     while True:
         try:
             thing_id, made, written_notes, moved, removed = _write_preview(
@@ -3621,6 +3685,10 @@ def _accept_new(
     stale = moved or renamed or any(not fact.ticked for fact in preview.facts)
     rev = before if stale else None
     if moved and prose is not None and thing_id not in prose:
+        prose.append(thing_id)
+    # languages 4a: a draft has no description (a page may send its
+    # sections back blank); it's written now
+    if not any(preview.prose.values()) and prose is not None and thing_id not in prose:
         prose.append(thing_id)
     for section in prose_gen.sections_for(preview.kind):
         if section in preview.prose:
@@ -3916,6 +3984,13 @@ def _write_preview(
         )
         removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, thing_id)
+        # languages 4a: the draft's Languages rows
+        if preview.languages and "languages" not in preview.fields:
+            rows = [
+                {k: v for k, v in r.items() if k != "from_words"}
+                for r in preview.languages
+            ]
+            rev.set_field(thing_id, "languages", rows, None)
         orphans = {
             stub_id
             for stub_id in made.values()
@@ -4482,7 +4557,7 @@ def _accept_same(
         view, preview.elsewhere, {stub.id} if stub is not None else set(), notes
     )
 
-    new_names = list(preview.new_names)
+    new_names = [n for n in preview.new_names if n.ticked]
     while True:
         try:
             made, written_notes, moved, removed = _write_same(

@@ -28,6 +28,7 @@ from talemate.load import load_scene
 from talemate.tale_mate import Scene
 from talemate.world.dates import WorldDate
 from talemate.world.store import Source
+from talemate.worldplay import prose_gen
 from talemate.worldplay.create import accept_preview, preview_thing
 from talemate.worldplay.persistence import (
     close_world_scene,
@@ -59,8 +60,9 @@ CREATE_REPLY = json.dumps(
     }
 )
 
-# the preview's prose is written from every fact: how Maren reads at the
-# open, "now" end of her timeline, from 314 on
+# her prose, written right after accept (a draft has none, languages 4a)
+# from every fact: how Maren reads at the open, "now" end of her timeline,
+# from 314 on
 PROSE_NOW = (
     "Maren is the Veldhaer ferry pilot, in a salt-stained coat; "
     "she lost her left eye to a smuggler's hook."
@@ -185,7 +187,7 @@ async def test_slice_end_to_end(world, loadable):
 
     # 1. create Maren from a prompt, with a lost eye from 314
     async with MockClientContext():
-        _queue(CREATE_REPLY, PROSE_NOW, PERSONALITY)
+        _queue(CREATE_REPLY)
         preview = await preview_thing(
             world,
             "character",
@@ -196,6 +198,10 @@ async def test_slice_end_to_end(world, loadable):
     eye = next(f for f in preview.facts if f.text == EYE_FACT)
     assert eye.since == WorldDate.of(314)
     maren = accept_preview(world, preview)
+    # the router writes the new entry's prose after accept (languages 4a)
+    async with MockClientContext():
+        _queue(PROSE_NOW, PERSONALITY)
+        await prose_gen.ensure_prose(world, maren, None, client)
 
     # the owner then adds a scar from 314, the way the World tab's
     # `add_fact` writes it; with no AI client its background prose update

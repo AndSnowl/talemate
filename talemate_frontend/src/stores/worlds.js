@@ -185,6 +185,7 @@ import { toRaw } from 'vue';
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
+import { markEdit, pickName, swapName } from '../components/worlds/nameMarks.js';
 import {
     factsKey,
     groupDraftKey,
@@ -386,14 +387,14 @@ function plural(count, one, many = `${one}s`) {
 
 // What accepting a preview would write: `{facts, elsewhere, stubs,
 // movedIn}` -- its own facts ticked, the elsewhere facts ticked, the new
-// stubs it'd make (its new names, the new entries a ticked elsewhere fact
+// stubs it'd make (its ticked new names, the new entries a ticked elsewhere fact
 // goes onto; not one the owner marked as some thing already), and the
 // facts moving in, ticked.
 export function previewCounts(preview) {
     const ticked = (rows) => (rows || []).filter((row) => row.ticked !== false);
     const elsewhere = ticked(preview?.elsewhere);
     const stubs = new Set();
-    for (const row of preview?.new_names || []) {
+    for (const row of ticked(preview?.new_names)) {
         if (!row.same_target_id) {
             stubs.add(nameKey(row.name));
         }
@@ -698,6 +699,27 @@ export const useWorldsStore = defineStore('worlds', {
         // job `{running, route, lines, text, error}`, the questions asked
         // `{pending, questions, error}`, and the brief to copy (its text)
         languageMakeRoute: null,
+        // languages 4a: the name lists' rows (`{name, kind, scope, off}`),
+        // the app's and this world's, for the Names page
+        nameLists: [],
+        // languages 4a revised: the Name it… panel's request, while it's
+        // open (`{words, languageId, kind, target, markId}`), else null
+        nameIt: null,
+        // its language's rules (`[{id, name, use, patterns}]`), the batch
+        // shown (`[{name, meaning}]`), and From a meaning's candidates
+        nameItRules: [],
+        nameItBatch: [],
+        nameItMeaning: { pending: false, candidates: [], error: null, languageId: null },
+        // the words a rename's pick adds to its language, once the rename
+        // is written (a refused one adds none: final review 3)
+        nameItRenameWords: null,
+        // names pinned in the Name it… batch: kept through a reroll (owner,
+        // Test3)
+        nameItPinned: [],
+        // From a meaning's new words, by part index: their rolls and pins,
+        // shared by the name's forms (owner, Test3)
+        nameItWordRolls: {},
+        nameItWordPinned: {},
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
@@ -795,6 +817,27 @@ export const useWorldsStore = defineStore('worlds', {
         // what every entry search looks in (`searchEntries`): `{id, name,
         // kind, stub, aka}` of every listed entry, species, race and mix,
         // and every live stub (`aka`: its other names)
+        // the Name it… batch as shown: the pinned names first, then the
+        // roll's others, ten in all
+        nameItShown: (state) => {
+            const pinned = state.nameItPinned.map((item) => ({ ...item, pinned: true }));
+            const keys = new Set(pinned.map((item) => item.name));
+            const rolled = state.nameItBatch.filter((item) => !keys.has(item.name));
+            return [...pinned, ...rolled.slice(0, Math.max(0, 10 - pinned.length))];
+        },
+        // a meaning's new words (`{index, meaning, word}`), one roll section
+        // each, whichever form of the name
+        nameItWordParts: (state) => {
+            const first = state.nameItMeaning.candidates[0];
+            return (first?.built_from || []).map((part, index) => ({ index, meaning: part.meaning, word: part.word, isNew: part.new })).filter((p) => p.isNew);
+        },
+        // a new word's rolls as shown, as the batch is: pinned first
+        nameItWordShown: (state) => (index) => {
+            const pinned = (state.nameItWordPinned[index] || []).map((item) => ({ ...item, pinned: true }));
+            const keys = new Set(pinned.map((item) => item.name));
+            const rolled = (state.nameItWordRolls[index] || []).filter((item) => !keys.has(item.name));
+            return [...pinned, ...rolled.slice(0, Math.max(0, 10 - pinned.length))];
+        },
         referenceTargets: (state) => {
             const byId = new Map();
             for (const things of Object.values(state.things)) {
@@ -1260,6 +1303,149 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('draft_render', { draft_key: draft.key, seq, preview: acceptable(draft.edited) });
         },
 
+        // languages 4a: a mark's action on the open draft (`nameMarks.
+        // markEdit`), and the name kept from now on, if it says so
+        // (`smallKey`: on that small draft, "+ Add facts" or a group's
+        // "+ Add", instead of the page draft)
+        markAction(markId, action, smallKey = null) {
+            const edited = smallKey ? this.smallDrafts[smallKey]?.edited : this.draft?.edited;
+            const result = markEdit(edited, markId, action);
+            if (!result) {
+                return;
+            }
+            if (smallKey) {
+                this.editSmall(smallKey, result.changes);
+            } else {
+                this.editDraft(result.changes);
+            }
+            if (result.keep) {
+                this.nameListEdit('add', 'keep', result.keep);
+            }
+        },
+
+        // open the Name it… panel for `request` (`{words, languageId, kind,
+        // target: {draftKey}|{smallKey}|{thingId}|{input}, markId?}`)
+        openNameIt(request) {
+            this.nameIt = { ...request };
+        },
+
+        // a new word (part `index`) becomes `word`, in every form of the
+        // name, each built again as one word or separate words as it was
+        nameItChooseWord(index, word) {
+            const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+            const candidates = this.nameItMeaning.candidates.map((candidate) => {
+                const parts = candidate.built_from.map((part, j) => (j === index ? { ...part, word } : part));
+                const words = parts.map((part) => part.word);
+                const name = candidate.name.includes(' ') ? words.map(cap).join(' ') : cap(words.join(''));
+                return { ...candidate, name, built_from: parts };
+            });
+            this.nameItMeaning = { ...this.nameItMeaning, candidates };
+        },
+
+        // pin a new word's roll (part `index`), or unpin it
+        nameItPinWord(index, item) {
+            const pins = this.nameItWordPinned[index] || [];
+            const pinned = pins.some((p) => p.name === item.name);
+            this.nameItWordPinned = { ...this.nameItWordPinned, [index]: pinned ? pins.filter((p) => p.name !== item.name) : [...pins, { name: item.name, meaning: item.meaning || '' }] };
+        },
+
+        // more rolls for a new word (part `index`), from the language's
+        // word rule
+        nameItRollWord(languageId, index) {
+            const rule = this.nameItRules.find((r) => r.use === 'words');
+            if (languageId && rule) {
+                this.request('name_it_batch', { language_id: languageId, rule_id: rule.id, pattern: null, count: 8, slot: `word:${index}` });
+            }
+        },
+
+        // pin `item` (`{name, meaning}`) in the batch, or unpin it
+        nameItPin(item) {
+            const pinned = this.nameItPinned.some((p) => p.name === item.name);
+            this.nameItPinned = pinned ? this.nameItPinned.filter((p) => p.name !== item.name) : [...this.nameItPinned, { name: item.name, meaning: item.meaning || '' }];
+        },
+
+        closeNameIt() {
+            this.nameIt = null;
+            this.nameItPinned = [];
+            this.nameItWordRolls = {};
+            this.nameItWordPinned = {};
+            this.nameItBatch = [];
+            this.nameItMeaning = { pending: false, candidates: [], error: null, languageId: null };
+        },
+
+        nameItLoadRules(languageId) {
+            this.nameItRules = [];
+            this.nameItBatch = [];
+            if (languageId) this.request('name_it_rules', { language_id: languageId });
+        },
+
+        nameItRoll(languageId, ruleId, pattern = null) {
+            if (languageId && ruleId) {
+                this.request('name_it_batch', { language_id: languageId, rule_id: ruleId, pattern });
+            }
+        },
+
+        nameItFromMeaning(languageId, text) {
+            if (!languageId || !text.trim()) return;
+            this.nameItMeaning = { pending: true, candidates: [], error: null, languageId };
+            this.request('name_it_meaning', { language_id: languageId, text: text.trim() });
+        },
+
+        // a name picked in the panel: put where the request asked (a page
+        // draft, a small draft, an entry, or a text box's callback), and
+        // its word added to the language with its meaning, and `newWords`
+        // (`[{word, meaning}]`, a meaning's coined parts) too; for an entry,
+        // only once its rename is written
+        pickNameIt(languageId, name, meaning = '', newWords = []) {
+            const request = this.nameIt;
+            if (!request) return;
+            const target = request.target || {};
+            const options = { flagged: !!request.markId, kind: request.kind || 'place' };
+            const words = languageId ? [...newWords.map((part) => [part.word, part.meaning]), [name, meaning]] : [];
+            let renaming = false;
+            if (target.draftKey && this.draft?.key === target.draftKey) {
+                this.editDraft(pickName(this.draft.edited, request.words, name, options));
+            } else if (target.smallKey && this.smallDrafts[target.smallKey]?.edited) {
+                this.editSmall(target.smallKey, pickName(this.smallDrafts[target.smallKey].edited, request.words, name, options));
+            }
+            // an entry (its page, or linked words on a draft: then both)
+            if (target.thingId) {
+                renaming = true;
+                // part of an entry's name (linked words): the rest is kept
+                const full = target.fullName ? swapName(target.fullName, request.words, name) : name;
+                this.nameItRenameWords = words.length ? { languageId, words } : null;
+                this.pending = { ...this.pending, name_it_rename: true };
+                this.request('name_it_rename', { thing_id: target.thingId, name: full });
+            } else if (!target.draftKey && !target.smallKey && typeof target.onPick === 'function') {
+                target.onPick(name);
+            }
+            if (!renaming) {
+                for (const [word, wordMeaning] of words) this.addLanguageWord(languageId, word, wordMeaning);
+            }
+            this.closeNameIt();
+        },
+
+        // the draft's Languages rows changed: cleaned again with them
+        draftLanguages(rows) {
+            const draft = this.draft;
+            if (!draft) {
+                return;
+            }
+            this.pending = { ...this.pending, draft_languages: true };
+            this.request('draft_languages', { draft_key: draft.key, preview: acceptable(draft.edited), rows });
+        },
+
+        loadNameLists() {
+            this.request('get_name_lists', {});
+        },
+
+        // one change to the name lists (`edit`: add, remove, make_global,
+        // turn_off, turn_on, remove_everywhere; `kind`: real, cliche,
+        // title, keep)
+        nameListEdit(edit, kind, name) {
+            this.request('name_list_edit', { edit, kind, name });
+        },
+
         // a selection in the draft's fact `index` (the server's), as
         // "Make a stub" (`kind`, `tag`) or "Link to…" (`targetId`)
         draftSelection(action, index, start, end, data) {
@@ -1297,6 +1483,10 @@ export const useWorldsStore = defineStore('worlds', {
                         edited = rebaseDraft(before.base, before.edited, preview);
                     }
                 }
+            } else if (how === 'replace') {
+                // the server's copy is the owner's own, cleaned again
+                // (languages 4a, `draft_languages`): nothing to rebase
+                edited = preview;
             } else if (how === 'restore') {
                 const kept = this.draftEdits[key]?.[version];
                 edited = kept ? rebaseDraft(kept.base, kept.edited, preview) : preview;
@@ -1686,7 +1876,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true } };
             if (slot.kind === 'group') {
                 this.pending = { ...this.pending, accept_group_add: true };
-                this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, draft_key: key });
+                this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, marks: slot.edited.marks || [], draft_key: key });
             } else if (slot.kind === 'nested') {
                 this.pending = { ...this.pending, write_nested_facts: true };
                 this.request('write_nested_facts', { draft_key: pageKeyOf(key), draft: slot.edited });
@@ -1715,7 +1905,7 @@ export const useWorldsStore = defineStore('worlds', {
                 return;
             }
             const { version, versions } = data;
-            const base = smallKind(key) === 'group' ? { thing_id: data.thing_id, tag: data.tag, rows: data.rows } : data.draft;
+            const base = smallKind(key) === 'group' ? { thing_id: data.thing_id, tag: data.tag, rows: data.rows, marks: data.marks || [] } : data.draft;
             if (how === 'asked' && slot.version != null) {
                 // the open version's edits kept; the oldest version
                 // dropped (five kept): the ones kept move down with it
@@ -2563,6 +2753,64 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'discard_preview':
                     break;
+                case 'draft_languages':
+                    this.pending = { ...this.pending, draft_languages: false };
+                    if (this.draft?.key === data.draft_key) {
+                        this.draftTaken(data, 'replace');
+                    }
+                    break;
+                case 'name_it_rules':
+                    if (this.nameIt) this.nameItRules = data.rules || [];
+                    break;
+                case 'name_it_batch':
+                    if (!this.nameIt) break;
+                    if (String(data.slot || '').startsWith('word:')) {
+                        // one new word's rolls
+                        const index = Number(String(data.slot).slice(5));
+                        const rolled = (data.names || []).map((n) => ({ name: n.name.toLowerCase(), meaning: '' }));
+                        this.nameItWordRolls = { ...this.nameItWordRolls, [index]: rolled };
+                    } else {
+                        this.nameItBatch = data.names || [];
+                    }
+                    break;
+                case 'name_it_meaning':
+                    // dropped once the panel closed or asked again elsewhere
+                    if (this.nameIt && this.nameItMeaning.pending) {
+                        const candidates = data.candidates || [];
+                        this.nameItMeaning = { ...this.nameItMeaning, pending: false, candidates, error: null };
+                        // each new word's first rolls: the model's pick and
+                        // the others it chose from
+                        const rolls = {};
+                        (candidates[0]?.built_from || []).forEach((part, index) => {
+                            if (part.new) rolls[index] = (part.options || [part.word]).map((name) => ({ name, meaning: '' }));
+                        });
+                        this.nameItWordRolls = rolls;
+                        this.nameItWordPinned = {};
+                    }
+                    break;
+                case 'name_it_meaning_failed':
+                    if (this.nameIt && this.nameItMeaning.pending) {
+                        this.nameItMeaning = { ...this.nameItMeaning, pending: false, candidates: [], error: message.message || 'No names came back.' };
+                    }
+                    break;
+                case 'name_it_rename':
+                    this.pending = { ...this.pending, name_it_rename: false };
+                    if (this.nameItRenameWords) {
+                        const { languageId, words } = this.nameItRenameWords;
+                        this.nameItRenameWords = null;
+                        for (const [word, wordMeaning] of words) this.addLanguageWord(languageId, word, wordMeaning);
+                    }
+                    if (data.id === this.selectedThingId) {
+                        this.thing = data;
+                    } else {
+                        this.refreshThing();
+                    }
+                    if (data.kind) this.listThings(data.kind);
+                    break;
+                case 'get_name_lists':
+                case 'name_list_edit':
+                    this.nameLists = data.rows || [];
+                    break;
                 case 'draft_render':
                     if (this.draft?.key === data.draft_key && this.draft.renderSeq === data.seq) {
                         const { draft_key: _key, seq: _seq, ...rendered } = data;
@@ -2714,6 +2962,8 @@ export const useWorldsStore = defineStore('worlds', {
                             this.setError(message.error.message);
                         }
                         this.pending = {};
+                        // a refused rename saves none of its words
+                        this.nameItRenameWords = null;
                         // the failed request may be the delete (or its
                         // check): close its dialog, so the error shows
                         this.deleteCheck = null;

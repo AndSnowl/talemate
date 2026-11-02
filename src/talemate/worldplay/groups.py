@@ -50,6 +50,7 @@ from typing import Any
 import structlog
 from pydantic import BaseModel
 
+from talemate.languages.cleaning.marks import Mark
 from talemate.prompts import Prompt
 from talemate.world import entries
 from talemate.world.filing import (
@@ -158,6 +159,8 @@ class GroupAddDraft(BaseModel):
     prompt: str
     show_under: bool = False
     rows: list[GroupAddRow]
+    # the names cleaning flagged (languages 4a)
+    marks: list[Mark] = []
 
 
 # --- synopsis ---------------------------------------------------------------

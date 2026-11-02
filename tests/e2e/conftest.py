@@ -41,6 +41,7 @@ from pathlib import Path
 import pytest
 
 from e2e.seed import (
+    FIXED_CLEAN_FILE,
     FIXED_FACTS_FILE,
     FIXED_GROUP_ADD_FILE,
     FIXED_GROUP_SYNOPSIS_FILE,
@@ -127,6 +128,7 @@ def app(tmp_path_factory, chromium_path):
         )
         mp.setenv("TALEMATE_TEST_FIXED_GROUP_ADD", str(root / FIXED_GROUP_ADD_FILE))
         mp.setenv("TALEMATE_TEST_FIXED_LANGUAGE", str(root / FIXED_LANGUAGE_FILE))
+        mp.setenv("TALEMATE_TEST_FIXED_CLEAN", str(root / FIXED_CLEAN_FILE))
         # Claude Code is a fake that writes the sample language; its mode per
         # test comes from a file (`fake_claude_mode`)
         mp.setenv("TALEMATE_TEST_CLAUDE_COMMAND", str(FAKE_CLAUDE))
@@ -175,6 +177,7 @@ fixed_facts = _fixed_reply_fixture(FIXED_FACTS_FILE)
 fixed_group_synopsis = _fixed_reply_fixture(FIXED_GROUP_SYNOPSIS_FILE)
 fixed_group_add = _fixed_reply_fixture(FIXED_GROUP_ADD_FILE)
 fixed_language = _fixed_reply_fixture(FIXED_LANGUAGE_FILE)
+fixed_clean = _fixed_reply_fixture(FIXED_CLEAN_FILE)
 
 
 @pytest.fixture()

@@ -20,7 +20,9 @@ from e2e.worlds.test_world_tab import (
 
 pytestmark = pytest.mark.e2e
 
-SAMPLE = Path(__file__).resolve().parents[2] / "languages" / "data" / "sample.language.json"
+SAMPLE = (
+    Path(__file__).resolve().parents[2] / "languages" / "data" / "sample.language.json"
+)
 
 
 def _sample_text(**changes) -> str:
@@ -70,9 +72,13 @@ def test_import_pasted_language_and_see_its_page(app, page):
     box.get_by_role("button", name="Import").click()
 
     thing = page.get_by_test_id("thing-page")
-    expect(thing.get_by_test_id("thing-name")).to_have_text("Velskar", timeout=TIMEOUT_MS)
+    expect(thing.get_by_test_id("thing-name")).to_have_text(
+        "Velskar", timeout=TIMEOUT_MS
+    )
     # About (facts and connections) is the default tab
-    expect(thing.get_by_test_id("language-tab-about")).to_have_attribute("aria-selected", "true")
+    expect(thing.get_by_test_id("language-tab-about")).to_have_attribute(
+        "aria-selected", "true"
+    )
     thing.get_by_test_id("language-tab-lexicon").click()
     words = thing.get_by_test_id("language-words")
     expect(words.get_by_test_id("language-word")).to_have_count(8, timeout=TIMEOUT_MS)
@@ -89,7 +95,9 @@ def test_blocking_problem_disables_import(app, page):
 
     data = json.loads(SAMPLE.read_text())
     data["language"]["generators"][0]["reject"] = ["("]
-    box.get_by_test_id("language-paste").locator("textarea").first.fill(json.dumps(data))
+    box.get_by_test_id("language-paste").locator("textarea").first.fill(
+        json.dumps(data)
+    )
     box.get_by_role("button", name="Check").click()
     report = box.get_by_test_id("language-report")
     expect(report).to_contain_text("must be fixed", timeout=TIMEOUT_MS)
@@ -127,17 +135,25 @@ def test_new_version_shows_kept_used_words(app, page):
     thing.get_by_role("button", name="Import a new version").click()
     # the import box sits on the Language tab
     box = thing.get_by_test_id("language-import")
-    box.get_by_test_id("language-paste").locator("textarea").first.fill(json.dumps(data))
+    box.get_by_test_id("language-paste").locator("textarea").first.fill(
+        json.dumps(data)
+    )
     box.get_by_role("button", name="Check").click()
-    expect(box.get_by_test_id("language-diff")).to_contain_text("veltasun", timeout=TIMEOUT_MS)
-    expect(box.get_by_test_id("change-kept")).to_contain_text("Kept as they are: veltasun")
+    expect(box.get_by_test_id("language-diff")).to_contain_text(
+        "veltasun", timeout=TIMEOUT_MS
+    )
+    expect(box.get_by_test_id("change-kept")).to_contain_text(
+        "Kept as they are: veltasun"
+    )
 
     # importing it keeps the word the world uses, with its meaning
     box.get_by_role("button", name="Import").click()
     expect(thing.get_by_test_id("language-import")).to_have_count(0, timeout=TIMEOUT_MS)
     thing.get_by_test_id("language-tab-lexicon").click()
     row = thing.get_by_test_id("language-word").filter(has_text="veltasun")
-    expect(row.get_by_test_id("word-meaning")).to_have_text(["the great fort"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(
+        ["the great fort"], timeout=TIMEOUT_MS
+    )
     expect(row.get_by_test_id("word-names")).to_have_text("name")
 
 
@@ -185,9 +201,13 @@ def test_a_word_shows_its_meanings_and_what_it_names(app, page):
     thing = _open_thing(page, "Velskar")
     thing.get_by_test_id("language-tab-lexicon").click()
     row = thing.get_by_test_id("language-word").filter(has_text="soru")
-    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "breath"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(
+        ["wind", "breath"], timeout=TIMEOUT_MS
+    )
     expect(row.get_by_test_id("word-names")).to_have_text("name")
-    expect(row.get_by_test_id("word-names")).to_have_attribute("title", "Soru (character)")
+    expect(row.get_by_test_id("word-names")).to_have_attribute(
+        "title", "Soru (character)"
+    )
     brin = thing.get_by_test_id("language-word").filter(has_text="brin")
     expect(brin.get_by_test_id("word-meaning")).to_have_text(["stone"])
 
@@ -195,30 +215,40 @@ def test_a_word_shows_its_meanings_and_what_it_names(app, page):
     row.get_by_test_id("add-meaning").click()
     row.get_by_label("new meaning").fill("gale")
     row.get_by_label("new meaning").press("Enter")
-    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "breath", "gale"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(
+        ["wind", "breath", "gale"], timeout=TIMEOUT_MS
+    )
 
     # × removes one
     row.get_by_label("Remove meaning breath").click()
-    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "gale"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(
+        ["wind", "gale"], timeout=TIMEOUT_MS
+    )
 
     # clicking a meaning edits it
     row.get_by_test_id("word-meaning").filter(has_text="gale").click()
     row.get_by_label("meaning", exact=True).fill("storm")
     row.get_by_label("meaning", exact=True).press("Enter")
-    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "storm"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(
+        ["wind", "storm"], timeout=TIMEOUT_MS
+    )
 
     # and it's saved: leaving the page and coming back rebuilds it from the store
     _open_thing(page, "Soru")
     thing = _open_thing(page, "Velskar")
     thing.get_by_test_id("language-tab-lexicon").click()
     row = thing.get_by_test_id("language-word").filter(has_text="soru")
-    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "storm"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(
+        ["wind", "storm"], timeout=TIMEOUT_MS
+    )
 
 
 def test_a_rule_sets_roll_rolls_only_its_own_names(app, page):
     name = _world_name("Lang roll one")
     seed_fm_world(
-        app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": _language_fields()}]
+        app.root,
+        name,
+        things=[{"kind": "language", "name": "Velskar", "fields": _language_fields()}],
     )
     _open_world(page, name)
     _world_tab(page)
@@ -252,7 +282,11 @@ def _lexicon_with_parts(app, page, stem):
         {"word": "ve", "meanings": ["in"]},
     ]
     name = _world_name(stem)
-    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    seed_fm_world(
+        app.root,
+        name,
+        things=[{"kind": "language", "name": "Velskar", "fields": fields}],
+    )
     _open_world(page, name)
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
@@ -262,6 +296,7 @@ def _lexicon_with_parts(app, page, stem):
 
 def test_a_words_part_is_picked_from_the_list(app, page):
     thing = _lexicon_with_parts(app, page, "Lang part pick")
+
     def word_row(word):
         cell = page.locator("td.col-word", has_text=re.compile(rf"^\s*{word}\s*$"))
         return thing.get_by_test_id("language-word").filter(has=cell).first
@@ -276,7 +311,9 @@ def test_a_words_part_is_picked_from_the_list(app, page):
     # kept: the page reads it back after leaving the tab
     thing.get_by_test_id("language-tab-about").click()
     thing.get_by_test_id("language-tab-lexicon").click()
-    expect(word_row("ve").locator("td.col-part")).to_have_text("preposition", timeout=TIMEOUT_MS)
+    expect(word_row("ve").locator("td.col-part")).to_have_text(
+        "preposition", timeout=TIMEOUT_MS
+    )
 
 
 def test_the_dictionary_filters_by_part(app, page):
@@ -296,7 +333,11 @@ def _big_lexicon(app, page, stem):
         {"word": f"w{n:03d}", "meanings": [f"m{119 - n:03d}", "zz"]} for n in range(120)
     ]
     name = _world_name(stem)
-    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    seed_fm_world(
+        app.root,
+        name,
+        things=[{"kind": "language", "name": "Velskar", "fields": fields}],
+    )
     _open_world(page, name)
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
@@ -325,18 +366,29 @@ def test_the_dictionary_sorts_by_word_or_first_meaning(app, page):
     thing = _big_lexicon(app, page, "Lang sorted")
     expect(thing.get_by_test_id("language-word")).to_have_count(50, timeout=TIMEOUT_MS)
     thing.get_by_test_id("dict-sort-meaning").click()
-    expect(thing.get_by_test_id("language-word").first.locator("td.col-word")).to_have_text("w119", timeout=TIMEOUT_MS)
+    expect(
+        thing.get_by_test_id("language-word").first.locator("td.col-word")
+    ).to_have_text("w119", timeout=TIMEOUT_MS)
     thing.get_by_test_id("dict-sort-word").click()
     assert _first_words(thing) == ["w000", "w001", "w002"]
     thing.get_by_test_id("dict-sort-word").click()
-    expect(thing.get_by_test_id("language-word").first.locator("td.col-word")).to_have_text("w119", timeout=TIMEOUT_MS)
+    expect(
+        thing.get_by_test_id("language-word").first.locator("td.col-word")
+    ).to_have_text("w119", timeout=TIMEOUT_MS)
 
 
 def test_the_dictionary_opens_sorted_by_word(app, page):
     fields = _language_fields()
-    fields["words"] = [{"word": w, "meanings": [m]} for w, m in (("zor", "star"), ("ark", "bow"), ("mol", "hill"))]
+    fields["words"] = [
+        {"word": w, "meanings": [m]}
+        for w, m in (("zor", "star"), ("ark", "bow"), ("mol", "hill"))
+    ]
     name = _world_name("Lang word sort")
-    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    seed_fm_world(
+        app.root,
+        name,
+        things=[{"kind": "language", "name": "Velskar", "fields": fields}],
+    )
     _open_world(page, name)
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
@@ -348,6 +400,8 @@ def test_the_dictionary_opens_sorted_by_word(app, page):
     thing.get_by_role("button", name="Add word", exact=True).click()
     word = thing.get_by_label("word", exact=True)
     word.press_sequentially("zz")
-    expect(thing.get_by_test_id("language-word").first.get_by_label("word", exact=True)).to_have_value("zz")
+    expect(
+        thing.get_by_test_id("language-word").first.get_by_label("word", exact=True)
+    ).to_have_value("zz")
     word.press("Enter")
     expect(thing.get_by_test_id("language-word")).to_have_count(4, timeout=TIMEOUT_MS)

@@ -927,16 +927,12 @@ def _created(name: str, category: str, text: str) -> str:
 
 def _queue_stub_previews() -> None:
     """The model's answers for previewing Aldric, Frosthollow and the
-    Order, in that order: each create reply, then its prose."""
+    Order, in that order: each create reply (a draft writes no prose)."""
 
     _queue(
         _created("Aldric", "background", "A ferryman who keeps the heron ledger."),
-        # no personality facts: no personality prose
-        "Aldric is a weathered ferryman.",
         _created("Frosthollow", "description", "A snowbound village on the weir."),
-        "Frosthollow sits under snow.",
         _created("Order of the Heron", "general", "Keepers of the river ledgers."),
-        "The Order keeps the ledgers.",
     )
 
 
@@ -1230,9 +1226,7 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
         _queue(
             json.dumps({"name": "Aldric", "facts": [], "names": []}),
             _created("Frosthollow", "description", "A snowbound village on the weir."),
-            "Frosthollow sits under snow.",
             _created("Order of the Heron", "general", "Keepers of the river ledgers."),
-            "The Order keeps the ledgers.",
         )
         setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
 
@@ -1305,7 +1299,7 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
     }
     client = MockClient("test")
     async with MockClientContext():
-        _queue(frost_reply, "Frosthollow sits under snow.")
+        _queue(frost_reply)
         setup = await plan_scene(
             world,
             "Maren buys ice in Frosthollow",
@@ -1320,8 +1314,8 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
     # the Weir's ice-fishers line names Frosthollow: it could move here
     assert preview.move_here and not any(m.ticked for m in preview.move_here)
     assert preview.filings and not any(f.ticked for f in preview.filings)
-    # no verdict call: the create and its prose only
-    assert len(client.prompt_history) == 2
+    # no verdict call: the create only
+    assert len(client.prompt_history) == 1
     assert preview.verdict is None
 
     setup = SceneSetup.model_validate(json.loads(setup.model_dump_json()))

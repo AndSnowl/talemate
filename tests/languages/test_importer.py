@@ -167,3 +167,27 @@ def test_cli_reads_wrapped_text(tmp_path):
     path = tmp_path / "reply.txt"
     path.write_text("Sure!\n```json\n" + _text(_moscavian()) + "\n```")
     assert main(["check", str(path)]) == 0
+
+
+def test_importing_a_language_writes_a_fact_about_it(world):
+    """4a revised: the model then knows the name is a language ("Varonvi
+    Codex" was taken for a book)."""
+
+    preview = preview_import(
+        world.view(),
+        _text(_moscavian(), description="The tongue of the Tsardom. It is harsh."),
+    )
+    with world.revision(Source.manual()) as rev:
+        lid = apply_import(rev, world.view(), preview)
+    facts = [f.text for f in world.view().thing(lid).facts]
+    assert facts == [
+        "Moscavian is a language of this world. The tongue of the Tsardom."
+    ]
+
+
+def test_a_new_version_writes_no_second_fact(world):
+    lid = _stored(world, _moscavian())
+    preview = preview_import(world.view(), _text(_moscavian()), target_id=lid)
+    with world.revision(Source.manual()) as rev:
+        apply_import(rev, world.view(), preview, target_id=lid)
+    assert world.view().thing(lid).facts == []

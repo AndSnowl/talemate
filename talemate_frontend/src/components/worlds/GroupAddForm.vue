@@ -86,7 +86,7 @@
                         :aria-label="'Name of ' + row.name"
                         @update:model-value="change(index, { name: $event })"
                     ></v-text-field>
-                    <span class="text-body-2 draft-line">{{ row.line }}</span>
+                    <span class="text-body-2 draft-line"><LinkedText :segments="markSegments([{ text: row.line, ref: null, stub: false }], found?.edited?.marks)" :text="row.line" /></span>
                 </div>
                 <template #under>
                     <v-chip size="x-small" label variant="tonal" color="muted">{{ row.kind }}</v-chip>
@@ -117,7 +117,9 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { tagHeading } from './entryPage.js';
 import { groupDraftKey, smallVersionRows } from './smallDrafts.js';
+import LinkedText from './LinkedText.vue';
 import NameHighlightInput from './NameHighlightInput.vue';
+import { markSegments } from './nameMarks.js';
 import SuggestionBar from './SuggestionBar.vue';
 import SuggestionRow from './SuggestionRow.vue';
 
@@ -136,7 +138,12 @@ import SuggestionRow from './SuggestionRow.vue';
 // tag and is filed showing under the group.
 export default {
     name: 'GroupAddForm',
-    components: { NameHighlightInput, SuggestionBar, SuggestionRow },
+    components: { LinkedText, NameHighlightInput, SuggestionBar, SuggestionRow },
+    // its cleaned names' cards act on this draft (languages 4a)
+    provide() {
+        const form = this;
+        return { markScope: { get key() { return form.key; } } };
+    },
     props: {
         thingId: { type: String, required: true },
         tag: { type: String, default: null },
@@ -193,6 +200,7 @@ export default {
         },
     },
     methods: {
+        markSegments,
         // Enter drafts (Shift+Enter a new line), not while an IME composes
         onEnter(event) {
             if (event.isComposing) {

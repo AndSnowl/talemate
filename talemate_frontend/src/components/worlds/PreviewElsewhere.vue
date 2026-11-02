@@ -24,7 +24,7 @@
                 testid="elsewhere-row"
                 @tick="tick(index, $event)"
             >
-                <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames)" :text="rows[index].text" />
+                <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames, worlds.draft?.edited?.marks)" :text="rows[index].text" />
                 <template v-if="rows[index].since" #end>
                     <span class="fact-date">{{ formatDate(worlds.calendar, rows[index].since) }}</span>
                 </template>

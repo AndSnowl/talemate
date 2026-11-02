@@ -41,6 +41,7 @@ from typing import Any, NamedTuple
 import structlog
 from pydantic import BaseModel, Field
 
+from talemate.languages.cleaning.marks import Mark
 from talemate.prompts import Prompt
 from talemate.world import entries
 from talemate.world.dates import WorldDate
@@ -63,6 +64,7 @@ from talemate.worldplay.create import (
     _row_stubs,
     clean_tag,
     create_categories,
+    language_names,
     current_date,
     default_category,
     entry_names,
@@ -103,8 +105,6 @@ class DraftName(NewName):
     """A fact draft's "New names" row: a name its facts use that the world
     hasn't, a stub on accept while `ticked` (ruling H8)."""
 
-    ticked: bool = True
-
 
 class FactDraft(BaseModel):
     """A small draft of facts for an entry (`thing_id`), from the owner's
@@ -125,6 +125,8 @@ class FactDraft(BaseModel):
     facts: list[PreviewFact] = Field(default_factory=list)
     new_names: list[DraftName] = Field(default_factory=list)
     move_here: list[MoveHereFact] = Field(default_factory=list)
+    # the names cleaning flagged (languages 4a)
+    marks: list[Mark] = Field(default_factory=list)
 
 
 class DraftAddition(NamedTuple):
@@ -218,6 +220,7 @@ async def _ask(
                     "categories": categories,
                     "year": calendar.format(WorldDate.of(year)) if year else None,
                     "now_year": now_year,
+                    "language_names": language_names(world.view()),
                 },
             )
         reply = extracted["response"]

@@ -464,8 +464,10 @@ def roll(
     count: int = 20,
     rng: random.Random | None = None,
     exclude: set[str] = frozenset(),
+    pattern: int | None = None,
 ) -> list[str]:
-    """Generate up to `count` unique candidate names.
+    """Generate up to `count` unique candidate names; with `pattern` (an
+    index into the generator's patterns), from that pattern only.
 
     Raises `GeneratorError` if `generator_id` is not one of
     `language.generators`. Attempts are capped at `count * 50`, so the
@@ -482,6 +484,10 @@ def roll(
     compiled = _compile_language(_language_cache_key(language))
     categories = compiled.categories
     patterns = compiled.generator_patterns[generator.id]
+    if pattern is not None:
+        if not 0 <= pattern < len(patterns):
+            raise GeneratorError(f"no pattern {pattern} in {generator_id!r}")
+        patterns = [patterns[pattern]]
     rejects = compiled.generator_reject[generator.id]
 
     exclude_lower = {value.lower() for value in exclude}

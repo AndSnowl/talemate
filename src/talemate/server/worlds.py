@@ -375,6 +375,7 @@ formatted with the world's calendar; `label` is ignored on the way in.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import os
@@ -434,6 +435,16 @@ from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
+from talemate.languages import naming_panel
+from talemate.languages.cleaning import lists as name_lists
+from talemate.languages.cleaning import model as clean_model
+from talemate.worldplay.cleaning import (
+    clean_fact_draft,
+    clean_group_draft,
+    clean_preview,
+    inherited_rows,
+    owner_kept,
+)
 from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
@@ -503,9 +514,9 @@ from talemate.worldplay.create import (
     same_offers,
 )
 from talemate.worldplay.create import _new_names as listed_stub_names
+from talemate.worldplay.create import _unlisted_names as unlisted_stub_names
 from talemate.worldplay.decide import Verdict
 from talemate.worldplay.facts import (
-    DraftAddition,
     DraftName,
     FactDraft,
     accept_facts,
@@ -551,6 +562,8 @@ from talemate.worldplay.repoint import (
     move_fact,
     renamed_words,
     repoint_stub,
+    drop_other_names,
+    rename_everywhere,
     retitle,
     target_name,
 )
@@ -620,6 +633,10 @@ FIXED_GROUP_ADD_ENV = "TALEMATE_TEST_FIXED_GROUP_ADD"
 # browser tests: the model's reply to every language naming call
 # (definitions and picks, `languages.naming`)
 FIXED_LANGUAGE_ENV = "TALEMATE_TEST_FIXED_LANGUAGE"
+# browser tests: canned replies for cleaning a draft's names (languages
+# 4a), `{"name-flags": ..., "name-picks": ..., "title-rewrites": ...,
+# "language-roles": ...}`, each the model's reply text or a JSON object
+FIXED_CLEAN_ENV = "TALEMATE_TEST_FIXED_CLEAN"
 # one language job at a time (a make, a change or a fill)
 BUSY = "Something else is being made or changed; wait for it or cancel it"
 LANGUAGE_GONE = "The language this was for is gone"
@@ -696,6 +713,13 @@ class DraftRenderPayload(DraftKeyPayload):
     preview: CreatePreview
     # sent back as it came, so the client keeps the newest reply only
     seq: int | None = None
+
+
+class DraftLanguagesPayload(DraftKeyPayload):
+    # the draft as the owner left it (the client's copy), and its new
+    # Languages rows
+    preview: CreatePreview
+    rows: list[dict] = []
 
 
 class UseVersionPayload(DraftKeyPayload):
@@ -1064,6 +1088,7 @@ class GroupAddPayload(pydantic.BaseModel):
 class AcceptGroupAddPayload(pydantic.BaseModel):
     thing_id: str
     rows: list[GroupAddRow]
+
     # the small draft accepted: dropped once it's written
     draft_key: str | None = None
 
@@ -1264,6 +1289,37 @@ def _fixed_file(env: str) -> Path | None:
     return path if path.exists() else None
 
 
+@contextlib.contextmanager
+def _fixed_cleaning(path: Path | None):
+    """While open, cleaning's model calls answer from the browser tests'
+    file at `path` (`FIXED_CLEAN_ENV`); with no file, from the model."""
+
+    if path is None:
+        yield
+        return
+    replies = {
+        name: reply if isinstance(reply, str) else json.dumps(reply)
+        for name, reply in json.loads(path.read_text(encoding="utf-8")).items()
+    }
+    clean_model.fixed_replies = replies
+    try:
+        yield
+    finally:
+        clean_model.fixed_replies = None
+
+
+async def _cleaned_fixed(preview: Coroutine, world: World) -> CreatePreview:
+    """A fixed preview, cleaned from the fixed cleaning replies when a
+    test wrote them; else as it is (no model to ask)."""
+
+    found = await preview
+    fixed = _fixed_file(FIXED_CLEAN_ENV)
+    if fixed is None:
+        return found
+    with _fixed_cleaning(fixed):
+        return await clean_preview(world, found, None)
+
+
 async def _fixed_preview(
     path: Path, payload: PreviewPayload, world: World
 ) -> CreatePreview:
@@ -1383,6 +1439,10 @@ async def _fixed_preview(
         list(payload.picks),
         payload.new_names,
     )
+    if not listed_names(fixed.get("names") or []):
+        new_names += unlisted_stub_names(
+            view, [fact.text for fact in facts], [name], new_names, payload.picks
+        )
     file_into = parse_file_into(
         fixed.get("file_into") or [],
         view,
@@ -1676,8 +1736,10 @@ def _draft_new_names(
     it will be (the second mapping: stand-in to kind, for
     `_Links.draft_segments`); a name marked the same as a live entry
     maps, with its written forms, to that entry. `fresh`: the names the
-    owner treats as new (`treated_as_new`)."""
+    owner treats as new (`treated_as_new`). An unticked row makes no
+    stub, so its words stay plain."""
 
+    rows = [row for row in rows if row.ticked]
     same: dict[str, str] = {}
     for row in rows:
         target = row.same_target_id
@@ -3001,7 +3063,7 @@ class WorldsPlugin(Plugin):
         self._refuse_while_nested(payload.draft_key)
         fixed = _fixed_file(FIXED_PREVIEW_ENV)
         if fixed is not None:
-            preview = _fixed_preview(fixed, payload, world)
+            preview = _cleaned_fixed(_fixed_preview(fixed, payload, world), world)
         else:
             client = self._client()
             preview = preview_thing(
@@ -3159,6 +3221,63 @@ class WorldsPlugin(Plugin):
         self._current.pop(payload.draft_key, None)
         self._small.discard(nested_key(payload.draft_key))
         self._reply("discard_preview", {"draft_key": payload.draft_key})
+
+    async def handle_draft_languages(self, data: dict):
+        """Set a draft's Languages rows and clean it again: every name
+        cleaning replaced is put back, then the draft is cleaned with the
+        new rows (`worldplay.cleaning`). The current version is replaced,
+        not added to; answers `draft_languages` as `preview_thing` does."""
+
+        # a fact the owner removed stays removed (final review I5): the
+        # client marks it `removed`, which a preview doesn't hold
+        raw = dict(data.get("preview") or {})
+        raw["facts"] = [
+            f
+            for f in raw.get("facts") or []
+            if not (isinstance(f, dict) and f.get("removed"))
+        ]
+        payload = DraftLanguagesPayload(**{**data, "preview": raw})
+        world = self._require_world()
+        key = payload.draft_key
+        self._require_draft(key)
+        self._refuse_while_nested(key)
+        held = self._current_preview(key)
+        # what only the server vouches for stays the server's (F26)
+        preview = payload.preview.model_copy(
+            update={
+                "stub_id": held.stub_id,
+                "selected_names": held.selected_names,
+                "pick_names": held.pick_names,
+            }
+        )
+        keep = owner_kept(held, preview)
+
+        async def recleaned() -> CreatePreview:
+            fixed = _fixed_file(FIXED_CLEAN_ENV)
+            client = None if fixed is not None else self._client()
+            with _fixed_cleaning(fixed):
+                return await clean_preview(
+                    world,
+                    preview,
+                    client,
+                    rows=payload.rows,
+                    keep=keep,
+                )
+
+        def replace(cleaned: CreatePreview) -> dict:
+            versions = self._require_draft(key)
+            versions[self._current.get(key, len(versions) - 1)] = cleaned
+            return self._draft_out(world, key)
+
+        self._spawn(
+            recleaned(),
+            self.create_task_done_callback(
+                "draft_languages",
+                "preview_failed",
+                "Error cleaning a draft again",
+                success_data=replace,
+            ),
+        )
 
     async def handle_draft_render(self, data: dict):
         """The draft as the owner left it, linked as accept will link it
@@ -4148,18 +4267,8 @@ class WorldsPlugin(Plugin):
         key = group_key(payload.thing_id, payload.tag)
         seq = self._ask_small(key, payload.regenerate)
 
-        def drafted(rows: list[GroupAddRow]) -> dict:
-            draft = GroupAddDraft(
-                thing_id=payload.thing_id,
-                tag=payload.tag,
-                prompt=payload.prompt,
-                show_under=payload.show_under,
-                rows=rows,
-            )
-            return self._small_add(world, key, draft)
-
-        self._spawn(
-            group_add(
+        async def drafting() -> GroupAddDraft:
+            rows = await group_add(
                 world,
                 payload.thing_id,
                 payload.tag,
@@ -4167,7 +4276,23 @@ class WorldsPlugin(Plugin):
                 client,
                 reply=reply,
                 show_under=payload.show_under,
-            ),
+            )
+            draft = GroupAddDraft(
+                thing_id=payload.thing_id,
+                tag=payload.tag,
+                prompt=payload.prompt,
+                show_under=payload.show_under,
+                rows=rows,
+            )
+            # languages 4a: its names cleaned
+            with _fixed_cleaning(_fixed_file(FIXED_CLEAN_ENV)):
+                return await clean_group_draft(world, draft, client)
+
+        def drafted(draft: GroupAddDraft) -> dict:
+            return self._small_add(world, key, draft)
+
+        self._spawn(
+            drafting(),
             self._small_done(
                 key,
                 seq,
@@ -4276,6 +4401,7 @@ class WorldsPlugin(Plugin):
                 "thing_id": draft.thing_id,
                 "tag": draft.tag,
                 "rows": [row.model_dump(mode="json") for row in draft.rows],
+                "marks": [m.model_dump(mode="json") for m in draft.marks],
             }
             versions = [
                 {"version": number, "prompt": version.prompt}
@@ -4343,13 +4469,12 @@ class WorldsPlugin(Plugin):
             # a new version of the held one; `write_nested_facts` puts the
             # ticked facts into the page draft
             preview = self._current_preview(key)
-            adding = draft_facts_for(
+            asked = draft_facts_for(
                 world, preview, payload.prompt, client, year=year, reply=reply
             )
-            small = nested_key(key)
-            seq = self._ask_small(small, payload.regenerate)
 
-            def nested(added: DraftAddition) -> dict:
+            async def adding_cleaned() -> FactDraft:
+                added = await asked
                 draft = FactDraft(
                     thing_id=None,
                     prompt=payload.prompt,
@@ -4357,6 +4482,16 @@ class WorldsPlugin(Plugin):
                     facts=added.facts,
                     new_names=[DraftName(**n.model_dump()) for n in added.new_names],
                 )
+                # cleaned in the page draft's languages (languages 4a)
+                rows = preview.languages or inherited_rows(world.view(), preview)
+                with _fixed_cleaning(_fixed_file(FIXED_CLEAN_ENV)):
+                    return await clean_fact_draft(world, draft, client, rows=rows)
+
+            adding = adding_cleaned()
+            small = nested_key(key)
+            seq = self._ask_small(small, payload.regenerate)
+
+            def nested(draft: FactDraft) -> dict:
                 return self._small_add(world, small, draft)
 
             answer = self._small_done(
@@ -4403,9 +4538,16 @@ class WorldsPlugin(Plugin):
             self._spawn(adding, on_done)
             return
         self._require_entry(world.view(), payload.thing_id)
-        drafting = draft_facts(
+        asked_facts = draft_facts(
             world, payload.thing_id, payload.prompt, client, year=year, reply=reply
         )
+
+        async def drafting_cleaned() -> FactDraft:
+            draft = await asked_facts
+            with _fixed_cleaning(_fixed_file(FIXED_CLEAN_ENV)):
+                return await clean_fact_draft(world, draft, client)
+
+        drafting = drafting_cleaned()
         # held as the page's small draft (`facts_key`): a fresh one, or
         # with `regenerate` a new version of the held one
         small = facts_key(payload.thing_id)
@@ -4551,6 +4693,10 @@ class WorldsPlugin(Plugin):
                 joining.append(fact)
         copy = preview.model_copy(deep=True)
         copy.facts.extend(joining)
+        # its cleaned names' marks join the page draft's (languages 4a)
+        copy.marks.extend(
+            m for m in draft.marks if m.id not in {k.id for k in copy.marks}
+        )
         copy.new_names.extend(
             self._nested_names(copy, [row for row in draft.new_names if row.ticked])
         )
@@ -5548,6 +5694,32 @@ class WorldsPlugin(Plugin):
         world.set_curation(settings)
         self._reply("set_curation", _settings_out(settings))
 
+    # --- name lists (languages 4a) ----------------------------------------
+
+    def _name_list_rows(self) -> dict:
+        world = self._require_world()
+        return {"rows": [r.model_dump() for r in name_lists.rows(world)]}
+
+    async def handle_get_name_lists(self, data: dict):
+        """Every row of the name lists, the app's and the world's, for the
+        Names page: `{rows: [{name, kind, scope, off}]}`."""
+
+        self._reply("get_name_lists", self._name_list_rows())
+
+    async def handle_name_list_edit(self, data: dict):
+        """One change to the name lists (`edit`: add, remove,
+        make_global, turn_off, turn_on, remove_everywhere; `kind`: real,
+        cliche, title, keep; `name`), answered as `get_name_lists`. An
+        unknown action or kind is refused, writing nothing."""
+
+        name_lists.edit(
+            self._require_world(),
+            str(data.get("edit") or ""),
+            str(data.get("kind") or ""),
+            str(data.get("name") or ""),
+        )
+        self._reply("name_list_edit", self._name_list_rows())
+
     async def handle_set_field(self, data: dict):
         """Set one field. Never `filings`, which only the filing actions
         write (`add_filing`, `edit_filing`, `remove_filing`), nor
@@ -5577,6 +5749,9 @@ class WorldsPlugin(Plugin):
                     rev.remove_field_value(
                         payload.thing_id, payload.field, _date_in(payload.valid_from)
                     )
+            elif payload.field == "aka" and payload.valid_from is None:
+                # a dropped other name leaves the links that showed it
+                drop_other_names(rev, world, payload.thing_id, payload.value)
             else:
                 rev.set_field(
                     payload.thing_id,
@@ -6047,6 +6222,96 @@ class WorldsPlugin(Plugin):
         else:
             # the scene's world, not the one the Worlds tab shows
             self._reply("language_add_word", {"id": payload.language_id, "scene": True})
+
+    # --- Name it… (languages 4a revised) ----------------------------------
+
+    def _language_entry(self, language_id: str):
+        state = self._require_world().view().thing(str(language_id or ""))
+        if state is None or state.kind != "language":
+            raise ValueError("there's no such language")
+        return state
+
+    async def handle_name_it_rules(self, data: dict):
+        """A language's rules and their patterns, for the Name it… panel:
+        `{language_id, rules: [{id, name, use, patterns}]}`."""
+
+        state = self._language_entry(data.get("language_id"))
+        rules = naming_panel.rules_of(language_of(state))
+        self._reply(
+            "name_it_rules",
+            {"language_id": state.id, "rules": [r.model_dump() for r in rules]},
+        )
+
+    async def handle_name_it_batch(self, data: dict):
+        """A batch of names from a rule, or one of its patterns (`pattern`,
+        an index), leaving out names the world has; no model:
+        `{language_id, rule_id, pattern, names: [{name, meaning}]}`."""
+
+        state = self._language_entry(data.get("language_id"))
+        view = self._require_world().view()
+        rule_id = str(data.get("rule_id") or "")
+        pattern = data.get("pattern")
+        pattern = int(pattern) if pattern is not None else None
+        taken = frozenset(
+            str(t.fields.get("name") or "").lower() for t in view.things(facts=False)
+        )
+        names = naming_panel.batch(
+            language_of(state),
+            rule_id,
+            pattern=pattern,
+            count=int(data.get("count") or naming_panel.BATCH),
+            exclude=taken,
+        )
+        self._reply(
+            "name_it_batch",
+            {
+                "language_id": state.id,
+                "rule_id": rule_id,
+                "pattern": pattern,
+                "names": names,
+                # one coined word's rolls, for From a meaning (owner, Test3)
+                **({"slot": str(data["slot"])} if data.get("slot") else {}),
+            },
+        )
+
+    async def handle_name_it_rename(self, data: dict):
+        """Rename an entry or stub to a name Name it… picked
+        (`repoint.rename_everywhere`), and answer with its page:
+        `name_it_rename {...thing}`. A name another thing has is refused."""
+
+        world = self._require_world()
+        thing_id = str(data.get("thing_id") or "")
+        name = str(data.get("name") or "").strip()
+        if not name:
+            raise ValueError("a name can't be blank")
+        with world.revision(Source.manual(note="renamed with Name it")) as rev:
+            rename_everywhere(rev, world, thing_id, name)
+        self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
+
+    async def handle_name_it_meaning(self, data: dict):
+        """Names for a meaning the owner typed, in the background (new words
+        are picked by the model): `{language_id, text, candidates}`."""
+
+        state = self._language_entry(data.get("language_id"))
+        text = str(data.get("text") or "").strip()
+        if not text:
+            raise ValueError("type what it should mean")
+        view = self._require_world().view()
+        client, reply = self._language_reply()
+        self._spawn(
+            naming_panel.from_meaning(view, client, state.id, text, reply=reply),
+            self.create_task_done_callback(
+                "name_it_meaning",
+                "name_it_meaning_failed",
+                "Error naming from a meaning",
+                success_data=lambda found: {
+                    "language_id": state.id,
+                    "text": text,
+                    "candidates": found,
+                },
+                failure_data={"language_id": state.id, "text": text},
+            ),
+        )
 
     async def handle_language_name_in(self, data: dict):
         """The entry's name in a language, for review, in the background:

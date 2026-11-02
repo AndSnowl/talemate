@@ -70,7 +70,7 @@ from talemate.server.worlds import WorldsPlugin
 from talemate.tale_mate import Scene
 from talemate.world.dates import WorldDate
 from talemate.world.filing import filings_of
-from talemate.worldplay import create, prose_gen
+from talemate.worldplay import create
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.context import TOUCHED_LINES, world_context_block
 from talemate.worldplay.persistence import close_world_scene, world_target
@@ -520,19 +520,11 @@ async def _send(plugin, action: str, *responses, **data) -> dict:
     return _last(plugin, action)
 
 
-def _prose(kind: str) -> list[str]:
-    """One prose reply per section a `kind` draft writes."""
-
-    return [f"Prose of a {kind}." for _ in prose_gen.sections_for(kind)]
-
-
 async def _draft(plugin, kind: str, reply, *, then=(), **data) -> dict:
-    """A draft page (`preview_thing`) from the model's `reply` and its
-    prose, then `then` (a same-thing verdict, asked last)."""
+    """A draft page (`preview_thing`) from the model's `reply` (a draft
+    writes no prose), then `then` (a same-thing verdict, asked last)."""
 
-    return await _send(
-        plugin, "preview_thing", reply, *_prose(kind), *then, kind=kind, **data
-    )
+    return await _send(plugin, "preview_thing", reply, *then, kind=kind, **data)
 
 
 async def _picks(plugin, prompt: str) -> dict[str, str]:
@@ -1076,6 +1068,7 @@ async def test_filing_end_to_end(plugin, client, loadable):
     ]
     row["ticked"] = True
     vasha = await _accept(plugin, draft)
+
     vasha_id = vasha["id"]
 
     # the scene: Vasha brings a sealed letter to the Chief Scribe at the
@@ -1097,8 +1090,13 @@ async def test_filing_end_to_end(plugin, client, loadable):
     assert setup["player"] == {"thing_id": vasha_id, "local": None}
     before = len(client.prompt_history)
     started = await _send(plugin, "start_scene", setup=setup)
-    # the characters' prose was written with their drafts: nothing to ask
-    assert len(client.prompt_history) == before
+    # a draft has no prose (languages 4a) and this test only records the
+    # prose accept schedules: the player's two sections are written at
+    # start
+    assert [c["prompt"].uid for c in client.prompt_history[before:]] == [
+        "world.thing-prose",
+        "world.thing-prose",
+    ]
     record = world.scenes().get(started["scene_id"])
     block = world_context_block(world, record, WorldDate.of(PRESENT))
     touched = _touched(block)
@@ -1185,12 +1183,13 @@ async def test_filing_end_to_end(plugin, client, loadable):
 # the fifteen drafts (the owl-folk, the Tsardom, Velikoye, the Khorol,
 # the Night Court, Runic Magic, the Order, the Academy, the White Talon,
 # the Host, Plumage Signaling, two Wattles versions, the Chief Scribe,
-# Vasha); their prose (one section each, two for a character); the White
-# Talon's verdict; the synopsis (asked once: then cached); the plan; the
-# narrator's turn
+# Vasha); Vasha's prose, written at the scene's start (drafts have none
+# since languages 4a, and this test only records the prose accept
+# schedules); the White Talon's verdict; the synopsis (asked once: then
+# cached); the plan; the narrator's turn
 ASKED = {
     "world.create-thing": 15,
-    "world.thing-prose": 17,
+    "world.thing-prose": 2,
     "world.same-thing": 1,
     "world.group-synopsis": 1,
     "world.scene-setup": 1,

@@ -679,12 +679,14 @@ def _own_facts_only(preview: CreatePreview) -> CreatePreview:
     return preview
 
 
-def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
+def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> list[str]:
     """Write each stub preview into its stub, keeping the id, with only
     its own facts (`_own_facts_only` again: the client's ticks are never
     trusted). A stub
     deleted since planning refuses the start before anything is written;
-    one already filled out (by hand, in the meantime) is left as it is."""
+    one already filled out (by hand, in the meantime) is left as it is.
+    Returns the ids filled: their prose is written next (a draft has none,
+    languages 4a)."""
 
     view = world.view()
     todo = []
@@ -702,6 +704,7 @@ def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
         # the setup came back from the client: its ticks are untrusted, so
         # only the stub's own facts are written again (ruling C25)
         accept_preview(world, _own_facts_only(preview))
+    return [preview.stub_id for preview in todo if preview.stub_id is not None]
 
 
 # --- planning ------------------------------------------------------------------
@@ -837,7 +840,7 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
         played = world.view(setup.start).thing(setup.player.thing_id)
         if played is None or not acts_in_world(played):
             raise ValueError(f"{setup.player.thing_id} can't be played")
-    _accept_stub_previews(world, setup.stub_previews)
+    filled = _accept_stub_previews(world, setup.stub_previews)
 
     view = world.view(setup.start)
     refs: list[SetupRef] = []
@@ -855,6 +858,11 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     for ref in refs:
         if ref.thing_id is not None and client is not None:
             await prose_gen.ensure_prose(world, ref.thing_id, setup.start, client)
+    # the stubs filled here that aren't cast (a place) get theirs too
+    cast_ids = {ref.thing_id for ref in refs}
+    for thing_id in filled:
+        if thing_id not in cast_ids and client is not None:
+            await prose_gen.ensure_prose(world, thing_id, setup.start, client)
 
     entries: list[dict[str, object]] = []
     local_things: list[dict[str, object]] = []

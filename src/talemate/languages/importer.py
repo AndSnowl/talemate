@@ -13,6 +13,8 @@ one, and taking it back out (languages 3a).
 
 from __future__ import annotations
 
+import re
+
 import json
 
 from pydantic import BaseModel, ValidationError
@@ -312,6 +314,15 @@ def _language_named(view: WorldView, name: str | None) -> str | None:
     return None
 
 
+def _about(name: str, description: str) -> str:
+    """A new language's own fact: what it is, and its file's description's
+    first sentence."""
+
+    first = re.split(r"(?<=[.!?])\s+", " ".join(description.split()), maxsplit=1)[0]
+    about = f"{name} is a language of this world."
+    return f"{about} {first}" if first else about
+
+
 def apply_import(
     rev: Revision, view: WorldView, preview: ImportPreview, target_id: str | None = None
 ) -> str:
@@ -333,7 +344,10 @@ def apply_import(
     if similar:
         fields["similar"] = similar
     if target_id is None:
-        return rev.create_thing("language", {"name": language.name, **fields})
+        made = rev.create_thing("language", {"name": language.name, **fields})
+        # the model knows it's a language, not a thing (languages 4a revised)
+        rev.add_fact(made, "general", _about(language.name, preview.file.description))
+        return made
     for field, value in fields.items():
         rev.set_field(target_id, field, value, None)
     return target_id

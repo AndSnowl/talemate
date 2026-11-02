@@ -83,24 +83,20 @@ LOWMERE_REPLY = json.dumps(
 
 
 async def test_preview_thing_with_no_active_scene(world, creator_agent):
-    client = _RealCheckClient(
-        "rc-preview-none", [LOWMERE_REPLY, "Lowmere is half under water."]
-    )
+    client = _RealCheckClient("rc-preview-none", [LOWMERE_REPLY])
     with ClientContext():
         preview = await preview_thing(world, "place", "a half-flooded town", {}, client)
 
     assert preview.name == "Lowmere"
-    assert preview.prose == {"description": "Lowmere is half under water."}
+    assert preview.prose == {}
     # ran as the creator agent, not a generic stand-in -- its own
     # generation settings (e.g. prompt-caching) apply, same as any other
     # call on its client
-    assert client.seen_agents == [creator_agent, creator_agent]
+    assert client.seen_agents == [creator_agent]
 
 
 async def test_preview_thing_with_an_inactive_scene(world, creator_agent):
-    client = _RealCheckClient(
-        "rc-preview-dead", [LOWMERE_REPLY, "Lowmere is half under water."]
-    )
+    client = _RealCheckClient("rc-preview-dead", [LOWMERE_REPLY])
     scene = MockScene()  # MockScene.active defaults to False, same as a dead scene
     with ClientContext():
         with ActiveScene(scene):
@@ -109,7 +105,7 @@ async def test_preview_thing_with_an_inactive_scene(world, creator_agent):
             )
 
     assert preview.name == "Lowmere"
-    assert client.seen_agents == [creator_agent, creator_agent]
+    assert client.seen_agents == [creator_agent]
 
 
 async def test_preview_thing_falls_back_with_no_creator_agent(world):
@@ -117,9 +113,7 @@ async def test_preview_thing_falls_back_with_no_creator_agent(world):
     hasn't touched the engine yet) still works -- the neutral stand-in
     takes over rather than crashing."""
 
-    client = _RealCheckClient(
-        "rc-preview-nocreator", [LOWMERE_REPLY, "Lowmere is half under water."]
-    )
+    client = _RealCheckClient("rc-preview-nocreator", [LOWMERE_REPLY])
     with ClientContext():
         preview = await preview_thing(world, "place", "a half-flooded town", {}, client)
 

@@ -121,6 +121,11 @@ class NewName(BaseModel):
     same_target_id: str | None = None
     tag: str | None = None
     filing: NameFiling | None = None
+    # a stub on accept only while ticked; `unlisted` is a name the facts
+    # write that the reply didn't list (languages 4a revised): it comes
+    # unticked, for the owner to tick
+    ticked: bool = True
+    unlisted: bool = False
 
 
 def _norm(text: str) -> str:

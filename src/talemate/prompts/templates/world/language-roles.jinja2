@@ -1,0 +1,22 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+The owner describes a new place, group or person for their fantasy world. Their words name these languages of the world:
+{% for language in languages -%}
+- {{ language.name }}{% if language.about %}: {{ language.about }}{% endif %}
+{% endfor %}
+For each of these languages, say how the new entry uses it, from the owner's words only:
+- a role: {{ roles|join(", ") }};
+- a share from 0 to 1 when more than one is spoken, the shares adding to about 1.
+Most entries have one main language. Use only the languages listed.
+
+The owner's words: {{ prompt }}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"languages": [{"language": "Moscavian", "role": "official", "share": 1}]}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

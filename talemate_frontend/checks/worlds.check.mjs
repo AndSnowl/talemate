@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
+import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
 import {
     akaAdded,
     akaChanged,
@@ -117,6 +118,7 @@ import {
     elsewhereSegments,
     factDraftSegments,
     freshSegments,
+    linkAt,
     holdFact,
     moveFactTo,
     namedSegments,
@@ -2476,6 +2478,8 @@ check('a group\'s "+ Add": drafted rows, edited, the ticked ones accepted', () =
         action: 'accept_group_add',
         thing_id: 'v',
         rows: [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }],
+        // its cleaned names (languages 4a): none here
+        marks: [],
         draft_key: key,
     };
     assert.deepEqual(sent.at(-1), accept);
@@ -3934,6 +3938,214 @@ check('the same error again is a new event (final review M5)', () => {
     assert.ok(store.errorSeq > first);
 });
 
+// --- languages 4a: cleaned names' marks (final review) -----------------------
+
+check('a nested draft written in keeps its marks beside the owner-changed ones (final I6)', () => {
+    const mark = (id, name) => ({ id, kind: 'replaced', name, was: 'X' + id, spares: [] });
+    const base = { name: 'Moscavia', facts: [], marks: [mark('a', 'Sovyetsk')] };
+    // the owner kept one mark's old name: their marks differ from the base's
+    const edited = { ...base, marks: [] };
+    // the server's new version: the page's mark, and the nested draft's
+    const next = { ...base, marks: [mark('a', 'Sovyetsk'), mark('b', 'Lezhograd')] };
+    const out = rebaseDraft(base, edited, next);
+    assert.deepEqual(out.marks.map((m) => m.id), ['b']);
+});
+
+check('a flagged fresh name stays fresh and carries its flag (4a revised)', () => {
+    const marks = [{ id: 'm', name: 'Novgorod', part: 'Novgorod', why: 'a real city' }];
+    const segments = markSegments([{ text: 'Trade with Novgorod.', ref: null, stub: false }], marks);
+    const fresh = markSegments([{ text: 'Novgorod', ref: null, stub: false, fresh: true, kind: 'place' }], marks);
+    assert.deepEqual(segments.map((s) => [s.text, s.flag || null]), [['Trade with ', null], ['Novgorod', 'm'], ['.', null]]);
+    assert.deepEqual([fresh[0].fresh, fresh[0].flag, fresh[0].kind], [true, 'm', 'place']);
+});
+
+check('pickName changes every place and renames the stub row (4a revised)', () => {
+    const edited = {
+        name: 'Tsardom',
+        facts: [{ text: 'Along the Duchies of the Greywash Coast.' }, { text: "Greywash's tides are cold." }],
+        elsewhere: [{ text: 'Greywash trades salt.' }],
+        new_names: [{ name: 'Duchies of the Greywash Coast', kind: 'place' }],
+        marks: [{ id: 'm', name: 'Duchies of the Greywash Coast', part: 'Greywash', why: 'x' }],
+    };
+    const changes = pickName(edited, 'Greywash', 'Kolvagorsk', { flagged: true, kind: 'place' });
+    assert.deepEqual(changes.facts.map((f) => f.text), ['Along the Duchies of the Kolvagorsk Coast.', "Kolvagorsk's tides are cold."]);
+    assert.equal(changes.elsewhere[0].text, 'Kolvagorsk trades salt.');
+    assert.deepEqual(changes.new_names.map((n) => n.name), ['Duchies of the Kolvagorsk Coast']);
+    assert.deepEqual(changes.marks, []);
+});
+
+check('pickName adds a stub row for a flagged name (4a revised)', () => {
+    const edited = { name: 'T', facts: [{ text: 'Trade with Novgorod.' }], new_names: [], marks: [{ id: 'm', name: 'Novgorod', part: 'Novgorod', why: 'x' }] };
+    const changes = pickName(edited, 'Novgorod', 'Sovyetsk', { flagged: true, kind: 'place' });
+    assert.deepEqual(changes.new_names, [{ name: 'Sovyetsk', kind: 'place', ticked: true }]);
+    const plain = pickName({ ...edited, marks: [] }, 'Novgorod', 'Sovyetsk', { flagged: false, kind: 'place' });
+    assert.deepEqual(plain.new_names, []);
+});
+
+check('keep and never_flag drop only the mark (4a revised)', () => {
+    const edited = { facts: [{ text: 'Trade with Novgorod.' }], marks: [{ id: 'm', name: 'Novgorod', why: 'x' }] };
+    const kept = markEdit(edited, 'm', 'keep');
+    assert.deepEqual(kept, { changes: { marks: [] }, keep: null });
+    assert.deepEqual(markEdit(edited, 'm', 'never_flag'), { changes: { marks: [] }, keep: 'Novgorod' });
+    assert.equal(markEdit(edited, 'm', 'reroll'), null);
+});
+
+check('an unticked new name stays plain in a draft (4a revised, Task 7)', () => {
+    const rows = [{ name: 'Velmora', kind: 'place', ticked: false, unlisted: true }];
+    assert.equal(freshSegments([{ text: 'Roosts in Velmora.', ref: null, stub: false }], rows).some((s) => s.fresh), false);
+    const ticked = freshSegments([{ text: 'Roosts in Velmora.', ref: null, stub: false }], [{ ...rows[0], ticked: true }]);
+    assert.equal(ticked.find((s) => s.text === 'Velmora').fresh, true);
+});
+
+check('previewCounts leaves unticked new names out (4a revised, Task 7)', () => {
+    const counts = previewCounts({ facts: [{ text: 'x' }], new_names: [{ name: 'Velmora', ticked: false, unlisted: true }, { name: 'Ashenmark' }] });
+    assert.equal(counts.stubs, 1);
+});
+
+check('naming a flagged unticked row ticks it (4a revised, Task 7)', () => {
+    const edited = { name: 'T', facts: [{ text: 'Trade with Novgorod.' }], new_names: [{ name: 'Novgorod', kind: 'place', ticked: false, unlisted: true }], marks: [] };
+    const changes = pickName(edited, 'Novgorod', 'Sovyetsk', { flagged: true, kind: 'place' });
+    assert.deepEqual(changes.new_names, [{ name: 'Sovyetsk', kind: 'place', ticked: true, unlisted: true }]);
+});
+
+check('pickName renames a "For other pages" row\'s target and its new stub (final review 1)', () => {
+    const edited = {
+        name: 'T',
+        facts: [],
+        new_names: [],
+        elsewhere: [{ text: 'Greywash is a port.', target_name: 'Greywash', new: { name: 'Greywash', kind: 'place', written: [], aka: [] } }],
+    };
+    const changes = pickName(edited, 'Greywash', 'Velmar', { flagged: true, kind: 'place' });
+    const row = changes.elsewhere[0];
+    assert.equal(row.text, 'Velmar is a port.');
+    assert.equal(row.target_name, 'Velmar');
+    assert.equal(row.new.name, 'Velmar');
+});
+
+check('pickName renames a row\'s written forms and other names, in any case (final review 2)', () => {
+    const edited = {
+        name: 'T',
+        facts: [{ text: 'Ships sail from Greywash.' }],
+        new_names: [
+            { name: 'Kingdom of Greywash', kind: 'place', written: ['Greywash'], aka: [{ name: 'the Greywash Realm' }] },
+            { name: 'greywash shore', kind: 'place', written: [], aka: [] },
+        ],
+    };
+    const changes = pickName(edited, 'Greywash', 'Velmar', { flagged: true, kind: 'place' });
+    assert.deepEqual(
+        changes.new_names.map((r) => [r.name, r.written, r.aka.map((a) => a.name)]),
+        [
+            ['Kingdom of Velmar', ['Velmar'], ['the Velmar Realm']],
+            ['Velmar shore', [], []],
+        ],
+    );
+});
+
+check('a refused Name it rename saves no word (final review 3)', () => {
+    const { store, sent } = freshStore();
+    const words = () => sent.filter((m) => m.action === 'language_add_word').map((m) => m.word ?? m.data?.word);
+    store.openNameIt({ words: 'Tsargrad', target: { thingId: 't1' } });
+    store.pickNameIt('l1', 'Velmar', 'grey hill', [{ word: 'velm', meaning: 'grey' }]);
+    assert.deepEqual(words(), []);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Velmar is already the name of Velmar' } });
+    store.handleMessage(reply('name_it_rename', { id: 't1', kind: 'place', name: 'Tsargrad' }));
+    assert.deepEqual(words(), []);
+    store.openNameIt({ words: 'Tsargrad', target: { thingId: 't1' } });
+    store.pickNameIt('l1', 'Khvod', 'lake', [{ word: 'khvod', meaning: 'lake' }]);
+    store.handleMessage(reply('name_it_rename', { id: 't1', kind: 'place', name: 'Khvod' }));
+    assert.deepEqual(words(), ['khvod', 'Khvod']);
+});
+
+check('a From-a-meaning reply after the panel closed is dropped (final review 5)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    store.nameItFromMeaning('l1', 'lakeland');
+    store.closeNameIt();
+    store.handleMessage(reply('name_it_meaning', { candidates: [{ name: 'Khvodakhan', built_from: [] }] }));
+    assert.deepEqual(store.nameItMeaning.candidates, []);
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    store.nameItFromMeaning('l1', 'lakeland');
+    store.handleMessage(reply('name_it_meaning', { candidates: [{ name: 'Khvodakhan', built_from: [] }] }));
+    assert.deepEqual(store.nameItMeaning.candidates.map((c) => c.name), ['Khvodakhan']);
+    assert.equal(store.nameItMeaning.languageId, 'l1');
+});
+
+check('linkAt finds the link run a selection lies in (final review 4)', () => {
+    const segments = [
+        { text: 'It borders ', ref: null },
+        { text: 'Duchies of the Greywash Coast', ref: 'd1', stub: true },
+        { text: '.', ref: null },
+    ];
+    assert.deepEqual(linkAt(segments, 11, 40), { ref: 'd1', text: 'Duchies of the Greywash Coast', stub: true });
+    assert.deepEqual(linkAt(segments, 26, 34), { ref: 'd1', text: 'Duchies of the Greywash Coast', stub: true });
+    assert.equal(linkAt(segments, 3, 20), null);
+    assert.equal(linkAt(segments, 0, 2), null);
+});
+
+check('Name it on part of a linked name renames the entry in full (final review 4)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Greywash', target: { thingId: 'd1', fullName: 'Duchies of the Greywash Coast' } });
+    store.pickNameIt(null, 'Velmar');
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name ?? asked.data?.name, 'Duchies of the Velmar Coast');
+});
+
+check('dropping a draft\'s other name rewrites its facts to the full name (owner, Test3)', () => {
+    const edited = {
+        name: 'Principality of Drassone',
+        aka: [{ name: 'Drassone', tag: 'common', everyday: true }, { name: 'Drass', tag: 'common' }],
+        facts: [{ text: 'Drassone is cold; Drass is its old name.' }],
+        elsewhere: [{ text: 'Vell flows into Drassone.' }],
+    };
+    const changes = setDraftAka(edited, [{ name: 'Drass', tag: 'common' }]);
+    assert.deepEqual(changes.aka, [{ name: 'Drass', tag: 'common' }]);
+    assert.equal(changes.facts[0].text, 'Principality of Drassone is cold; Drass is its old name.');
+    assert.equal(changes.elsewhere[0].text, 'Vell flows into Principality of Drassone.');
+    assert.deepEqual(setDraftAka(edited, edited.aka), { aka: edited.aka });
+});
+
+check('a pinned name stays through a reroll (owner, Test3)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    const batch = (names) => store.handleMessage(reply('name_it_batch', { names: names.map((name) => ({ name, meaning: '' })) }));
+    batch(['Avo', 'Bel', 'Cor']);
+    store.nameItPin({ name: 'Bel', meaning: '' });
+    batch(['Dun', 'Bel', 'Eth']);
+    assert.deepEqual(store.nameItShown.map((n) => [n.name, !!n.pinned]), [['Bel', true], ['Dun', false], ['Eth', false]]);
+    store.nameItPin({ name: 'Bel', meaning: '' });
+    assert.deepEqual(store.nameItShown.map((n) => n.name), ['Dun', 'Bel', 'Eth']);
+    store.nameItPin({ name: 'Dun', meaning: '' });
+    store.closeNameIt();
+    assert.deepEqual(store.nameItPinned, []);
+});
+
+check('a meaning\'s new word rolls like the batch, once for both forms (owner, Test3)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    store.nameItFromMeaning('l1', 'white lake');
+    const part = (word, meaning, isNew, options) => ({ word, meaning, new: isNew, ...(options ? { options } : {}) });
+    store.handleMessage(reply('name_it_meaning', {
+        candidates: [
+            { name: 'Blanchicaunfo', built_from: [part('blanchic', 'white', false), part('aunfo', 'lake', true, ['aunfo', 'meri', 'lusa'])] },
+            { name: 'Blanchic Aunfo', built_from: [part('blanchic', 'white', false), part('aunfo', 'lake', true, ['aunfo', 'meri', 'lusa'])] },
+        ],
+    }));
+    // one roll section per new word, shared by both forms
+    assert.deepEqual(store.nameItWordParts.map((p) => [p.index, p.meaning]), [[1, 'lake']]);
+    assert.deepEqual(store.nameItWordShown(1).map((n) => n.name), ['aunfo', 'meri', 'lusa']);
+    store.nameItChooseWord(1, 'meri');
+    assert.deepEqual(store.nameItMeaning.candidates.map((c) => c.name), ['Blanchicmeri', 'Blanchic Meri']);
+    // pin one, roll more: the pinned word stays first
+    store.nameItPinWord(1, { name: 'lusa' });
+    store.nameItRules = [{ id: 'words', use: 'words', patterns: [] }];
+    store.nameItRollWord('l1', 1);
+    const asked = sent.filter((m) => m.action === 'name_it_batch').at(-1);
+    assert.equal(asked.slot ?? asked.data?.slot, 'word:1');
+    store.handleMessage(reply('name_it_batch', { slot: 'word:1', names: [{ name: 'Tova', meaning: '' }] }));
+    assert.deepEqual(store.nameItWordShown(1).map((n) => [n.name, !!n.pinned]), [['lusa', true], ['tova', false]]);
+    assert.deepEqual(store.nameItBatch, []);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);
@@ -3942,3 +4154,4 @@ if (failures.length) {
     process.exit(1);
 }
 console.log(`ok ${passed} worlds checks passed`);
+

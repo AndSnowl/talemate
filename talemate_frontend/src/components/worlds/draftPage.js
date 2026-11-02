@@ -20,6 +20,7 @@
 // selection names, `index`) hold.
 
 import { kindInfo } from './worldKinds.js';
+import { markSegments, swapName } from './nameMarks.js';
 
 // the articles a name may lead with (`talemate.world.names.ARTICLES`)
 const ARTICLES = ['the', 'a', 'an'];
@@ -116,10 +117,27 @@ export function previewSegments(text, newNames = []) {
 // F26) is found in any case, as accept will link it.
 export function freshSegments(segments, newNames = [], selected = []) {
     const owned = new Set((selected || []).map(nameKey));
+    // an unticked row (a "+ Add facts" draft's, or one the reply didn't
+    // list) makes no stub: its words stay plain
     const fresh = (newNames || [])
-        .filter((row) => !row.same_target_id)
+        .filter((row) => !row.same_target_id && row.ticked !== false)
         .map((row) => (owned.has(nameKey(row.name)) ? { ...row, anyCase: true } : row));
     return (segments || []).flatMap((segment) => (segment.ref || segment.self || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
+}
+
+// The link run (`{ref, text, stub}`) the characters `start`..`end` of
+// `segments`' text lie wholly in, or null: Name it… on linked words names
+// that entry (final review 4).
+export function linkAt(segments, start, end) {
+    let at = 0;
+    for (const segment of segments || []) {
+        const from = at;
+        at += (segment.text || '').length;
+        if (start >= from && end <= at && end > start) {
+            return segment.ref ? { ref: segment.ref, text: segment.text, stub: !!segment.stub } : null;
+        }
+    }
+    return null;
 }
 
 // A "+ Add facts…" draft fact's segments (as the server linked it) with
@@ -133,12 +151,12 @@ export function factDraftSegments(segments, newNames = []) {
 // (`rendered`, the draft's `elsewhere`: `[{index, text, segments}]`) when
 // it rendered these words, else its new names highlighted here
 // (`previewSegments`).
-export function elsewhereSegments(row, index, rendered = [], newNames = []) {
+export function elsewhereSegments(row, index, rendered = [], newNames = [], marks = []) {
     const found = (rendered || []).find((entry) => entry.index === index);
     if (found && found.text === row.text) {
-        return found.segments;
+        return markSegments(found.segments, marks);
     }
-    return previewSegments(row.text || '', newNames);
+    return markSegments(previewSegments(row.text || '', newNames), marks);
 }
 
 function same(a, b) {
@@ -166,6 +184,9 @@ const ROW_KEYS = {
     new_names: (row) => nameKey(row.name),
     file_into: (row) => row.thing_id,
     move_here: (row) => `${row.fact_id}|${row.repeat ? 'repeat' : 'near'}`,
+    // cleaned names' marks (languages 4a): by id, so a nested draft's
+    // join the page's and the owner's choices on the others stay
+    marks: (row) => row.id,
 };
 
 function rebaseRows(oldBase, oldEdited, newBase, key, fresh) {
@@ -269,7 +290,8 @@ export function draftFactRows(page, edited, rendered = null) {
             edited: rewritten,
             // what a selection names: the server's fact, as the server has it
             serverIndex: rewritten ? null : index,
-            segments,
+            // the names cleaning replaced or found suspect (languages 4a)
+            segments: markSegments(segments, edited?.marks),
         }];
     });
 }
@@ -610,8 +632,21 @@ export function setDraftNumber(edited, field, value) {
 // the draft's other names, after one of the list helpers above
 // (`akaAdded`, `akaChanged`, `akaEveryday`, `akaRemoved`) made the new
 // list from `edited.aka`.
+// a dropped other name leaves the draft's text: each place it's written
+// says the full name instead (owner, Test3: "Drassone" freed for a city)
 export function setDraftAka(edited, aka) {
-    return { aka };
+    const kept = new Set((aka || []).map((entry) => nameKey(entry?.name)));
+    const dropped = (edited?.aka || [])
+        .map((entry) => entry?.name || '')
+        .filter((name) => name && !kept.has(nameKey(name)) && nameKey(name) !== nameKey(edited.name));
+    if (!dropped.length || !edited.name) {
+        return { aka };
+    }
+    const rewrite = (text) => dropped.reduce((out, name) => swapName(out, name, edited.name), text || '');
+    const changes = { aka };
+    if (edited.facts) changes.facts = edited.facts.map((fact) => ({ ...fact, text: rewrite(fact.text) }));
+    if (edited.elsewhere) changes.elsewhere = edited.elsewhere.map((row) => ({ ...row, text: rewrite(row.text) }));
+    return changes;
 }
 
 // a new name's kind, tag, "same as…" or "in…" (`change`)

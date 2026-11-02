@@ -39,6 +39,8 @@
                 <template v-else>
                     <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
+                    <!-- Name it… (languages 4a revised): rename from a language -->
+                    <v-btn v-if="!draft && thing.kind !== 'language'" variant="text" size="x-small" color="accent" prepend-icon="mdi-rename" data-testid="name-it-thing" @click="nameItThing">Name it…</v-btn>
                 </template>
                 <!-- a draft's kind can change (its facts' categories follow) -->
                 <v-select
@@ -56,6 +58,14 @@
                 <v-chip v-else size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
                 <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
                 <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
+                <!-- the draft's own name flagged (final review 6): its
+                     facts show it as the entry itself, unmarked -->
+                <div v-if="draft && nameFlag" class="w-100 d-flex align-center flex-wrap ga-2 text-body-2 name-flag-row" data-testid="draft-name-flag">
+                    <span class="name-flagged">{{ nameFlag.name }}</span>
+                    <span class="text-muted">flagged: {{ nameFlag.why }}</span>
+                    <v-btn size="x-small" variant="outlined" color="accent" prepend-icon="mdi-rename" data-testid="draft-name-flag-name-it" @click="nameItOwnName">Name it…</v-btn>
+                    <v-btn size="x-small" variant="text" data-testid="draft-name-flag-keep" @click="worlds.markAction(nameFlag.id, 'keep')">Keep it</v-btn>
+                </div>
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
                 <!-- its other names (edited under Other names) -->
                 <span v-if="otherNames.length" class="d-inline-flex align-center flex-wrap ga-1" data-testid="thing-other-names">
@@ -292,6 +302,16 @@
                     <!-- who speaks what here (languages 3a); a language's
                          own page has none -->
                     <EntryLanguages v-if="!draft && thing.kind !== 'language'" :thing="thing" />
+                    <!-- a draft's, found from the owner's words (languages
+                         4a); none in a world without languages -->
+                    <EntryLanguages
+                        v-else-if="draft && thing.kind !== 'language'"
+                        :thing="thing"
+                        draft
+                        :rows="edited?.languages || []"
+                        :inherited-rows="edited?.inherited_languages || []"
+                        @change="worlds.draftLanguages($event)"
+                    />
 
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
                          line under the heading (a draft page's nested draft
@@ -553,7 +573,7 @@
                 <!-- 5. Could move here -->
                 <MoveHere :draft="edited" @tick="tickMove" />
                 <!-- 6. New stubs -->
-                <PreviewStubs :rows="edited.new_names || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
+                <PreviewStubs :rows="edited.new_names || []" :marks="edited.marks || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
                 <!-- 7. File into this -->
                 <div v-if="(edited.file_into || []).length" class="mt-3" data-testid="draft-file-into">
                     <div class="suggestion-heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>
@@ -611,6 +631,7 @@
             :before="selection?.before || ''"
             :draft="draft"
             :blocked="selection?.blocked || ''"
+            :link="selection?.link || null"
             :exclude="thing && thing.id ? [thing.id] : []"
             @stub="makeStub(false, $event)"
             @expand="makeStub(true, $event)"
@@ -642,6 +663,7 @@ import {
     editFact,
     filingKey,
     holdFact,
+    linkAt,
     moveFactTo,
     removeFact as removeDraftFact,
     removeFiling,
@@ -888,6 +910,11 @@ export default {
         };
     },
     computed: {
+        // a mark on the draft's own name (final review 6)
+        nameFlag() {
+            const name = (this.edited?.name || '').toLowerCase();
+            return (this.edited?.marks || []).find((m) => m.name && name.includes(m.name.toLowerCase())) || null;
+        },
         // the Change it… panel belongs on this page: its language's, or
         // the entry it was asked from
         changeHere() {
@@ -1465,6 +1492,28 @@ export default {
             const at = date ? { instant: date.instant, precision: date.precision } : null;
             this.worlds.viewThingAt(at);
         },
+        nameItOwnName() {
+            const mark = this.nameFlag;
+            this.worlds.openNameIt({
+                words: mark.part || mark.name,
+                languageId: (this.edited.languages || [])[0]?.language || (this.edited.inherited_languages || [])[0]?.language_id || null,
+                kind: this.edited.kind,
+                markId: mark.id,
+                target: { draftKey: this.worlds.draft?.key },
+            });
+        },
+        nameItThing() {
+            const own = this.thing.languages_own || [];
+            const seen = (this.thing.languages_view || []).map((r) => ({ language: r.language_id }));
+            this.worlds.openNameIt({
+                words: this.thing.name,
+                languageId: [...own, ...seen][0]?.language || null,
+                kind: this.thing.kind,
+                // the panel can rename only part of it (owner, Test3)
+                target: { thingId: this.thing.id, fullName: this.thing.name },
+                stub: !!this.thing.stub,
+            });
+        },
         startRename() {
             this.rename = { text: this.thing.name, sent: false };
         },
@@ -1653,6 +1702,8 @@ export default {
                 words,
                 before,
                 target: [x, y],
+                // linked words: Name it… names that entry (final review 4)
+                link: linkAt(row.view?.segments, start, end),
                 blocked: row.serverIndex === null ? 'This fact was written or changed here: its words can be linked once it\'s accepted.' : '',
             };
             this.selecting = true;
@@ -1693,6 +1744,14 @@ export default {
 </script>
 
 <style scoped>
+/* under the heading's other parts, on a line of its own */
+.name-flag-row {
+    order: 1;
+}
+.name-flagged {
+    text-decoration: underline wavy rgb(var(--v-theme-warning));
+    text-underline-offset: 3px;
+}
 .draft-name {
     max-width: 340px;
 }

@@ -385,50 +385,35 @@ async def test_moved_source_prose_goes_stale(world, tsardom):
     assert stale() is True
 
 
-async def test_moved_here_fact_leaves_the_new_entrys_prose_stale(world, tsardom):
-    """Final review I2: the preview's prose was written from its own facts
-    only, so with a fact moved here (every own fact still ticked) it's
-    cached as of before the accept -- it reads stale -- and the entry goes
-    in `prose` to be written again."""
+async def test_moved_here_fact_puts_the_new_entry_in_prose(world, tsardom):
+    """Final review I2, since languages 4a: a draft has no prose, so with a
+    fact moved here the new entry goes in `prose` to be written, from its
+    own facts and the moved one."""
 
     t = tsardom
     preview, _prompt = await _zakonnik_here(world, t)
     _tick_moves(preview)
     for fact in preview.facts:
         fact.ticked = True
-    assert preview.prose
+    assert preview.prose == {}
     prose: list[str] = []
     thing_id = accept_preview(world, preview, prose=prose)
     _fact(world, thing_id, LAW_CODE.format("the Zakonnik"))
     assert thing_id in prose
-    cache = world.prose()
-    for section in preview.prose:
-        assert cache.stale(
-            thing_id,
-            section,
-            None,
-            prose_gen.staleness_also(world, thing_id, section, None),
-            prose_gen.unread_categories("lore", section),
-        )
 
 
-async def test_no_move_here_keeps_the_new_entrys_prose_current(world, tsardom):
+async def test_no_move_here_moves_no_other_entrys_prose(world, tsardom):
+    """With nothing moved here, only the new entry itself is in `prose`
+    (to be written: a draft has no prose since languages 4a); no entry a
+    fact would have left is."""
+
     t = tsardom
     preview, _prompt = await _zakonnik_here(world, t)
     for fact in preview.facts:
         fact.ticked = True
     prose: list[str] = []
     thing_id = accept_preview(world, preview, prose=prose)
-    assert thing_id not in prose
-    cache = world.prose()
-    for section in preview.prose:
-        assert not cache.stale(
-            thing_id,
-            section,
-            None,
-            prose_gen.staleness_also(world, thing_id, section, None),
-            prose_gen.unread_categories("lore", section),
-        )
+    assert prose == [thing_id]
 
 
 async def test_undo_redo_move_here(world, tsardom):

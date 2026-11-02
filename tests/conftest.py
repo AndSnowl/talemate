@@ -195,6 +195,15 @@ class MockClientContext:
             client_responses.reset(self.token)
 
 
+@pytest.fixture(autouse=True)
+def _empty_mock_replies():
+    """A reply one test queued and never used doesn't answer the next
+    test's call: the default queue is shared by the process's tests."""
+
+    yield
+    client_responses.get().clear()
+
+
 # ---------------------------------------------------------------------------
 # Async signal helpers
 # ---------------------------------------------------------------------------

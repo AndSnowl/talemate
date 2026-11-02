@@ -83,7 +83,6 @@ SPECIES_REPLY = json.dumps(
         "names": [{"name": "Tsardom of Moscavia", "kind": "place", "aka": []}],
     }
 )
-SPECIES_PROSE = "The Owl-folk are winged."
 
 TSARDOM_REPLY = json.dumps(
     {
@@ -112,7 +111,6 @@ TSARDOM_REPLY = json.dumps(
         ],
     }
 )
-TSARDOM_PROSE = "A northern realm."
 
 # --- 2. the Church --------------------------------------------------------------
 
@@ -151,7 +149,6 @@ CHURCH_REPLY = json.dumps(
         ],
     }
 )
-CHURCH_PROSE = "The state church."
 
 # --- 3. the Divine Right, its facts sent elsewhere ------------------------------
 
@@ -180,7 +177,6 @@ HELD_CROWNING = (
     "Church of the Eternal Light holds that the Light crowned the first Tsar "
     "with a ray of dawn."
 )
-RIGHT_PROSE = "A doctrine of the Tsar's rule."
 
 # --- 4. Runeweaving, Ashenmere and the Codex -----------------------------------
 
@@ -218,7 +214,6 @@ RUNEWEAVING_REPLY = json.dumps(
         ],
     }
 )
-RUNEWEAVING_PROSE = "The art of runes."
 
 REDISCOVERY = (
     "A party of Runeweavers rediscovered the Ashenmere rune dialect in its "
@@ -244,7 +239,6 @@ ASHENMERE_REPLY = json.dumps(
         "elsewhere": [],
     }
 )
-ASHENMERE_PROSE = "Pale caves."
 
 CODEX_REPLY = json.dumps(
     {
@@ -270,7 +264,6 @@ CODEX_REPLY = json.dumps(
         "elsewhere": [],
     }
 )
-CODEX_PROSE = "The founding text."
 
 # --- 5. the Deep Galleries: a fact moves here ------------------------------------
 
@@ -288,7 +281,6 @@ GALLERIES_REPLY = json.dumps(
         "elsewhere": [],
     }
 )
-GALLERIES_PROSE = "Deep chambers."
 
 # --- 6. "Is this X?" with the model's verdict ---------------------------------
 
@@ -301,7 +293,6 @@ HOLLOWS_REPLY = json.dumps(
         "elsewhere": [],
     }
 )
-HOLLOWS_PROSE = "Bat-filled caves."
 HOLLOWS_WHY = "Both are the pale caves under the Greymarch."
 VERDICT_REPLY = json.dumps({"verdict": "same", "why": HOLLOWS_WHY})
 
@@ -334,7 +325,6 @@ CATHEDRAL_PREVIEW = json.dumps(
         "names": [],
     }
 )
-CATHEDRAL_PROSE = "A candlelit cathedral."
 TURN = "Father Ilya lifts a candle and speaks of the Tsar's right."
 
 
@@ -512,7 +502,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
         plugin,
         "preview_thing",
         SPECIES_REPLY,
-        SPECIES_PROSE,
         kind="species",
         prompt="Owl-folk: owl people. Everyone in the Tsardom of Moscavia "
         "became this race suddenly one day.",
@@ -520,7 +509,7 @@ async def test_curation_end_to_end(plugin, client, loadable):
     )
     await _send(plugin, "accept_preview", preview=preview)
     tsardom_id = (await _stubs(plugin))["Tsardom of Moscavia"]["id"]
-    preview = await _expand(plugin, tsardom_id, "place", TSARDOM_REPLY, TSARDOM_PROSE)
+    preview = await _expand(plugin, tsardom_id, "place", TSARDOM_REPLY)
     tsardom = await _send(plugin, "accept_preview", preview=preview)
     assert tsardom["id"] == tsardom_id and tsardom["stub"] is None
     stubs = await _stubs(plugin)
@@ -530,9 +519,7 @@ async def test_curation_end_to_end(plugin, client, loadable):
 
     # 2. the Church, from its stub with the religion hint: its doctrine is
     # a belief (held by it); the Divine Right and the Cathedral filed in it
-    preview = await _expand(
-        plugin, church_id, "lore", CHURCH_REPLY, CHURCH_PROSE, hint="religion"
-    )
+    preview = await _expand(plugin, church_id, "lore", CHURCH_REPLY, hint="religion")
     church = await _send(plugin, "accept_preview", preview=preview)
     assert church["hint"] == "religion"
     doctrine = next(f for f in church["facts"] if f["text"] == DOCTRINE)
@@ -549,7 +536,7 @@ async def test_curation_end_to_end(plugin, client, loadable):
     }
 
     # 3. the Divine Right: its own facts stay, the rest goes elsewhere
-    preview = await _expand(plugin, right_id, "lore", RIGHT_REPLY, RIGHT_PROSE)
+    preview = await _expand(plugin, right_id, "lore", RIGHT_REPLY)
     assert [f["text"] for f in preview["facts"]] == [RIGHT_OWN, RIGHT_HELD]
     # the army is no entry yet: its fact goes onto a new stub
     assert {(e["target_id"], e["text"], e["ticked"]) for e in preview["elsewhere"]} == {
@@ -584,7 +571,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
         plugin,
         "preview_thing",
         RUNEWEAVING_REPLY,
-        RUNEWEAVING_PROSE,
         kind="lore",
         prompt="Runeweaving: runic magic, carved into stone and steel.",
         fields={},
@@ -596,9 +582,7 @@ async def test_curation_end_to_end(plugin, client, loadable):
     ashenmere_id = stubs["Ashenmere"]["id"]
     codex_id = stubs["First Codex of Aelberth"]["id"]
     conclave_id = stubs["Runeweavers' Conclave"]["id"]
-    preview = await _expand(
-        plugin, ashenmere_id, "place", ASHENMERE_REPLY, ASHENMERE_PROSE
-    )
+    preview = await _expand(plugin, ashenmere_id, "place", ASHENMERE_REPLY)
     ashenmere = await _send(
         plugin, "accept_preview", preview=preview, into_stub=ashenmere_id
     )
@@ -609,7 +593,7 @@ async def test_curation_end_to_end(plugin, client, loadable):
 
     # the Codex: the Caves are Ashenmere (the owner says so); the Conclave
     # is left new, a duplicate for the merge below
-    preview = await _expand(plugin, codex_id, "item", CODEX_REPLY, CODEX_PROSE)
+    preview = await _expand(plugin, codex_id, "item", CODEX_REPLY)
     rows = {n["name"]: n for n in preview["new_names"]}
     caves, conclave_row = rows["Ashenmere Caves"], rows["The Conclave"]
     assert [o["thing_id"] for o in caves["same_as"]] == [ashenmere_id]
@@ -633,7 +617,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
         plugin,
         "preview_thing",
         GALLERIES_REPLY,
-        GALLERIES_PROSE,
         kind="place",
         prompt="The Deep Galleries, the lowest chambers of Ashenmere",
         fields={"filings": [{"target": ashenmere_id}]},
@@ -682,7 +665,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
         plugin,
         "preview_thing",
         HOLLOWS_REPLY,
-        HOLLOWS_PROSE,
         VERDICT_REPLY,
         kind="place",
         prompt="The Ashenmere Hollows, pale caves under the Greymarch",
@@ -690,7 +672,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
     )
     assert [c["kind"] for c in client.prompt_history[before:]] == [
         "creative_instruction_3072",
-        "analyze",
         "analyze",
     ]
     verdict_call = client.prompt_history[-1]["prompt"]
@@ -732,7 +713,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
         "plan_scene",
         SETUP_REPLY,
         CATHEDRAL_PREVIEW,
-        CATHEDRAL_PROSE,
         prompt="Vasha hears the Patriarch preach on the Divine Right of the Tsar",
         picks={"the Divine Right of the Tsar": right_id},
         start=WorldDate.of(PRESENT).model_dump(),
@@ -776,11 +756,12 @@ async def test_curation_end_to_end(plugin, client, loadable):
 
 # species, the Tsardom, the Church, the Divine Right, Runeweaving,
 # Ashenmere, the Codex, the Galleries, the Hollows and the Cathedral's stub
-# preview at planning; each one's prose; the Hollows' verdict; the plan;
-# the narrator's turn
+# preview at planning (a draft writes no prose); the Hollows' verdict and
+# the Cathedral's description, written as the scene's start fills its stub
+# (languages 4a); the plan; the narrator's turn
 KINDS_ASKED = {
     "creative_instruction_3072": 10,
     "creative_instruction_2048": 1,
-    "analyze": 11,
+    "analyze": 2,
     "narrate_512": 1,
 }
