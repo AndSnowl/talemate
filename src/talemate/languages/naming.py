@@ -61,9 +61,11 @@ def generator_for(language: Language, kind: str) -> GeneratorDef:
 
     names = [g for g in language.generators if g.use != "words"]
     for wanted in (kind, _BUCKETS.get(kind, "things"), "places"):
-        for generator in names:
-            if generator.use == wanted:
-                return generator
+        # a plain rule first: a composed one (languages 4b-1) is used when
+        # it's picked, or when it's the only one
+        found = [g for g in names if g.use == wanted]
+        for generator in sorted(found, key=lambda g: bool(g.shapes)):
+            return generator
     if names:
         return names[0]
     raise ValueError("this language has no name rules")

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from talemate.languages.entry import language_of
 from talemate.languages.generator import roll
+from talemate.languages.composed import _label
 from talemate.languages.models import Language
 from talemate.languages.naming import translate_text
 from talemate.world.view import WorldView
@@ -31,6 +32,8 @@ class RuleInfo(BaseModel):
     name: str
     use: str
     patterns: list[str]
+    # a composed rule's parts, as labels (languages 4b-1); [] for a plain one
+    parts: list[str] = []
 
 
 def rules_of(language: Language) -> list[RuleInfo]:
@@ -42,6 +45,10 @@ def rules_of(language: Language) -> list[RuleInfo]:
             name=g.name,
             use=g.use,
             patterns=[_WEIGHT.sub("", p).strip() for p in g.patterns],
+            parts=[
+                part.word if part.kind == "word" else _label(language, part)
+                for part in (g.shapes[0].parts if g.shapes else [])
+            ],
         )
         for g in language.generators
     ]
