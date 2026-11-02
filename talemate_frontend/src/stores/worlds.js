@@ -1312,6 +1312,30 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameIt = { ...request };
         },
 
+        // candidate `ci`'s part `pi` (a coined word) becomes `word`, one of
+        // its other rolls; the candidate's name is built again, as one word
+        // or as separate words as it was (owner, Test3)
+        nameItChooseWord(ci, pi, word) {
+            const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+            const candidates = this.nameItMeaning.candidates.map((candidate, i) => {
+                if (i !== ci) return candidate;
+                const parts = candidate.built_from.map((part, j) => (j === pi ? { ...part, word } : part));
+                const words = parts.map((part) => part.word);
+                const name = candidate.name.includes(' ') ? words.map(cap).join(' ') : cap(words.join(''));
+                return { ...candidate, name, built_from: parts };
+            });
+            this.nameItMeaning = { ...this.nameItMeaning, candidates };
+        },
+
+        // more rolls for one coined word (`slot`, "candidate:part"), from the
+        // language's word rule
+        nameItRollWord(languageId, slot) {
+            const rule = this.nameItRules.find((r) => r.use === 'words');
+            if (languageId && rule) {
+                this.request('name_it_batch', { language_id: languageId, rule_id: rule.id, pattern: null, count: 8, slot });
+            }
+        },
+
         // pin `item` (`{name, meaning}`) in the batch, or unpin it
         nameItPin(item) {
             const pinned = this.nameItPinned.some((p) => p.name === item.name);
@@ -2715,7 +2739,23 @@ export const useWorldsStore = defineStore('worlds', {
                     if (this.nameIt) this.nameItRules = data.rules || [];
                     break;
                 case 'name_it_batch':
-                    if (this.nameIt) this.nameItBatch = data.names || [];
+                    if (!this.nameIt) break;
+                    if (data.slot) {
+                        // one coined word's rolls: its word first, then these
+                        const [ci, pi] = String(data.slot).split(':').map(Number);
+                        const candidates = this.nameItMeaning.candidates.map((candidate, i) => {
+                            if (i !== ci) return candidate;
+                            const parts = candidate.built_from.map((part, j) => {
+                                if (j !== pi) return part;
+                                const rolled = (data.names || []).map((n) => n.name.toLowerCase()).filter((w) => w !== part.word);
+                                return { ...part, options: [part.word, ...rolled] };
+                            });
+                            return { ...candidate, built_from: parts };
+                        });
+                        this.nameItMeaning = { ...this.nameItMeaning, candidates };
+                    } else {
+                        this.nameItBatch = data.names || [];
+                    }
                     break;
                 case 'name_it_meaning':
                     // dropped once the panel closed or asked again elsewhere

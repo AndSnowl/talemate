@@ -6269,6 +6269,8 @@ class WorldsPlugin(Plugin):
                 "rule_id": rule_id,
                 "pattern": pattern,
                 "names": names,
+                # one coined word's rolls, for From a meaning (owner, Test3)
+                **({"slot": str(data["slot"])} if data.get("slot") else {}),
             },
         )
 

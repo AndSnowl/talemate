@@ -168,3 +168,18 @@ async def test_removing_an_other_name_rewrites_its_links_to_the_full_name(plugin
         f"The Vell flows through [[thing:{land}|Principality of Drassone]] and"
         f" [[thing:{land}|the Principality]]."
     )
+
+
+async def test_a_batch_echoes_its_slot(plugin):
+    """Owner's run (Test3): one coined word's rolls come back to its slot."""
+
+    language = await _world(plugin)
+    await _act(
+        plugin,
+        "name_it_batch",
+        language_id=language,
+        rule_id="words",
+        count=4,
+        slot="0:1",
+    )
+    assert _last(plugin, "name_it_batch")["data"]["slot"] == "0:1"

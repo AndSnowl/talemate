@@ -4119,6 +4119,31 @@ check('a pinned name stays through a reroll (owner, Test3)', () => {
     assert.deepEqual(store.nameItPinned, []);
 });
 
+check('a meaning\'s new word can be swapped for another roll (owner, Test3)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
+    store.nameItFromMeaning('l1', 'white lake');
+    const part = (word, meaning, isNew, options) => ({ word, meaning, new: isNew, ...(options ? { options } : {}) });
+    store.handleMessage(reply('name_it_meaning', {
+        candidates: [
+            { name: 'Blanchicaunfo', built_from: [part('blanchic', 'white', false), part('aunfo', 'lake', true, ['aunfo', 'meri', 'lusa'])] },
+            { name: 'Blanchic Aunfo', built_from: [part('blanchic', 'white', false), part('aunfo', 'lake', true, ['aunfo', 'meri', 'lusa'])] },
+        ],
+    }));
+    store.nameItChooseWord(0, 1, 'meri');
+    store.nameItChooseWord(1, 1, 'lusa');
+    assert.deepEqual(store.nameItMeaning.candidates.map((c) => c.name), ['Blanchicmeri', 'Blanchic Lusa']);
+    assert.equal(store.nameItMeaning.candidates[0].built_from[1].word, 'meri');
+    // more rolls for one word: the word rule's batch, kept apart by slot
+    store.nameItRules = [{ id: 'words', use: 'words', patterns: [] }];
+    store.nameItRollWord('l1', '0:1');
+    const asked = sent.filter((m) => m.action === 'name_it_batch').at(-1);
+    assert.equal(asked.slot ?? asked.data?.slot, '0:1');
+    store.handleMessage(reply('name_it_batch', { slot: '0:1', names: [{ name: 'Tova', meaning: '' }] }));
+    assert.deepEqual(store.nameItMeaning.candidates[0].built_from[1].options, ['meri', 'tova']);
+    assert.deepEqual(store.nameItBatch, []);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

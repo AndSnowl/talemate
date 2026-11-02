@@ -281,7 +281,19 @@ async def translate_text(
             )
             taken.add(chosen.lower())
             new_words.append({"word": chosen.lower(), "meaning": key})
-            parts.append({"word": chosen.lower(), "meaning": key, "new": True})
+            # the other rolls too, the pick first: the owner may pick
+            # another (owner, Test3)
+            options = [chosen.lower()] + [
+                c.lower() for c in candidates if c.lower() != chosen.lower()
+            ]
+            parts.append(
+                {
+                    "word": chosen.lower(),
+                    "meaning": key,
+                    "new": True,
+                    "options": options,
+                }
+            )
             out.append(chosen)
     return NameInResult(
         name=" ".join(w[:1].upper() + w[1:] for w in out),

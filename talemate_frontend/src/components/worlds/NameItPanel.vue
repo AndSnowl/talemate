@@ -98,11 +98,30 @@
                 <v-btn variant="text" color="accent" size="small" :loading="worlds.nameItMeaning.pending" :disabled="!languageId || !meaning.trim()" data-testid="name-it-find" @click="find">Find</v-btn>
             </div>
             <div v-if="worlds.nameItMeaning.error" class="text-caption text-error mt-1">{{ worlds.nameItMeaning.error }}</div>
-            <div v-for="candidate in worlds.nameItMeaning.candidates" :key="candidate.name" class="d-flex align-center flex-wrap ga-2 mt-2" data-testid="name-it-candidate">
-                <v-chip class="name" variant="tonal" @click="pickCandidate(candidate)">{{ candidate.name }}</v-chip>
-                <span class="text-caption text-muted">
-                    <template v-for="(part, i) in candidate.built_from" :key="i"><span v-if="i"> + </span><span class="foreign">{{ part.word }}</span> “{{ part.meaning }}”<span v-if="part.new"> (new word, saved if you pick it)</span></template>
-                </span>
+            <div v-for="(candidate, ci) in worlds.nameItMeaning.candidates" :key="ci" class="mt-2" data-testid="name-it-candidate">
+                <div class="d-flex align-center flex-wrap ga-2">
+                    <v-chip class="name" variant="tonal" data-testid="name-it-candidate-name" @click="pickCandidate(candidate)">{{ candidate.name }}</v-chip>
+                    <span class="text-caption text-muted">
+                        <template v-for="(part, i) in candidate.built_from" :key="i"><span v-if="i"> + </span><span class="foreign">{{ part.word }}</span> “{{ part.meaning }}”<span v-if="part.new"> (new word, saved if you pick it)</span></template>
+                    </span>
+                </div>
+                <!-- each new word's other rolls (owner, Test3) -->
+                <template v-for="(part, pi) in candidate.built_from" :key="'o' + pi">
+                    <div v-if="part.new && (part.options || []).length > 1" class="d-flex align-center flex-wrap ga-1 mt-1 ml-4" data-testid="name-it-word-rolls">
+                        <span class="text-caption text-muted mr-1">“{{ part.meaning }}”</span>
+                        <v-chip
+                            v-for="option in part.options"
+                            :key="option"
+                            size="x-small"
+                            class="foreign"
+                            :variant="option === part.word ? 'flat' : 'outlined'"
+                            :color="option === part.word ? 'accent' : undefined"
+                            data-testid="name-it-word-option"
+                            @click="worlds.nameItChooseWord(ci, pi, option)"
+                        >{{ option }}</v-chip>
+                        <v-btn variant="text" size="x-small" icon="mdi-dice-multiple" :aria-label="'More words for ' + part.meaning" data-testid="name-it-word-reroll" @click="worlds.nameItRollWord(worlds.nameItMeaning.languageId, ci + ':' + pi)"></v-btn>
+                    </div>
+                </template>
             </div>
         </v-card>
     </v-dialog>

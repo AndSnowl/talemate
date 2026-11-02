@@ -314,3 +314,34 @@ def test_name_it_renames_only_the_words_picked(app, page):
     expect(page.get_by_test_id("thing-name")).to_have_text(
         f"Cathedral of Saint {picked}", timeout=TIMEOUT_MS
     )
+
+
+def test_a_meanings_new_word_shows_other_rolls(
+    app, page, fixed_preview, fixed_clean, fixed_language
+):
+    """Owner's run (Test3): each new word of a meaning comes with other
+    rolls; picking one builds the name again, and Reroll brings more."""
+
+    fixed_language({})
+    draft = _draft_page(app, page, fixed_preview, fixed_clean, "Name it word rolls")
+    _card(page, draft, "Novgorod").get_by_test_id("flag-name-it").click()
+    panel = _panel(page)
+    panel.get_by_test_id("name-it-meaning").locator("input").fill("grey lake")
+    panel.get_by_test_id("name-it-find").click()
+    candidate = panel.get_by_test_id("name-it-candidate").first
+    rolls = candidate.get_by_test_id("name-it-word-rolls")
+    expect(rolls).to_contain_text("“lake”", timeout=TIMEOUT_MS)
+    options = rolls.get_by_test_id("name-it-word-option")
+    other = options.nth(1).inner_text().strip()
+    options.nth(1).click()
+    expect(candidate.get_by_test_id("name-it-candidate-name")).to_have_text(
+        "Syev" + other
+    )
+    before = options.all_inner_texts()
+    rolls.get_by_test_id("name-it-word-reroll").click()
+    for _ in range(60):
+        if options.all_inner_texts() != before:
+            break
+        page.wait_for_timeout(250)
+    after = [o.strip() for o in options.all_inner_texts()]
+    assert after != [b.strip() for b in before] and after[0] == other

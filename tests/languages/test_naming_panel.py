@@ -93,3 +93,18 @@ async def test_from_meaning_translates_and_coins_without_saving(world, otsyenyan
         "syev",
         "voda",
     ]
+
+
+async def test_a_coined_word_comes_with_other_rolls(world, otsyenyan):
+    """Owner's run (Test3): each new word shows several rolls to pick
+    from, the model's pick first."""
+
+    got = await from_meaning(world.view(), None, otsyenyan, "grey lake")
+    lake = got[0]["built_from"][1]
+    assert lake["options"][0] == lake["word"]
+    assert len(lake["options"]) > 3 and len(set(lake["options"])) == len(
+        lake["options"]
+    )
+    assert all(o.islower() and len(o) == 4 for o in lake["options"])
+    # a word the language has comes alone
+    assert "options" not in got[0]["built_from"][0]
