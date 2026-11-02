@@ -39,7 +39,7 @@ __all__ = [
 
 # coined words offered for a new word: the model's pick and the others
 CANDIDATES = 8
-_FUNCTION = {"the", "of", "a", "an"}
+_FUNCTION = {"the", "of", "a", "an", "and"}
 
 
 def _object(reply: str) -> dict:
@@ -62,8 +62,38 @@ def singular(word: str) -> str:
     return w
 
 
+def _words(text: str) -> list[str]:
+    """The text's words: split on spaces and hyphens, punctuation and
+    digits dropped, a possessive's "'s" taken off (owl's → owl)."""
+
+    out = []
+    for raw in re.split(r"[\s\-]+", text.strip()):
+        word = re.sub(r"['’]s$", "", raw.strip('.,;:!?"()[]'))
+        word = re.sub(r"[^\w'’]|\d", "", word)
+        if word:
+            out.append(word)
+    return out
+
+
+def split_of(text: str) -> tuple[str, str] | None:
+    """ "Court of Lakes" as ("Court", "Lakes"): the words before "of" and
+    after it; None when "of" doesn't stand between two parts."""
+
+    words = _words(text)
+    lower = [w.lower() for w in words]
+    if "of" not in lower[1:-1]:
+        return None
+    at = lower.index("of", 1)
+    head = " ".join(w for w in words[:at] if w.lower() not in _FUNCTION)
+    tail = " ".join(words[at + 1 :])
+    return (head, tail) if head and tail else None
+
+
 def read_english(
-    text: str, compound: Callable[[str], dict] | None = None
+    text: str,
+    compound: Callable[[str], dict] | None = None,
+    *,
+    language: Language | None = None,
 ) -> MeaningPhrase:
     """A meaning's structure read from the English (probe 4b-1, 19/20):
     "of" and "the" from its words, the last content word as the noun (made
@@ -71,13 +101,25 @@ def read_english(
     in "Owl-of-Frost", "land" as the "land of" ending; a one-word compound
     ("Blackwater") goes to `compound`, the model."""
 
-    words = [w for w in re.split(r"[\s\-]+", text.strip()) if w]
+    words = _words(text)
     lower = [w.lower() for w in words]
     of = bool(lower) and (lower[0] == "of" or "of" in lower[1:-1])
     the = "the" in lower
     content = [w for w in lower if w not in _FUNCTION]
     ending = ""
-    if content and (content[-1] == "land" or (content[0] == "land" and "of" in lower)):
+    # "land" is the "land of" ending only where the language has one
+    has_land = language is None or (
+        language.name_grammar is not None
+        and any(
+            e.meaning.strip().lower() == "land of"
+            for e in language.name_grammar.endings
+        )
+    )
+    if (
+        has_land
+        and content
+        and (content[-1] == "land" or (content[0] == "land" and "of" in lower))
+    ):
         ending = "land of"
         content = [w for w in content if w != "land"]
         of = False
@@ -122,6 +164,7 @@ async def split_meaning(
     slots: list[NamePart],
     *,
     reply: str | None = None,
+    ask: Callable[[str], dict] | None = None,
 ) -> list[MeaningPhrase]:
     """The owner's meaning as phrases, one a meaning part (`slots`; none:
     one phrase for the whole text). Several parts share the meaning out by
@@ -132,9 +175,19 @@ async def split_meaning(
     pieces = [text]
     if len(slots) > 1:
         pieces = [p for p in re.split(r",|\band\b", text) if p.strip()]
+        found = split_of(text) if len(pieces) == 1 else None
+        if found is not None:
+            # "Owl of Frost": the words before "of" for the plain part, the
+            # rest for the part that takes "of"
+            head, tail = found
+            pieces = [head, f"of {tail}"]
+            if slots[0].of and not slots[1].of:
+                pieces.reverse()
     asked: dict[str, dict] = {}
 
-    async def ask(word: str) -> dict:
+    async def model(word: str) -> dict:
+        if ask is not None:
+            return ask(word)
         if reply is not None:
             return _object(reply)
         if client is None:
@@ -144,9 +197,18 @@ async def split_meaning(
     phrases: list[MeaningPhrase] = []
     for piece in pieces[: max(1, len(slots))]:
         single = re.fullmatch(r"\s*([^\W\d_]+)\s*", piece)
-        if single and single.group(1).lower() not in asked:
-            asked[single.group(1).lower()] = await ask(single.group(1))
-        phrases.append(read_english(piece, compound=lambda w: asked.get(w.lower(), {})))
+        # a word the dictionary has is its own noun, never split
+        if (
+            single
+            and single.group(1).lower() not in asked
+            and lookup_word(language, single.group(1)) is None
+        ):
+            asked[single.group(1).lower()] = await model(single.group(1))
+        phrases.append(
+            read_english(
+                piece, compound=lambda w: asked.get(w.lower(), {}), language=language
+            )
+        )
     while len(phrases) < len(slots):
         phrases.append(MeaningPhrase(noun=""))
     return phrases
@@ -325,6 +387,9 @@ async def give_meaning(
             what=text,
             reply=reply,
         )
+    found = split_of(text)
+    if found is not None:
+        return {"candidates": [await _x_of_y(client, language, text, found, reply)]}
     (phrase,) = await split_meaning(client, language, text, [], reply=reply)
     if not phrase.noun:
         return {"candidates": []}
@@ -342,6 +407,30 @@ async def give_meaning(
                 0, {"name": joined.text, "built_from": _with_options(joined, options)}
             )
     return {"candidates": candidates}
+
+
+async def _x_of_y(
+    client, language: Language, text: str, found: tuple[str, str], reply
+) -> dict:
+    """ "Court of Lakes": the head built, the "of" phrase built, in the
+    order the language's of-rule puts them (after, unless it says
+    before)."""
+
+    head = read_english(found[0], language=language)
+    tail = read_english(f"of {found[1]}", language=language)
+    words, new, options = await resolve_words(
+        client, language, [*_meanings(head), *_meanings(tail)], what=text, reply=reply
+    )
+    first = build_phrase(language, head, words, frozenset(new))
+    second = build_phrase(language, tail, words, frozenset(new))
+    of = language.name_grammar.of if language.name_grammar else None
+    pair = (
+        [second, first] if of is not None and of.place == "before" else [first, second]
+    )
+    return {
+        "name": " ".join(b.text for b in pair),
+        "built_from": [p for b in pair for p in _with_options(b, options)],
+    }
 
 
 async def _suggest_reply(

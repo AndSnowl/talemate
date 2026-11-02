@@ -4202,6 +4202,18 @@ check('reroll sends the pinned parts and keeps them (4b-1)', () => {
     assert.equal(store.nameItParts, null);
 });
 
+check('a builder reply for another rule is dropped (4b-1 final review I5)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.nameItSuggest('l1', 'owl', 't1');
+    // the owner switches rule before Suggest answers
+    store.nameItRollParts('l1', 'men');
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'men', shape: 0, parts: [{ index: 0, kind: 'rule', label: 'Men', pinned: false, rolls: [{ text: 'Zemol', parts: [] }] }] }));
+    store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', ...OWL_PARTS }));
+    assert.equal(store.nameItBuilt, 'Zemol');
+    assert.equal(store.nameItBuilding, false);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

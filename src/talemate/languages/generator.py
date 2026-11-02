@@ -583,6 +583,14 @@ def _built_words(language: Language) -> frozenset[str]:
                     words.add(apply_ending(grammar, vowels, word, ending.meaning))
             except (ValueError, KeyError):
                 continue
+        # the words a form or "of" puts beside a word (lo, lou, dez)
+        changes = [*grammar.the, *grammar.more_than_one]
+        changes += [c for ending in grammar.endings for c in ending.changes]
+        for change in changes:
+            if change.kind in ("word_before", "word_after"):
+                words.update(w.lower().strip("'’-") for w in change.text.split())
+        if grammar.of is not None and grammar.of.how == "word":
+            words.update(w.lower() for w in grammar.of.text.split())
     for generator in language.generators:
         for shape in generator.shapes:
             words.update(p.word.lower() for p in shape.parts if p.kind == "word")

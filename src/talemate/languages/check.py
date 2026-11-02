@@ -193,11 +193,21 @@ def _name_grammar_problems(language: Language) -> list[str]:
             except ValueError as exc:
                 problems.append(f"The grammar for names can't be read: {exc}")
     ids = {g.id for g in language.generators}
+    endings = (
+        {e.meaning.strip().lower() for e in grammar.endings}
+        if grammar is not None
+        else set()
+    )
     for generator in language.generators:
         if not generator.patterns and not generator.shapes:
             problems.append(f"The name rule {generator.id!r} has no patterns or parts")
         for shape in generator.shapes:
             for part in shape.parts:
+                if part.ending and part.ending.strip().lower() not in endings:
+                    problems.append(
+                        f"The name rule {generator.id!r} uses an ending the "
+                        f"grammar for names doesn't have: {part.ending!r}"
+                    )
                 if part.kind == "rule" and part.rule not in ids:
                     problems.append(
                         f"The name rule {generator.id!r} uses a rule that "
@@ -212,9 +222,9 @@ def check_language(
     """Check `language`: what blocks it, what's worth fixing, and sample
     names per generator."""
     report = CheckReport(dictionary_size=len(language.dictionary))
-    report.blocking.extend(_name_grammar_problems(language))
-    if report.blocking:
-        return report
+    # problems in the grammar for names block, but every rule's samples
+    # are still rolled (final review I3)
+    grammar_problems = _name_grammar_problems(language)
     try:
         validate_language(language)
     except Exception as exc:  # GeneratorError, or a bad regex reaching it
@@ -230,6 +240,7 @@ def check_language(
             report.blocking.append(
                 f"The name rule {generator.id!r} can't make names: {exc}"
             )
+    report.blocking.extend(grammar_problems)
     if report.blocking:
         return report
     _check_fit(language, report)

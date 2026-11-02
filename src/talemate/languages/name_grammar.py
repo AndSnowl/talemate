@@ -38,6 +38,7 @@ __all__ = [
     "grammar_rows",
     "lookup_word",
     "parse_condition",
+    "real_words",
     "vowels_of",
 ]
 
@@ -258,7 +259,8 @@ def build_phrase(
         return Built(text=_capitalise(text), parts=[*describing, noun_part])
 
     head = noun
-    if phrase.ending:
+    known = {e.meaning.strip().lower() for e in grammar.endings}
+    if phrase.ending and phrase.ending.strip().lower() in known:
         head = apply_ending(grammar, vowels, head, phrase.ending)
         noun_part["steps"].append(
             f"-{_ending(grammar, phrase.ending).ending} {phrase.ending}"
@@ -340,10 +342,19 @@ def _example_noun(language: Language) -> str:
                 found = re.match(r"\s*([^\W\d_][\w'’-]*)", table.caption or "")
                 if found:
                     return found.group(1).lower()
-    for entry in language.dictionary:
-        if entry.part in ("noun", ""):
-            return entry.word.lower()
+    for entry in real_words(language, "noun"):
+        return entry.word.lower()
     return ""
+
+
+def real_words(language: Language, part: str) -> list[DictionaryEntry]:
+    """Dictionary words of `part` that are words of their own: one word
+    with a meaning (a picked name is saved with none); words marked so
+    first, then unmarked ones (final review I4)."""
+
+    words = [e for e in language.dictionary if e.meanings and " " not in e.word.strip()]
+    marked = [e for e in words if e.part == part]
+    return marked or [e for e in words if not e.part]
 
 
 def _change_words(changes: list[FormChange]) -> str:

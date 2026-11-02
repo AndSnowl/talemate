@@ -10,7 +10,12 @@ import random
 from pydantic import BaseModel, Field
 
 from talemate.languages.models import GeneratorDef, Language, NamePart, NameShape
-from talemate.languages.name_grammar import Built, MeaningPhrase, build_phrase
+from talemate.languages.name_grammar import (
+    Built,
+    MeaningPhrase,
+    build_phrase,
+    real_words,
+)
 
 __all__ = [
     "MISSING_RULE",
@@ -78,14 +83,16 @@ def random_phrase(
     def meaning(entry) -> str:
         return (entry.meanings[0] if entry.meanings else entry.word).strip().lower()
 
-    nouns = [e for e in language.dictionary if e.part in ("noun", "")]
+    nouns = real_words(language, "noun")
     if not nouns:
         return None
     noun = rng.choice(nouns)
     words = {meaning(noun): noun.word}
     describing: list[str] = []
     if part.slot == "describing_noun":
-        adjectives = [e for e in language.dictionary if e.part == "adjective"]
+        adjectives = [
+            e for e in real_words(language, "adjective") if e.part == "adjective"
+        ]
         if adjectives:
             adjective = rng.choice(adjectives)
             describing = [meaning(adjective)]

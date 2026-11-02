@@ -723,6 +723,9 @@ export const useWorldsStore = defineStore('worlds', {
         nameItPartChosen: {},
         nameItPartPinned: {},
         nameItBuilding: false,
+        // the language and rule the builder last asked for: a reply for
+        // another is dropped (final review I5)
+        nameItAsked: null,
         // a language's grammar for names in plain words, by its id (the
         // Names chapter, languages 4b-1): `{rows, has_grammar}`
         nameGrammar: {},
@@ -1395,6 +1398,11 @@ export const useWorldsStore = defineStore('worlds', {
         // the builder: a composed rule's parts rolled, its pins kept
         nameItRollParts(languageId, ruleId) {
             if (!languageId || !ruleId) return;
+            if (this.nameItAsked?.ruleId !== ruleId || this.nameItAsked?.languageId !== languageId) {
+                // another rule: a Suggest still out is for the old one
+                this.nameItBuilding = false;
+            }
+            this.nameItAsked = { languageId, ruleId };
             const keep = this.nameItParts && this.nameItParts.rule_id === ruleId && Object.keys(this.nameItPartPinned).length;
             this.request('name_it_parts', {
                 language_id: languageId,
@@ -1433,12 +1441,15 @@ export const useWorldsStore = defineStore('worlds', {
         nameItSuggest(languageId, ruleId, thingId) {
             if (!languageId || !ruleId || !thingId) return;
             this.nameItBuilding = true;
+            this.nameItAsked = { languageId, ruleId };
             this.request('name_it_suggest', { language_id: languageId, rule_id: ruleId, thing_id: thingId, pinned: { ...this.nameItPartPinned } });
         },
 
         // a builder reply: its parts, each part's first roll chosen (a
         // pinned part keeps its text)
         nameItTakeParts(data) {
+            const asked = this.nameItAsked;
+            if (asked && (asked.ruleId !== data.rule_id || asked.languageId !== data.language_id)) return;
             this.nameItBuilding = false;
             this.nameItParts = { rule_id: data.rule_id, shape: data.shape, parts: data.parts || [] };
             const chosen = {};
@@ -1461,6 +1472,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameItPartChosen = {};
             this.nameItPartPinned = {};
             this.nameItBuilding = false;
+            this.nameItAsked = null;
             this.nameItWordRolls = {};
             this.nameItWordPinned = {};
             this.nameItBatch = [];
@@ -1483,6 +1495,7 @@ export const useWorldsStore = defineStore('worlds', {
         nameItFromMeaning(languageId, text, ruleId = null) {
             if (!languageId || !text.trim()) return;
             this.nameItMeaning = { pending: true, candidates: [], error: null, languageId };
+            if (ruleId) this.nameItAsked = { languageId, ruleId };
             this.request('name_it_meaning', {
                 language_id: languageId,
                 text: text.trim(),
