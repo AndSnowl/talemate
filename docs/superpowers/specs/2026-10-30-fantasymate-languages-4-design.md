@@ -240,6 +240,8 @@ A name is replaced when any of these says so:
 
 ## 4b: fuller names
 
+**Split (owner, 2026-11-02):** 4b-1, the grammar engine, is designed in `2026-11-02-fantasymate-languages-4b1-grammar-engine-design.md`. 4b-2, people's names on top of it (full names that adapt to what the owner gives, parts from connections, forms by sex or rank, forms of address by kind of relationship with per-person overrides, pet names from rules with invented ones as overrides), comes after. The sections below are its starting point.
+
 ### Name rules made of other rules
 
 The owner's idea: a full-name rule is a composition of single-part rules, and the AI (the language-design skill, a change) can write one out of rules the language already has.

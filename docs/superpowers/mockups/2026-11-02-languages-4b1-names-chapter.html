@@ -1,0 +1,46 @@
+<style>
+  .page { background:#282828; color:#ebdbb2; border:1px solid #504945; border-radius:6px; padding:16px 20px; font-family:system-ui,sans-serif; font-size:14px; max-width:820px; }
+  .h { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#a89984; margin:16px 0 6px; display:flex; align-items:center; gap:10px; }
+  .h .act { margin-left:auto; color:#fe8019; letter-spacing:0; text-transform:none; font-size:12px; }
+  .card { border:1px solid #3c3836; border-radius:6px; padding:10px 12px; margin-bottom:8px; }
+  .rule { display:flex; align-items:baseline; gap:10px; padding:4px 0; border-bottom:1px dashed #3c3836; }
+  .rule:last-child { border-bottom:none; }
+  .what { width:150px; color:#a89984; font-size:12px; flex:none; }
+  .how { flex:1; }
+  .ex { color:#a89984; font-size:12px; }
+  .foreign { color:#83a598; font-style:italic; }
+  .pencil { color:#a89984; font-size:12px; cursor:pointer; }
+  .part { display:inline-block; padding:1px 8px; border-radius:10px; background:#3c3836; margin-right:3px; font-size:12px; }
+  .part.fixed { background:transparent; border:1px dashed #665c54; }
+  .part.meaning { background:transparent; border:1px solid #83a598; color:#83a598; }
+  .note { color:#a89984; font-size:12px; margin-top:6px; }
+  .warn { color:#fabd2f; font-size:12px; }
+</style>
+
+<h2>The Names chapter, with the grammar for names</h2>
+<p class="subtitle">Varovni's language page → Names. The prose stays; the rules the engine uses sit under it, readable and editable row by row.</p>
+
+<div class="page">
+  <div style="font-size:18px;margin-bottom:4px">Names</div>
+  <div class="ex">A person has a given name and a family name… Since the Light, many Owl-folk add an owl-name after their old name, joined by the word <span class="foreign">ul</span> (owl-of): Dorvak Ul Zvesk… <span style="color:#fe8019">more</span></div>
+
+  <div class="h">Name rules <span class="act">+ Add a rule</span></div>
+  <div class="card">
+    <div class="rule"><span class="what">Men's names</span><span class="how">CV(F)C[en|ak|ol] · CVC[en|ak|ol]</span><span class="ex">Dorvak, Zemol</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">Family (man / woman)</span><span class="how">CVCV[ovsk] → woman's form adds <span class="foreign">-a</span></span><span class="ex">Kesterovsk / Kesterovska</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">Owl-names</span><span class="how"><span class="part">Men's names</span><span class="part fixed">Ul</span><span class="part meaning">a meaning · plural</span></span><span class="ex">Dorvak Ul Zveski</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">Places</span><span class="how">CVCV[ovsk] · CV(F)C[nya|ina]</span><span class="ex">Khyagovsk, Otsyenya</span><span class="pencil">✎</span></div>
+  </div>
+
+  <div class="h">Grammar for names <span class="act">Change it…</span></div>
+  <div class="card">
+    <div class="rule"><span class="what">Adjectives</span><span class="how">before the noun</span><span class="ex">ilvo ulkha, white owl</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">"of"</span><span class="how">the word <span class="foreign">dez</span>, after the thing owned</span><span class="ex">zovna dez gosvar, name of the sovereign</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">Joined words</span><span class="how">describing word first</span><span class="ex">ilvo + ulkhar → ilvulkhar</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">"the"</span><span class="how"><span class="foreign">-ek</span> after a consonant, <span class="foreign">-k</span> after a vowel; after the plural</span><span class="ex">skeltek, skeltik</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">More than one</span><span class="how"><span class="foreign">-i</span> after a consonant, <span class="foreign">-ni</span> after a vowel</span><span class="ex">skelti, ulkhani</span><span class="pencil">✎</span></div>
+    <div class="rule"><span class="what">Endings</span><span class="how"><span class="foreign">-ets</span> one from · <span class="foreign">-nya</span> land of · <span class="foreign">-ovna</span> thing that does · <span class="foreign">-ush</span> honour</span><span class="ex">Otsyenets</span><span class="pencil">✎</span></div>
+    <div class="note">Each row's example is built by the engine from the rule, so a wrong rule shows a wrong example.</div>
+    <div class="warn">A language without these rules: "No grammar for names yet: names are built in your word order. <u>Fill them in from the grammar</u>" (a Change it… run).</div>
+  </div>
+</div>

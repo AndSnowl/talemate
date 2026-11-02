@@ -1,0 +1,73 @@
+<style>
+  .panel { background:#282828; color:#ebdbb2; border:1px solid #504945; border-radius:6px; padding:16px; font-family:system-ui,sans-serif; font-size:14px; max-width:760px; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
+  .muted { color:#a89984; font-size:12px; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:14px; background:#3c3836; color:#83a598; font-style:italic; cursor:pointer; }
+  .chip.pinned { background:transparent; border:1px solid #83a598; }
+  .chip.fixed { color:#ebdbb2; font-style:normal; background:#32302f; border:1px dashed #665c54; cursor:default; }
+  .chip.on { background:#fe8019; color:#282828; font-style:normal; }
+  .chip.sel { border:1px solid #fe8019; }
+  .pin { font-style:normal; font-size:11px; opacity:.8; }
+  .sel-box { border:1px solid #665c54; border-radius:4px; padding:4px 10px; color:#ebdbb2; }
+  .btn { border:1px solid #fe8019; color:#fe8019; border-radius:4px; padding:3px 10px; font-size:12px; text-transform:uppercase; }
+  .btn.ghost { border:none; }
+  .slot { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 8px; border:1px solid #3c3836; border-radius:6px; }
+  .slot .label { font-size:11px; color:#a89984; }
+  .built { font-size:12px; color:#a89984; margin-left:6px; }
+  .foreign { color:#83a598; font-style:italic; }
+  hr { border:none; border-top:1px solid #3c3836; margin:12px 0; }
+  .namecard { display:inline-flex; gap:3px; padding:4px 6px; border-radius:16px; background:#32302f; }
+</style>
+
+<h2>Name it… with names made of parts</h2>
+<p class="subtitle">Varovni's "owl-name" rule: [man's name] + Ul + [a meaning, plural]. Dorvak's page. Two ways to pin parts.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Pin parts inside each name</h3>
+      <p>The batch stays ten whole names. Each part of a name has its own pin: pin "Dorvak" and Reroll keeps him in every name, rolling only the rest.</p>
+      <div class="panel">
+        <div class="row"><b>Name it:</b><span class="chip on">Dorvak</span><span class="chip on">Ul</span><span class="chip on">Zveski</span><span class="muted">renames it everywhere; "Dorvak Ul Zveski" stays as another name</span></div>
+        <div class="row"><span class="sel-box">Varovni ▾</span><span class="sel-box">Owl-names ▾</span><span class="sel-box">Pattern: any ▾</span><span class="btn">🎲 Reroll</span><span class="btn">✨ Suggest from its facts</span></div>
+        <div class="row">
+          <span class="namecard"><span class="chip pinned">Dorvak <span class="pin">📌</span></span><span class="chip fixed">Ul</span><span class="chip">Zveski <span class="pin">○</span></span></span>
+          <span class="namecard"><span class="chip pinned">Dorvak <span class="pin">📌</span></span><span class="chip fixed">Ul</span><span class="chip">Lunovi <span class="pin">○</span></span></span>
+          <span class="namecard"><span class="chip pinned">Dorvak <span class="pin">📌</span></span><span class="chip fixed">Ul</span><span class="chip">Skelti <span class="pin">○</span></span></span>
+          <span class="namecard"><span class="chip pinned">Dorvak <span class="pin">📌</span></span><span class="chip fixed">Ul</span><span class="chip">Varsani <span class="pin">○</span></span></span>
+          <span class="muted">… ten in all</span>
+        </div>
+        <div class="row muted">Hover a name: Zveski = <span class="foreign">zvesk</span> "star" + plural <span class="foreign">-i</span>. Click a name to use it.</div>
+        <hr>
+        <div class="row"><b>Give a meaning</b><span class="sel-box" style="min-width:200px">of the Stars</span><span class="btn ghost">Find</span></div>
+        <div class="row"><span class="chip">Dorvak Ul Zveski</span><span class="built"><span class="foreign">Ul</span> "owl-of" + <span class="foreign">zvesk</span> "star" + <span class="foreign">-i</span> "more than one" · the order and forms come from Varovni's grammar</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>A builder: one name, part by part</h3>
+      <p>The name in use is laid out part by part, each with its own rolls. Pin or pick per part; Reroll rolls every unpinned part. The batch of ten whole names stays below for plain rules.</p>
+      <div class="panel">
+        <div class="row"><b>Name it:</b><span class="chip on">Dorvak</span><span class="chip on">Ul</span><span class="chip on">Zveski</span></div>
+        <div class="row"><span class="sel-box">Varovni ▾</span><span class="sel-box">Owl-names ▾</span><span class="btn">🎲 Reroll unpinned</span><span class="btn">✨ Suggest from its facts</span></div>
+        <div class="row" style="align-items:flex-start">
+          <div class="slot"><span class="label">man's name 📌</span><span class="chip pinned">Dorvak</span><span class="muted">pinned</span></div>
+          <div class="slot"><span class="label">fixed</span><span class="chip fixed">Ul</span></div>
+          <div class="slot"><span class="label">a meaning (plural) ○</span>
+            <span class="chip sel">Zveski <span class="muted">stars</span></span>
+            <span class="chip">Lunovi <span class="muted">moons</span></span>
+            <span class="chip">Skelti <span class="muted">stones</span></span>
+            <span class="chip">Varsani <span class="muted">snows</span></span>
+          </div>
+        </div>
+        <div class="row"><b style="font-size:16px">Dorvak Ul Zveski</b><span class="btn">Use this name</span><span class="built"><span class="foreign">zvesk</span> "star" + <span class="foreign">-i</span></span></div>
+        <hr>
+        <div class="row"><b>Give a meaning</b><span class="sel-box" style="min-width:200px">of the Stars</span><span class="btn ghost">Find</span><span class="muted">fills the builder's meaning part</span></div>
+      </div>
+    </div>
+  </div>
+</div>
