@@ -308,7 +308,9 @@ def test_name_it_renames_only_the_words_picked(app, page):
     ).click()
     panel = _panel(page)
     panel.get_by_test_id("name-it-part").filter(has_text="Vorogovik").click()
-    expect(panel.locator(".words")).to_have_text("Vorogovik")
+    # the name shows once, as chips: only the word chosen is renamed
+    expect(panel.locator(".part-chosen")).to_have_text("Vorogovik")
+    expect(panel.locator(".words")).to_have_count(0)
     picked = _names(panel)[0]
     panel.get_by_test_id("name-it-name").first.click()
     expect(page.get_by_test_id("thing-name")).to_have_text(
@@ -319,8 +321,9 @@ def test_name_it_renames_only_the_words_picked(app, page):
 def test_a_meanings_new_word_shows_other_rolls(
     app, page, fixed_preview, fixed_clean, fixed_language
 ):
-    """Owner's run (Test3): each new word of a meaning comes with other
-    rolls; picking one builds the name again, and Reroll brings more."""
+    """Owner's run (Test3): each new word of a meaning rolls as the batch
+    does, once for both forms of the name: picking a roll builds the names
+    again, and a pinned roll stays through a reroll."""
 
     fixed_language({})
     draft = _draft_page(app, page, fixed_preview, fixed_clean, "Name it word rolls")
@@ -328,20 +331,24 @@ def test_a_meanings_new_word_shows_other_rolls(
     panel = _panel(page)
     panel.get_by_test_id("name-it-meaning").locator("input").fill("grey lake")
     panel.get_by_test_id("name-it-find").click()
-    candidate = panel.get_by_test_id("name-it-candidate").first
-    rolls = candidate.get_by_test_id("name-it-word-rolls")
-    expect(rolls).to_contain_text("“lake”", timeout=TIMEOUT_MS)
+    expect(panel.get_by_test_id("name-it-candidate")).to_have_count(
+        2, timeout=TIMEOUT_MS
+    )
+    rolls = panel.get_by_test_id("name-it-word-rolls")
+    expect(rolls).to_have_count(1)
+    expect(rolls).to_contain_text("“lake”")
     options = rolls.get_by_test_id("name-it-word-option")
     other = options.nth(1).inner_text().strip()
     options.nth(1).click()
-    expect(candidate.get_by_test_id("name-it-candidate-name")).to_have_text(
-        "Syev" + other
-    )
-    before = options.all_inner_texts()
+    names = panel.get_by_test_id("name-it-candidate-name")
+    expect(names.first).to_have_text("Syev" + other)
+    expect(names.nth(1)).to_have_text("Syev " + other.capitalize())
+    rolls.get_by_test_id("name-it-word-pin").nth(1).click()
+    before = [o.strip() for o in options.all_inner_texts()]
     rolls.get_by_test_id("name-it-word-reroll").click()
     for _ in range(60):
-        if options.all_inner_texts() != before:
+        if [o.strip() for o in options.all_inner_texts()] != before:
             break
         page.wait_for_timeout(250)
     after = [o.strip() for o in options.all_inner_texts()]
-    assert after != [b.strip() for b in before] and after[0] == other
+    assert after != before and after[0] == other

@@ -4119,7 +4119,7 @@ check('a pinned name stays through a reroll (owner, Test3)', () => {
     assert.deepEqual(store.nameItPinned, []);
 });
 
-check('a meaning\'s new word can be swapped for another roll (owner, Test3)', () => {
+check('a meaning\'s new word rolls like the batch, once for both forms (owner, Test3)', () => {
     const { store, sent } = freshStore();
     store.openNameIt({ words: 'Lake', target: { thingId: 't1' } });
     store.nameItFromMeaning('l1', 'white lake');
@@ -4130,17 +4130,19 @@ check('a meaning\'s new word can be swapped for another roll (owner, Test3)', ()
             { name: 'Blanchic Aunfo', built_from: [part('blanchic', 'white', false), part('aunfo', 'lake', true, ['aunfo', 'meri', 'lusa'])] },
         ],
     }));
-    store.nameItChooseWord(0, 1, 'meri');
-    store.nameItChooseWord(1, 1, 'lusa');
-    assert.deepEqual(store.nameItMeaning.candidates.map((c) => c.name), ['Blanchicmeri', 'Blanchic Lusa']);
-    assert.equal(store.nameItMeaning.candidates[0].built_from[1].word, 'meri');
-    // more rolls for one word: the word rule's batch, kept apart by slot
+    // one roll section per new word, shared by both forms
+    assert.deepEqual(store.nameItWordParts.map((p) => [p.index, p.meaning]), [[1, 'lake']]);
+    assert.deepEqual(store.nameItWordShown(1).map((n) => n.name), ['aunfo', 'meri', 'lusa']);
+    store.nameItChooseWord(1, 'meri');
+    assert.deepEqual(store.nameItMeaning.candidates.map((c) => c.name), ['Blanchicmeri', 'Blanchic Meri']);
+    // pin one, roll more: the pinned word stays first
+    store.nameItPinWord(1, { name: 'lusa' });
     store.nameItRules = [{ id: 'words', use: 'words', patterns: [] }];
-    store.nameItRollWord('l1', '0:1');
+    store.nameItRollWord('l1', 1);
     const asked = sent.filter((m) => m.action === 'name_it_batch').at(-1);
-    assert.equal(asked.slot ?? asked.data?.slot, '0:1');
-    store.handleMessage(reply('name_it_batch', { slot: '0:1', names: [{ name: 'Tova', meaning: '' }] }));
-    assert.deepEqual(store.nameItMeaning.candidates[0].built_from[1].options, ['meri', 'tova']);
+    assert.equal(asked.slot ?? asked.data?.slot, 'word:1');
+    store.handleMessage(reply('name_it_batch', { slot: 'word:1', names: [{ name: 'Tova', meaning: '' }] }));
+    assert.deepEqual(store.nameItWordShown(1).map((n) => [n.name, !!n.pinned]), [['lusa', true], ['tova', false]]);
     assert.deepEqual(store.nameItBatch, []);
 });
 

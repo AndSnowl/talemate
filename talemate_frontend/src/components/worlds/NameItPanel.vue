@@ -1,25 +1,25 @@
 <template>
     <v-dialog :model-value="!!request" max-width="780" @update:model-value="!$event && worlds.closeNameIt()">
         <v-card v-if="request" class="name-it pa-4" data-testid="name-it">
-            <div class="d-flex align-baseline flex-wrap ga-2">
+            <!-- an entry's name as chips: the words chosen are renamed, the
+                 rest stays (owner, Test3) -->
+            <div class="d-flex align-center flex-wrap ga-2" data-testid="name-it-parts">
                 <span class="text-subtitle-1">Name it:</span>
-                <span class="words">{{ request.words || 'a new name' }}</span>
+                <template v-if="parts.length > 1">
+                    <v-chip
+                        v-for="(part, i) in parts"
+                        :key="i"
+                        size="small"
+                        label
+                        :class="{ 'part-chosen': chosen(i) }"
+                        :variant="chosen(i) ? 'flat' : 'outlined'"
+                        :color="chosen(i) ? 'accent' : undefined"
+                        data-testid="name-it-part"
+                        @click="togglePart(i)"
+                    >{{ part }}</v-chip>
+                </template>
+                <span v-else class="words">{{ request.words || 'a new name' }}</span>
                 <span class="text-caption text-muted" data-testid="name-it-effect">{{ effect }}</span>
-            </div>
-            <!-- an entry's name: which of its words to rename (owner, Test3) -->
-            <div v-if="parts.length > 1" class="d-flex align-center flex-wrap ga-1 mt-2" data-testid="name-it-parts">
-                <span class="text-caption text-muted mr-1">Rename</span>
-                <v-chip
-                    v-for="(part, i) in parts"
-                    :key="i"
-                    size="small"
-                    label
-                    :variant="chosen(i) ? 'flat' : 'outlined'"
-                    :color="chosen(i) ? 'accent' : undefined"
-                    data-testid="name-it-part"
-                    @click="togglePart(i)"
-                >{{ part }}</v-chip>
-                <span class="text-caption text-muted ml-1">the rest stays</span>
             </div>
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
@@ -59,27 +59,7 @@
             </div>
             <div v-if="!languageId" class="text-body-2 text-muted mt-2">Pick the language to name it in.</div>
 
-            <div class="names mt-3">
-                <v-chip
-                    v-for="item in worlds.nameItShown"
-                    :key="item.name"
-                    class="name"
-                    :class="{ pinned: item.pinned }"
-                    :variant="item.pinned ? 'outlined' : 'tonal'"
-                    :title="item.meaning || 'no meaning of its own'"
-                    data-testid="name-it-name"
-                    @click="pick(item.name, item.meaning)"
-                >{{ item.name }}<v-btn
-                        :icon="item.pinned ? 'mdi-pin' : 'mdi-pin-outline'"
-                        variant="text"
-                        size="x-small"
-                        density="compact"
-                        class="ml-1 pin"
-                        :aria-label="(item.pinned ? 'Unpin ' : 'Pin ') + item.name"
-                        data-testid="name-it-pin"
-                        @click.stop="worlds.nameItPin(item)"
-                    ></v-btn></v-chip>
-            </div>
+            <NameRolls class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
             <div v-if="meaningShown" class="text-caption text-muted mt-1">{{ meaningShown }}</div>
 
             <v-divider class="my-3"></v-divider>
@@ -98,30 +78,27 @@
                 <v-btn variant="text" color="accent" size="small" :loading="worlds.nameItMeaning.pending" :disabled="!languageId || !meaning.trim()" data-testid="name-it-find" @click="find">Find</v-btn>
             </div>
             <div v-if="worlds.nameItMeaning.error" class="text-caption text-error mt-1">{{ worlds.nameItMeaning.error }}</div>
-            <div v-for="(candidate, ci) in worlds.nameItMeaning.candidates" :key="ci" class="mt-2" data-testid="name-it-candidate">
-                <div class="d-flex align-center flex-wrap ga-2">
-                    <v-chip class="name" variant="tonal" data-testid="name-it-candidate-name" @click="pickCandidate(candidate)">{{ candidate.name }}</v-chip>
-                    <span class="text-caption text-muted">
-                        <template v-for="(part, i) in candidate.built_from" :key="i"><span v-if="i"> + </span><span class="foreign">{{ part.word }}</span> “{{ part.meaning }}”<span v-if="part.new"> (new word, saved if you pick it)</span></template>
-                    </span>
+            <div v-for="(candidate, ci) in worlds.nameItMeaning.candidates" :key="ci" class="d-flex align-center flex-wrap ga-2 mt-2" data-testid="name-it-candidate">
+                <v-chip class="name" variant="tonal" data-testid="name-it-candidate-name" @click="pickCandidate(candidate)">{{ candidate.name }}</v-chip>
+                <span class="text-caption text-muted">
+                    <template v-for="(part, i) in candidate.built_from" :key="i"><span v-if="i"> + </span><span class="foreign">{{ part.word }}</span> “{{ part.meaning }}”<span v-if="part.new"> (new word, saved if you pick it)</span></template>
+                </span>
+            </div>
+            <!-- each new word's rolls, once for every form of the name, as
+                 the batch above rolls (owner, Test3) -->
+            <div v-for="part in worlds.nameItWordParts" :key="'w' + part.index" class="mt-3" data-testid="name-it-word-rolls">
+                <div class="d-flex align-center ga-2 mb-1">
+                    <span class="text-caption text-muted">“{{ part.meaning }}”</span>
+                    <v-btn variant="text" size="x-small" color="accent" prepend-icon="mdi-dice-multiple" data-testid="name-it-word-reroll" @click="worlds.nameItRollWord(worlds.nameItMeaning.languageId, part.index)">Reroll</v-btn>
                 </div>
-                <!-- each new word's other rolls (owner, Test3) -->
-                <template v-for="(part, pi) in candidate.built_from" :key="'o' + pi">
-                    <div v-if="part.new && (part.options || []).length > 1" class="d-flex align-center flex-wrap ga-1 mt-1 ml-4" data-testid="name-it-word-rolls">
-                        <span class="text-caption text-muted mr-1">“{{ part.meaning }}”</span>
-                        <v-chip
-                            v-for="option in part.options"
-                            :key="option"
-                            size="x-small"
-                            class="foreign"
-                            :variant="option === part.word ? 'flat' : 'outlined'"
-                            :color="option === part.word ? 'accent' : undefined"
-                            data-testid="name-it-word-option"
-                            @click="worlds.nameItChooseWord(ci, pi, option)"
-                        >{{ option }}</v-chip>
-                        <v-btn variant="text" size="x-small" icon="mdi-dice-multiple" :aria-label="'More words for ' + part.meaning" data-testid="name-it-word-reroll" @click="worlds.nameItRollWord(worlds.nameItMeaning.languageId, ci + ':' + pi)"></v-btn>
-                    </div>
-                </template>
+                <NameRolls
+                    :items="worlds.nameItWordShown(part.index)"
+                    :current="part.word"
+                    testid="name-it-word-option"
+                    pin-testid="name-it-word-pin"
+                    @pick="worlds.nameItChooseWord(part.index, $event.name)"
+                    @pin="worlds.nameItPinWord(part.index, $event)"
+                />
             </div>
         </v-card>
     </v-dialog>
@@ -129,6 +106,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
 const BUCKETS = { character: 'people', being: 'people', place: 'places' };
@@ -139,6 +117,7 @@ const BUCKETS = { character: 'people', being: 'people', place: 'places' };
 // (`worlds.pickNameIt`) and adds the word to the language.
 export default {
     name: 'NameItPanel',
+    components: { NameRolls },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -282,14 +261,6 @@ export default {
 }
 .meaning {
     flex: 0 1 260px;
-}
-.names {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-.pin {
-    font-style: normal;
 }
 .name,
 .foreign {
