@@ -289,6 +289,14 @@ Names that change over a life are not modelled (Non-goals).
 - **Old files without them still load.** People then get single rolled names, as in 4a.
 - A language whose grammar has a "How names are built" section (the test world's Moscavian has one) is the model for what a change should turn into rules.
 
+### Word order from the language's grammar (owner, 2026-11-01)
+
+From a meaning builds a name in the owner's English word order, word by word. "white lake" in a French-like language comes out "Blanchic Aunfoimtte" (white lake), where the language would likely say "lake white". Names built from meanings should follow the language's own order: an adjective before or after its noun, possessives, "X of Y". That order is in the grammar's `word_order` and `adjectives` sections. The model could read them, or the language file could carry a small machine-readable order rule.
+
+### The language agent on the world's model (owner, 2026-11-01)
+
+A language made through the agent route (Claude) writes facts that repeat the brief: "French-like" and "Russian-sounding" end up in the world's context. Its phrases, especially curses, come out tamer than the world's own model (Skyfall) writes. To try: let the language agent hand the creative parts to the world's main model (facts, phrases, maybe the dictionary's flavour), keeping the structure, rules and checks with the agent. Probe it first: the same language brief, with phrases and facts from each model.
+
 ## Probe 4 (before building; ask the owner before running)
 
 On Skyfall, through the app's own calls where they exist:

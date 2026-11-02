@@ -106,3 +106,16 @@ What the runs show:
 - Name it is fast and clear about which rule it's using.
 - From a meaning gave one candidate this time; the plan asks for up to two.
 - A draft with no language in reach marks only list hits. Pick a language, or file the draft somewhere that has one.
+
+### The owner's verdict (2026-11-01)
+
+The owner made world Test3 in the fresh app. Their words: "Overall liking the flow this time around a lot better", and "I am liking the feel of this a lot better than the previous run".
+
+Their notes:
+- **Bug:** a draft showed its tag twice. Fixed in 46529ef5; it came from the final-review fix pass.
+- **In this branch, before merge:**
+  - pin a roll while rerolling;
+  - rename only part of an entry's name ("Vorogovik" in "Cathedral of Saint Vorogovik");
+  - From a meaning shows several rolls for each new word;
+  - removing an other name rewrites the facts that used it to the full name ("Drassone" becomes "Principality of Drassone", freeing "Drassone" for the capital).
+- **Later, filed in the part 4 design:** word order from the language's grammar ("Blanchic Aunfoimtte" or "Aunfoimtte Blanchic"?), and the language agent handing facts and phrases to the world's model. Facts made by the agent route repeated the brief ("French-like", "Russian-sounding"), and its curses were childish.
