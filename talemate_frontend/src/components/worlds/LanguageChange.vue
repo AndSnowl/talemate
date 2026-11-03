@@ -256,6 +256,12 @@ export default {
         },
     },
     watch: {
+        'worlds.languageMakeRoute'() {
+            this.autoStart();
+        },
+        'draft.autoNames'() {
+            this.autoStart();
+        },
         'worlds.languageChangeFocus'() {
             this.focusRequest();
         },
@@ -275,6 +281,7 @@ export default {
     },
     mounted() {
         this.worlds.loadLanguageMakeRoute();
+        this.autoStart();
         if (this.fromEntry) this.worlds.loadLanguageMenu(this.draft.originId);
         this.focusRequest();
     },
@@ -310,6 +317,12 @@ export default {
         fill() {
             if (this.briefOnly) this.copyBrief('fill');
             else this.start('fill');
+        },
+        // opened by the card's Fill them in: start once the route is known
+        autoStart() {
+            if (!this.draft?.autoNames || !this.worlds.languageMakeRoute || this.running || this.otherBusy) return;
+            this.worlds.languageChange = { ...this.draft, autoNames: false };
+            this.fillNames();
         },
         // the grammar for names from the grammar (languages 4b-1)
         fillNames() {

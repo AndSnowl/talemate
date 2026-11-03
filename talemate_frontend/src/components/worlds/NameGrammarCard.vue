@@ -3,7 +3,7 @@
         <div class="sh">
             <span class="text-overline text-muted">Grammar for names</span>
             <v-spacer></v-spacer>
-            <v-btn v-if="hasGrammar" variant="text" size="small" color="accent" data-testid="name-grammar-change" @click="$emit('fill')">Change it…</v-btn>
+            <v-btn v-if="hasGrammar" variant="text" size="small" color="accent" data-testid="name-grammar-change" @click="$emit('change')">Change it…</v-btn>
         </div>
         <template v-if="!hasGrammar">
             <div class="text-body-2 text-muted">No grammar for names yet: names are built in your word order.</div>
@@ -95,7 +95,7 @@ export default {
     props: {
         thing: { type: Object, required: true },
     },
-    emits: ['fill'],
+    emits: ['fill', 'change'],
     setup() {
         return { worlds: useWorldsStore(), SIDES_NOUN, SIDES_ITS, JOINING, OF_HOW };
     },

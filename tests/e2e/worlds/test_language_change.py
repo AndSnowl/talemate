@@ -339,9 +339,9 @@ def test_fill_them_in_starts_a_names_change(app, page, fake_claude_mode):
         has_text="Name rules"
     ).first.click()
     card = thing.get_by_test_id("name-grammar")
+    # one click: the panel opens and the run starts (owner, 2026-11-02)
     card.get_by_test_id("name-grammar-fill").click()
     panel = page.get_by_test_id("language-change")
-    panel.get_by_test_id("change-names").click()
     review = panel.get_by_test_id("review-name-grammar")
     expect(review).to_contain_text("vel → velen", timeout=LONG_MS)
     panel.get_by_test_id("language-accept").click()
