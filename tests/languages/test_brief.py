@@ -209,7 +209,7 @@ def test_a_names_brief_asks_for_name_grammar_only():
     assert brief.startswith("# Change a language for a fantasy world")
     assert "## What to add: the grammar for names" in brief
     assert "`name_grammar`" in brief
-    assert "Change nothing else." in brief
+    assert "Change nothing else" in brief
     assert "Every rule must build the examples the language's tables give" in brief
     for condition in (
         "after_vowel",
@@ -231,3 +231,14 @@ def test_the_full_brief_describes_name_grammar_and_composed_rules():
     language = example["language"]
     assert language.get("name_grammar")
     assert any(g.get("shapes") for g in language["generators"])
+
+
+def test_a_names_brief_turns_naming_customs_into_rules_made_of_parts():
+    """Owner, Test2: Varovni's owl-names were faked with "Ul Kerd" in its
+    People (male) patterns, so the builder never showed."""
+
+    brief = write_brief(
+        None, MakeRequest(kind="names", target_id="x", text=""), current=SAMPLE_FILE
+    )
+    assert "naming customs" in brief and "`shapes`" in brief
+    assert "take those patterns out" in brief
