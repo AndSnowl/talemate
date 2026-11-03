@@ -193,4 +193,30 @@ def test_rows_read_plainly_as_the_acceptance_run_wrote_them():
     )
     ending = next(r for k, r in rows.items() if k.startswith("ending:"))
     assert ending.label == "-ov"
-    assert apply_ending(grammar, frozenset("aeiou"), "dyesh", "one who does") == "dyeshov"
+    assert (
+        apply_ending(grammar, frozenset("aeiou"), "dyesh", "one who does") == "dyeshov"
+    )
+
+
+async def test_a_word_meaning_several_words_wins(world):
+    """Owner, Test2: Varovni's ul means "owl-of", so "owl of the sun" is
+    Ul Svelm, not Ulkha Dez Svelm."""
+
+    lang = _lang(
+        dictionary=[
+            DictionaryEntry(word="ul", meanings=["owl-of"], part="particle"),
+            DictionaryEntry(word="ulkha", meanings=["owl"], part="noun"),
+            DictionaryEntry(word="svelm", meanings=["sun"], part="noun"),
+            DictionaryEntry(word="zhimra", meanings=["snow"], part="noun"),
+        ]
+    )
+    for text in ("owl of the sun", "owl-of-the-sun", "Owl of the Sun"):
+        found = await _give(world, lang, text)
+        assert found["candidates"][0]["name"] == "Ul Svelm", text
+    found = await _give(world, lang, "owl of the snow")
+    first = found["candidates"][0]
+    assert first["name"] == "Ul Zhimra"
+    assert [(p["word"], p["meaning"]) for p in first["built_from"]] == [
+        ("ul", "owl-of"),
+        ("zhimra", "snow"),
+    ]

@@ -387,6 +387,9 @@ async def give_meaning(
             what=text,
             reply=reply,
         )
+    phrased = await _with_phrase_words(client, language, text, reply)
+    if phrased is not None:
+        return {"candidates": [phrased]}
     found = split_of(text)
     if found is not None:
         return {"candidates": [await _x_of_y(client, language, text, found, reply)]}
@@ -407,6 +410,99 @@ async def give_meaning(
                 0, {"name": joined.text, "built_from": _with_options(joined, options)}
             )
     return {"candidates": candidates}
+
+
+def _phrase_entries(language: Language) -> list[tuple[tuple[str, ...], object]]:
+    """Dictionary words whose meaning is two or more words ("owl-of"),
+    as (the meaning's words, the entry), longest first."""
+
+    found = []
+    for entry in language.dictionary:
+        for meaning in entry.meanings:
+            words = tuple(w.lower() for w in _words(meaning))
+            if len(words) >= 2:
+                found.append((words, entry, meaning))
+    return sorted(found, key=lambda item: -len(item[0]))
+
+
+async def _with_phrase_words(
+    client, language: Language, text: str, reply
+) -> dict | None:
+    """A meaning using a word that means several words (Varovni's ul,
+    "owl-of"; owner, Test2): that word stands for them, and what follows
+    a word meaning "…of" is its noun ("owl of the sun" → Ul Svelm). None
+    when the meaning uses no such word."""
+
+    entries = _phrase_entries(language)
+    if not entries:
+        return None
+    words = _words(text)
+    lower = [w.lower() for w in words]
+    pieces: list = []
+    i = 0
+    matched = False
+    while i < len(lower):
+        hit = next(
+            (
+                (len(t), entry, meaning)
+                for t, entry, meaning in entries
+                if tuple(lower[i : i + len(t)]) == t
+            ),
+            None,
+        )
+        if hit is not None:
+            n, entry, meaning = hit
+            pieces.append((entry, meaning))
+            i += n
+            matched = True
+        else:
+            if pieces and isinstance(pieces[-1], list):
+                pieces[-1].append(words[i])
+            else:
+                pieces.append([words[i]])
+            i += 1
+    if not matched:
+        return None
+    grammar = language.name_grammar
+    phrases: list = []
+    for index, piece in enumerate(pieces):
+        if isinstance(piece, tuple):
+            phrases.append(piece)
+            continue
+        phrase = read_english(" ".join(piece), language=language)
+        before = pieces[index - 1] if index else None
+        if isinstance(before, tuple) and _words(before[1])[-1].lower() == "of":
+            # the noun of a word meaning "…of": "the" as the of-rule says
+            the = grammar.of.the if grammar is not None and grammar.of else False
+            phrase = phrase.model_copy(update={"of": False, "the": the})
+        phrases.append(phrase if phrase.noun else None)
+    meanings = [
+        m for p in phrases if isinstance(p, MeaningPhrase) for m in _meanings(p)
+    ]
+    resolved, new, options = await resolve_words(
+        client, language, meanings, what=text, reply=reply
+    )
+    texts: list[str] = []
+    parts: list[dict] = []
+    for phrase in phrases:
+        if phrase is None:
+            continue
+        if isinstance(phrase, tuple):
+            entry, meaning = phrase
+            texts.append(entry.word[:1].upper() + entry.word[1:])
+            parts.append(
+                {
+                    "word": entry.word.lower(),
+                    "meaning": meaning,
+                    "new": False,
+                    "steps": [],
+                }
+            )
+            continue
+        built = build_phrase(language, phrase, resolved, frozenset(new))
+        texts.append(built.text)
+        parts += _with_options(built, options)
+    return {"name": " ".join(texts), "built_from": parts}
 
 
 async def _x_of_y(
