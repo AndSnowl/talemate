@@ -4214,6 +4214,29 @@ check('a builder reply for another rule is dropped (4b-1 final review I5)', () =
     assert.equal(store.nameItBuilding, false);
 });
 
+check('the chosen form goes with Reroll, Find and Suggest (owner, Test2)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Zakan', target: { thingId: 't1' } });
+    const last = (action) => {
+        const m = sent.filter((x) => x.action === action).at(-1);
+        return m.data ?? m;
+    };
+    store.nameItShapeChoice = 1;
+    store.nameItRollParts('l1', 'people');
+    assert.equal(last('name_it_parts').shape, 1);
+    store.nameItFromMeaning('l1', 'owl of the sun', 'people');
+    assert.equal(last('name_it_meaning').shape, 1);
+    store.nameItSuggest('l1', 'people', 't1');
+    assert.equal(last('name_it_suggest').shape, 1);
+    // with no choice, Find sends the form on screen
+    store.nameItShapeChoice = null;
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'people', shape: 0, parts: [] }));
+    store.nameItFromMeaning('l1', 'sun', 'people');
+    assert.equal(last('name_it_meaning').shape, 0);
+    store.closeNameIt();
+    assert.equal(store.nameItShapeChoice, null);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

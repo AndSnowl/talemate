@@ -726,6 +726,9 @@ export const useWorldsStore = defineStore('worlds', {
         // the language and rule the builder last asked for: a reply for
         // another is dropped (final review I5)
         nameItAsked: null,
+        // the form of a composed rule the owner chose (an index into its
+        // shapes), or null for any (owner, Test2)
+        nameItShapeChoice: null,
         // a language's grammar for names in plain words, by its id (the
         // Names chapter, languages 4b-1): `{rows, has_grammar}`
         nameGrammar: {},
@@ -1408,7 +1411,7 @@ export const useWorldsStore = defineStore('worlds', {
                 language_id: languageId,
                 rule_id: ruleId,
                 pinned: { ...this.nameItPartPinned },
-                shape: keep ? this.nameItParts.shape : null,
+                shape: this.nameItShapeChoice ?? (keep ? this.nameItParts.shape : null),
             });
         },
 
@@ -1423,6 +1426,12 @@ export const useWorldsStore = defineStore('worlds', {
             else pinned[index] = text;
             this.nameItPartPinned = pinned;
             if (pinned[index]) this.nameItChoosePart(index, text);
+        },
+
+        // the form a meaning or Suggest goes into: the one chosen, else
+        // the one on screen (the server moves to a form with a meaning part)
+        nameItFormShown() {
+            return this.nameItShapeChoice ?? this.nameItParts?.shape ?? null;
         },
 
         // the owner's own word for a part: it's pinned (empty: unpinned)
@@ -1442,7 +1451,7 @@ export const useWorldsStore = defineStore('worlds', {
             if (!languageId || !ruleId || !thingId) return;
             this.nameItBuilding = true;
             this.nameItAsked = { languageId, ruleId };
-            this.request('name_it_suggest', { language_id: languageId, rule_id: ruleId, thing_id: thingId, pinned: { ...this.nameItPartPinned } });
+            this.request('name_it_suggest', { language_id: languageId, rule_id: ruleId, thing_id: thingId, pinned: { ...this.nameItPartPinned }, shape: this.nameItFormShown() });
         },
 
         // a builder reply: its parts, each part's first roll chosen (a
@@ -1473,6 +1482,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameItPartPinned = {};
             this.nameItBuilding = false;
             this.nameItAsked = null;
+            this.nameItShapeChoice = null;
             this.nameItWordRolls = {};
             this.nameItWordPinned = {};
             this.nameItBatch = [];
@@ -1499,7 +1509,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('name_it_meaning', {
                 language_id: languageId,
                 text: text.trim(),
-                ...(ruleId ? { rule_id: ruleId, pinned: { ...this.nameItPartPinned } } : {}),
+                ...(ruleId ? { rule_id: ruleId, pinned: { ...this.nameItPartPinned }, shape: this.nameItFormShown() } : {}),
             });
         },
 

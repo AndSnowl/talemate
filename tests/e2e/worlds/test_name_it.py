@@ -400,6 +400,7 @@ VAROVNI = Language(
         ),
     ],
     dictionary=[
+        DictionaryEntry(word="svelm", meanings=["sun"], part="noun"),
         DictionaryEntry(word="zvesk", meanings=["star"], part="noun"),
         DictionaryEntry(word="skelt", meanings=["stone"], part="noun"),
         DictionaryEntry(word="varsa", meanings=["snow"], part="noun"),
@@ -413,6 +414,24 @@ VAROVNI = Language(
         ],
     ),
 )
+# Test2's People (male) after Fill them in: two forms, one with Ul and a
+# meaning (owner, 2026-11-03)
+TWO_FORMS = GeneratorDef(
+    id="people",
+    name="People (male)",
+    use="character",
+    shapes=[
+        NameShape(parts=[NamePart(kind="rule", rule="men")]),
+        NameShape(
+            parts=[
+                NamePart(kind="rule", rule="men"),
+                NamePart(kind="word", word="Ul"),
+                NamePart(kind="meaning"),
+            ]
+        ),
+    ],
+)
+VAROVNI = VAROVNI.model_copy(update={"generators": [*VAROVNI.generators, TWO_FORMS]})
 
 
 def _builder(app, page, stem):
@@ -528,3 +547,40 @@ def test_a_plain_rule_keeps_the_batch(app, page):
     expect(panel.get_by_test_id("name-builder")).to_have_count(0, timeout=TIMEOUT_MS)
     expect(panel.get_by_test_id("name-it-name")).to_have_count(10, timeout=TIMEOUT_MS)
     expect(panel.get_by_test_id("name-it-batch-meanings")).to_be_visible()
+
+
+def _people(app, page, stem):
+    panel = _builder(app, page, stem)
+    panel.get_by_test_id("name-it-rule").click()
+    page.get_by_role("option", name="People (male)").click()
+    expect(panel.get_by_test_id("name-it-form")).to_be_visible(timeout=TIMEOUT_MS)
+    return panel
+
+
+def test_find_fills_the_form_with_a_meaning(app, page):
+    """Owner, Test2: Find on a rule whose first form has no meaning part
+    only rerolled."""
+
+    panel = _people(app, page, "Builder find form")
+    panel.get_by_test_id("name-it-form").click()
+    page.get_by_role("option", name="Men's names", exact=True).click()
+    expect(panel.get_by_test_id("name-builder-part")).to_have_count(
+        1, timeout=TIMEOUT_MS
+    )
+    panel.get_by_test_id("name-it-meaning").locator("input").fill("sun")
+    panel.get_by_test_id("name-it-find").click()
+    expect(panel.get_by_test_id("name-builder-part")).to_have_count(
+        3, timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text("Ul Svelm")
+
+
+def test_a_chosen_form_stays_through_rerolls(app, page):
+    panel = _people(app, page, "Builder form stays")
+    panel.get_by_test_id("name-it-form").click()
+    page.get_by_role("option", name="Men's names + Ul + a meaning").click()
+    parts = panel.get_by_test_id("name-builder-part")
+    for _ in range(4):
+        panel.get_by_test_id("name-it-reroll").click()
+        page.wait_for_timeout(400)
+        expect(parts).to_have_count(3)

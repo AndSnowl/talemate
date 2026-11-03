@@ -34,6 +34,8 @@ class RuleInfo(BaseModel):
     patterns: list[str]
     # a composed rule's parts, as labels (languages 4b-1); [] for a plain one
     parts: list[str] = []
+    # each of its forms, its parts joined by "+" ("Men + Ul + a meaning")
+    shapes: list[str] = []
 
 
 def rules_of(language: Language) -> list[RuleInfo]:
@@ -48,6 +50,13 @@ def rules_of(language: Language) -> list[RuleInfo]:
             parts=[
                 part.word if part.kind == "word" else _label(language, part)
                 for part in (g.shapes[0].parts if g.shapes else [])
+            ],
+            shapes=[
+                " + ".join(
+                    part.word if part.kind == "word" else _label(language, part)
+                    for part in form.parts
+                )
+                for form in g.shapes
             ],
         )
         for g in language.generators

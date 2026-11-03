@@ -56,6 +56,19 @@
                     :disabled="!ruleId"
                     data-testid="name-it-pattern"
                 ></v-select>
+                <!-- a composed rule's form: any, or one chosen (owner, Test2) -->
+                <v-select
+                    v-if="composed && shapeItems.length > 2"
+                    :model-value="worlds.nameItShapeChoice"
+                    :items="shapeItems"
+                    label="Form"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="field form"
+                    data-testid="name-it-form"
+                    @update:model-value="chooseForm"
+                ></v-select>
                 <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll unpinned' : 'Reroll' }}</v-btn>
                 <v-btn
                     v-if="composed && request.target?.thingId"
@@ -154,6 +167,11 @@ export default {
         ruleItems() {
             return this.worlds.nameItRules.map((r) => ({ title: r.name, value: r.id }));
         },
+        // a composed rule's forms, with "any" first
+        shapeItems() {
+            const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
+            return [{ title: 'any', value: null }, ...(rule?.shapes || []).map((title, i) => ({ title, value: i }))];
+        },
         // the picked rule is made of parts (languages 4b-1)
         composed() {
             const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
@@ -219,6 +237,7 @@ export default {
             this.worlds.nameItParts = null;
             this.worlds.nameItPartPinned = {};
             this.worlds.nameItPartChosen = {};
+            this.worlds.nameItShapeChoice = null;
             this.roll();
         },
         pattern() {
@@ -255,6 +274,12 @@ export default {
             this.picked = Array.from({ length: to - from + 1 }, (_, j) => from + j);
             this.worlds.nameIt = { ...this.worlds.nameIt, words: this.parts.slice(from, to + 1).join(' ') };
         },
+        chooseForm(shape) {
+            this.worlds.nameItShapeChoice = shape;
+            // another form: its pins no longer fit
+            this.worlds.nameItPartPinned = {};
+            this.roll();
+        },
         roll() {
             if (this.composed) this.worlds.nameItRollParts(this.languageId, this.ruleId);
             else this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
@@ -290,6 +315,9 @@ export default {
 }
 .field {
     flex: 0 1 200px;
+}
+.form {
+    flex: 0 1 340px;
 }
 .meaning {
     flex: 0 1 260px;

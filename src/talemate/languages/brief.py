@@ -266,13 +266,12 @@ def _names(current, used) -> list[str]:
     lines = [
         "## What to add: the grammar for names",
         "",
-        "Write `name_grammar` from this language's grammar sections and "
-        "tables below.",
+        "Write `name_grammar` from this language's grammar sections and tables below.",
         "",
         "Then turn the language's naming customs into rules made of parts "
         "(`shapes`): a custom that puts words with a meaning into a name, such "
-        "as a second name after the given name (\"Owl-of-Stars\") or a family "
-        "named for its home (\"of the Forest\"), becomes its own rule, with a "
+        'as a second name after the given name ("Owl-of-Stars") or a family '
+        'named for its home ("of the Forest"), becomes its own rule, with a '
         "`meaning` part for the words that mean something. When an existing "
         "rule fakes such a custom with fixed words in its patterns, take those "
         "patterns out of it and keep its plain names. Change nothing else.",

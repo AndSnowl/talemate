@@ -220,3 +220,52 @@ async def test_a_word_meaning_several_words_wins(world):
         ("ul", "owl-of"),
         ("zhimra", "snow"),
     ]
+
+
+TWO_FORMS = GeneratorDef(
+    id="people",
+    name="People (male)",
+    use="character",
+    shapes=[
+        NameShape(
+            parts=[NamePart(kind="rule", rule="men"), NamePart(kind="rule", rule="men")]
+        ),
+        NameShape(
+            parts=[
+                NamePart(kind="rule", rule="men"),
+                NamePart(kind="word", word="Ul"),
+                NamePart(kind="meaning"),
+            ]
+        ),
+    ],
+)
+OWL_WORDS = [
+    DictionaryEntry(word="ul", meanings=["owl-of"], part="particle"),
+    DictionaryEntry(word="ulkha", meanings=["owl"], part="noun"),
+    DictionaryEntry(word="svelm", meanings=["sun"], part="noun"),
+]
+
+
+async def test_find_uses_a_form_with_a_meaning_part(world):
+    """Owner, Test2: Find on People (male) just rerolled: the first form
+    has no meaning part."""
+
+    lang = _lang(generators=[*_lang().generators, TWO_FORMS], dictionary=OWL_WORDS)
+    for shape in (None, 0):
+        found = await _give(world, lang, "sun", rule_id="people", shape=shape)
+        assert found["shape"] == 1
+        assert found["parts"][2]["rolls"][0]["text"] == "Svelm"
+
+
+async def test_owl_of_is_not_said_twice_in_a_rule_with_ul(world):
+    lang = _lang(generators=[*_lang().generators, TWO_FORMS], dictionary=OWL_WORDS)
+    found = await _give(world, lang, "owl of the sun", rule_id="people", shape=1)
+    assert found["parts"][2]["rolls"][0]["text"] == "Svelm"
+
+
+def test_rules_list_their_forms():
+    from talemate.languages.naming_panel import rules_of
+
+    lang = _lang(generators=[*_lang().generators, TWO_FORMS])
+    rule = next(r for r in rules_of(lang) if r.id == "people")
+    assert rule.shapes == ["Men + Men", "Men + Ul + a meaning"]

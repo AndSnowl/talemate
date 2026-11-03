@@ -334,6 +334,47 @@ async def _fill_parts(
     return {"shape": shape, "parts": [p.model_dump() for p in out]}
 
 
+def _meaning_shape(language: Language, rule_id: str, shape: int | None) -> int | None:
+    """The form a meaning goes into: `shape` when it has a meaning part,
+    else the rule's first form that has one (owner, Test2: Find on a form
+    without one only rerolled); `shape` as given when none has."""
+
+    generator = next((g for g in language.generators if g.id == rule_id), None)
+    if generator is None or not generator.shapes:
+        return shape
+    has = [
+        i
+        for i, form in enumerate(generator.shapes)
+        if any(p.kind == "meaning" for p in form.parts)
+    ]
+    if shape is not None and shape in has:
+        return shape
+    return has[0] if has else shape
+
+
+def _drop_fixed(
+    language: Language, rule_id: str, shape: int | None, text: str
+) -> tuple[str, bool]:
+    """The meaning without the words a fixed word of the form already says
+    ("owl of" when the form has Ul, "owl-of"), and whether those words
+    ended in "of" (the rest is then that "of"'s noun)."""
+
+    generator = next((g for g in language.generators if g.id == rule_id), None)
+    if generator is None or shape is None or not 0 <= shape < len(generator.shapes):
+        return text, False
+    fixed = {p.word.lower() for p in generator.shapes[shape].parts if p.kind == "word"}
+    words = _words(text)
+    lower = [w.lower() for w in words]
+    for meaning_words, entry, meaning in _phrase_entries(language):
+        if (
+            entry.word.lower() in fixed
+            and tuple(lower[: len(meaning_words)]) == meaning_words
+        ):
+            rest = " ".join(words[len(meaning_words) :])
+            return rest, meaning_words[-1] == "of"
+    return text, False
+
+
 def _meaning_slots(
     language: Language, rule_id: str, shape: int | None
 ) -> list[tuple[int, NamePart]]:
@@ -370,12 +411,16 @@ async def give_meaning(
         raise ValueError("there's no such language")
     language = language_of(state)
     if rule_id:
+        shape = _meaning_shape(language, rule_id, shape)
         slots = _meaning_slots(language, rule_id, shape)
-        if slots and shape is None:
-            shape = 0
+        text, after_of = _drop_fixed(language, rule_id, shape, text)
         phrases = await split_meaning(
             client, language, text, [p for _i, p in slots], reply=reply
         )
+        if after_of and phrases:
+            grammar = language.name_grammar
+            the = grammar.of.the if grammar is not None and grammar.of else False
+            phrases[0] = phrases[0].model_copy(update={"of": False, "the": the})
         found = {i: phrase for (i, _p), phrase in zip(slots, phrases)}
         return await _fill_parts(
             client,
@@ -606,6 +651,7 @@ async def suggest_for(
     language = language_of(state)
     name = view.name_of(thing_id) or ""
     facts = [f.text for f in thing.facts][:20]
+    shape = _meaning_shape(language, rule_id, shape)
     slots = _meaning_slots(language, rule_id, shape)
     if not slots:
         shape_used, parts = roll_parts(language, rule_id, pinned=pinned, shape=shape)
