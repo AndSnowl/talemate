@@ -238,11 +238,17 @@ export default {
         chosen(i) {
             return this.picked.includes(i);
         },
-        // a word on or off; the words renamed run from the first chosen to
-        // the last
+        // a click switches that word on or off (owner, 2026-11-02); the
+        // words renamed stay one run: a word switched off in the middle
+        // keeps the longer side (the later one on a tie), and none left
+        // means all of them again
         togglePart(i) {
-            const all = this.picked.length === this.parts.length;
-            let picked = all ? [i] : this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i];
+            let picked = this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i].sort((a, b) => a - b);
+            if (this.chosen(i) && picked.length && i > picked[0] && i < picked[picked.length - 1]) {
+                const before = picked.filter((p) => p < i);
+                const after = picked.filter((p) => p > i);
+                picked = before.length > after.length ? before : after;
+            }
             if (!picked.length) picked = this.parts.map((_, j) => j);
             const from = Math.min(...picked);
             const to = Math.max(...picked);

@@ -316,7 +316,9 @@ def test_name_it_renames_only_the_words_picked(app, page):
         "name-it-thing"
     ).click()
     panel = _panel(page)
-    panel.get_by_test_id("name-it-part").filter(has_text="Vorogovik").click()
+    # a click switches that word off (owner, 2026-11-02): the rest stays
+    for word in ("Cathedral", "of", "Saint"):
+        panel.get_by_test_id("name-it-part").filter(has_text=word).first.click()
     # the name shows once, as chips: only the word chosen is renamed
     expect(panel.locator(".part-chosen")).to_have_text("Vorogovik")
     expect(panel.locator(".words")).to_have_count(0)
