@@ -1,0 +1,65 @@
+{
+ "fill_Tsevrani": {
+  "route": null,
+  "seconds": 72,
+  "review": "Grammar for names\nDescribing words\nbefore the noun\nzhaven dyesh\n\"of\"\nthe word “tre”, before its noun\ntre dyesh\nJoined words\ndescribing word first\n\"the\"\n-k (plural); -k after -a/-e/-i/-o/-u/-y; -ek\ndyesh → dyeshek\nMore than one\n-a/-o becomes -y after -a/-o; -y after a consonant\ndyesh → dyeshy\n--ov\none who does\ndyesh → dyeshov\n--yk\nsmall, dear\ndyesh → dyeshyk\n--ya\nland of\ndyesh → dyeshya\n--de\nplace\ndyesh → dyeshde\n--yn\none who is\ndyesh → dyeshyn",
+  "rows": [
+   "Describing words\nbefore the noun\nzhaven dyesh",
+   "\"of\"\nthe word “tre”, before its noun\ntre dyesh",
+   "Joined words\ndescribing word first",
+   "\"the\"\n-k (plural); -k after -a/-e/-i/-o/-u/-y; -ek\ndyesh → dyeshek",
+   "More than one\n-a/-o becomes -y after -a/-o; -y after a consonant\ndyesh → dyeshy",
+   "--ov\none who does\ndyesh → dyeshov",
+   "--yk\nsmall, dear\ndyesh → dyeshyk",
+   "--ya\nland of\ndyesh → dyeshya",
+   "--de\nplace\ndyesh → dyeshde",
+   "--yn\none who is\ndyesh → dyeshyn"
+  ]
+ },
+ "fill_Drassonais": {
+  "route": "claude_code",
+  "seconds": 43,
+  "review": "Grammar for names\nDescribing words\nafter the noun\nchinou tud\n\"of\"\nthe word “di”, before its noun\ndi chinou\nJoined words\nmain word first\n\"the\"\n“lou” before (plural); “l'” before before a vowel; “lo” before\nchinou → lo chinou\nMore than one\n-s\nchinou → chinous\n-el\nlittle, dear\nchinou → chinouel\n-aud\none who does\nchinou → chinouaud\n-auve\nplace of\nchinou → chinouauve\n-ais\nperson from\nchinou → chinouais",
+  "rows": [
+   "Describing words\nafter the noun\nchinou tud",
+   "\"of\"\nthe word “di”, before its noun\ndi chinou",
+   "Joined words\nmain word first",
+   "\"the\"\n“lou” before (plural); “l'” before before a vowel; “lo” before\nchinou → lo chinou",
+   "More than one\n-s\nchinou → chinous",
+   "-el\nlittle, dear\nchinou → chinouel",
+   "-aud\none who does\nchinou → chinouaud",
+   "-auve\nplace of\nchinou → chinouauve",
+   "-ais\nperson from\nchinou → chinouais"
+  ]
+ },
+ "home_rule": {
+  "parts": [
+   "Men's names",
+   "a meaning · of"
+  ],
+  "samples": "Roll to see names."
+ },
+ "builder": {
+  "first": "Gafou Di Solenc",
+  "meaning": {
+   "seconds": 0,
+   "built": "Alttin Di Sauvaire",
+   "working": "di “of” + sauvaire “forest”"
+  },
+  "suggest": {
+   "seconds": 6,
+   "before": "Alttin Di Sauvaire",
+   "built": "Nesnhaud Di Osre",
+   "working": "di “of” + osre “owl” (new word, saved if you pick it)"
+  },
+  "reroll": {
+   "kept": "Nesnhaud",
+   "built": [
+    "Nesnhaud Di Drassone",
+    "Nesnhaud Di Nazic",
+    "Nesnhaud Di Brumic"
+   ],
+   "kept_ok": true
+  }
+ }
+}

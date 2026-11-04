@@ -30,7 +30,7 @@ In the owner's fresh test app, world Test3, after the update (worlds backed up f
 
 ## Results (2026-11-02)
 
-Screenshots and raw records are in the plan's workspace: `real-runs.json` and `real-*.png`.
+The raw record is `raw/2026-11-02-languages-4b1-acceptance-runs.json`.
 
 **Fill them in.**
 - **Tsevrani (72 s):**
