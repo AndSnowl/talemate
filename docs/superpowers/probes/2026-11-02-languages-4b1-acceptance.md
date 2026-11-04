@@ -62,3 +62,20 @@ Screenshots and raw records are in the plan's workspace: `real-runs.json` and `r
 - The plain batch's meaning line stayed under the builder.
 
 **Noted:** a composed rule's sample names show "Roll to see names." after its parts are edited, until Roll is pressed.
+
+## The owner's rounds and verdict (2026-11-02 to 2026-11-04)
+
+After the real runs, the owner tried 4b-1 in the test app, and each note was fixed in this branch:
+- **Fill them in starts at once** from the card's button, and it also turns naming customs into rules made of parts (Varovni's owl-name, with the faked "Ul Kerd" patterns taken out).
+- **A dictionary word that means several words stands for them:** ul, "owl-of", so "owl of the sun" gives Ul Svelm.
+- **The builder was redesigned** (mockups `2026-11-03-languages-4b1-builder-meaning-per-part.html` and `…-builder-stable-grid.html`):
+  - a meaning box in each meaning part, whose Find fills that part only;
+  - Suggest fills only the meaning parts;
+  - a Form select;
+  - the panel-wide box only for plain rules;
+  - a fixed grid that doesn't change size between rolls.
+- **The name chips change only the word clicked.** Kept words (a title like King or Commander) stay where they are, with a result line ("King + new name + III").
+
+**Verdict:** "alright I think this is all good now".
+
+**Left for 4b-2:** titles the language makes by rank or sex, and relatives' stubs from a son-of or daughter-of name.
