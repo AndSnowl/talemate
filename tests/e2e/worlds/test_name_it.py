@@ -615,3 +615,24 @@ def test_a_chosen_form_stays_through_rerolls(app, page):
         panel.get_by_test_id("name-it-reroll").click()
         page.wait_for_timeout(400)
         expect(parts).to_have_count(3)
+
+
+def test_kept_words_stay_where_they_are(app, page):
+    """Owner, 2026-11-04: a click changes only the word clicked; a title
+    kept out of the rename stays in its place."""
+
+    _world(
+        app, page, "Name it kept", things=[{"kind": "place", "name": "King Zakan III"}]
+    )
+    _open_thing(page, "King Zakan III").get_by_test_id("name-it-thing").click()
+    panel = _panel(page)
+    chips = panel.get_by_test_id("name-it-part")
+    chips.filter(has_text="King").click()
+    chips.filter(has_text="III").click()
+    expect(panel.locator(".part-chosen")).to_have_text(["Zakan"])
+    expect(panel.get_by_test_id("name-it-result")).to_have_text("King + new name + III")
+    picked = _names(panel)[0]
+    panel.get_by_test_id("name-it-name").first.click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        f"King {picked} III", timeout=TIMEOUT_MS
+    )

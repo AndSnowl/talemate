@@ -21,7 +21,10 @@
                 <span v-else class="words">{{ request.words || 'a new name' }}</span>
                 <span class="text-caption text-muted" data-testid="name-it-effect">{{ effect }}</span>
             </div>
-            <div v-if="parts.length > 1" class="text-caption text-muted font-italic mt-1">click a word to leave it out of the rename</div>
+            <div v-if="parts.length > 1" class="text-caption text-muted mt-1">
+                <span class="font-italic">click a word to keep it out of the rename</span>
+                <span class="ml-2">gives <b data-testid="name-it-result">{{ result }}</b></span>
+            </div>
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
                 <v-select
@@ -141,6 +144,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import NameBuilder from './NameBuilder.vue';
+import { resultLine } from './nameParts.js';
 import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
@@ -163,6 +167,10 @@ export default {
     computed: {
         request() {
             return this.worlds.nameIt;
+        },
+        // what the rename gives: "King + new name + III"
+        result() {
+            return resultLine(this.request?.target?.fullName || '', this.picked);
         },
         // an entry's name, word by word, when the panel renames an entry
         parts() {
@@ -273,22 +281,17 @@ export default {
         chosen(i) {
             return this.picked.includes(i);
         },
-        // a click switches that word on or off (owner, 2026-11-02); the
-        // words renamed stay one run: a word switched off in the middle
-        // keeps the longer side (the later one on a tie), and none left
-        // means all of them again
+        // a click changes only the word clicked (owner, 2026-11-04):
+        // picked words are renamed, the others kept where they are; the
+        // last picked word stays (something has to be renamed)
         togglePart(i) {
-            let picked = this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i].sort((a, b) => a - b);
-            if (this.chosen(i) && picked.length && i > picked[0] && i < picked[picked.length - 1]) {
-                const before = picked.filter((p) => p < i);
-                const after = picked.filter((p) => p > i);
-                picked = before.length > after.length ? before : after;
-            }
-            if (!picked.length) picked = this.parts.map((_, j) => j);
-            const from = Math.min(...picked);
-            const to = Math.max(...picked);
-            this.picked = Array.from({ length: to - from + 1 }, (_, j) => from + j);
-            this.worlds.nameIt = { ...this.worlds.nameIt, words: this.parts.slice(from, to + 1).join(' ') };
+            if (this.chosen(i) && this.picked.length === 1) return;
+            this.picked = this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i].sort((a, b) => a - b);
+            this.worlds.nameIt = {
+                ...this.worlds.nameIt,
+                words: this.picked.map((p) => this.parts[p]).join(' '),
+                picked: [...this.picked],
+            };
         },
         chooseForm(shape) {
             this.worlds.nameItShapeChoice = shape;

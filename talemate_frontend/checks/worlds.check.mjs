@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
-import { partLabel } from '../src/components/worlds/nameParts.js';
+import { composeName, partLabel, resultLine } from '../src/components/worlds/nameParts.js';
 import {
     akaAdded,
     akaChanged,
@@ -4276,6 +4276,25 @@ check('Suggest fills only the meaning parts (round 4)', () => {
     store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', shape: 0, fills: { 2: [{ text: 'Varsani', parts: [] }] } }));
     assert.equal(store.nameItBuilt, 'Zemol Ul Varsani');
     assert.equal(store.nameItBuilding, false);
+});
+
+check('kept words stay where they are; the new name takes the first picked word\'s place (owner, 2026-11-04)', () => {
+    assert.equal(composeName('King Zakan III', [1], 'Velmar'), 'King Velmar III');
+    assert.equal(composeName('Zakan III', [0], 'Velmar'), 'Velmar III');
+    assert.equal(composeName('Commander Zakan of the Watch', [1], 'Velmar'), 'Commander Velmar of the Watch');
+    assert.equal(composeName('King Zakan III', [0, 2], 'Velmar'), 'Velmar Zakan');
+    assert.equal(composeName('King Zakan III', [0, 1, 2], 'Velmar Ul Svelm'), 'Velmar Ul Svelm');
+    assert.equal(resultLine('King Zakan III', [1]), 'King + new name + III');
+    assert.equal(resultLine('King Zakan III', []), '');
+    assert.equal(resultLine('Commander Zakan of the Watch', [1]), 'Commander + new name + of the Watch');
+});
+
+check('a rename keeps the words left out (owner, 2026-11-04)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Zakan', target: { thingId: 't1', fullName: 'King Zakan III' }, picked: [1] });
+    store.pickNameIt(null, 'Velmar');
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name ?? asked.data?.name, 'King Velmar III');
 });
 
 if (failures.length) {

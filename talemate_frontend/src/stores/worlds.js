@@ -186,6 +186,7 @@ import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import { markEdit, pickName, swapName } from '../components/worlds/nameMarks.js';
+import { composeName } from '../components/worlds/nameParts.js';
 import {
     factsKey,
     groupDraftKey,
@@ -1583,7 +1584,13 @@ export const useWorldsStore = defineStore('worlds', {
             if (target.thingId) {
                 renaming = true;
                 // part of an entry's name (linked words): the rest is kept
-                const full = target.fullName ? swapName(target.fullName, request.words, name) : name;
+                // part of an entry's name: the words left out stay where
+                // they are (owner, 2026-11-04)
+                const full = target.fullName
+                    ? request.picked
+                        ? composeName(target.fullName, request.picked, name)
+                        : swapName(target.fullName, request.words, name)
+                    : name;
                 this.nameItRenameWords = words.length ? { languageId, words } : null;
                 this.pending = { ...this.pending, name_it_rename: true };
                 this.request('name_it_rename', { thing_id: target.thingId, name: full });
