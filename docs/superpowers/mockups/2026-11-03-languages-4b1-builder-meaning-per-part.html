@@ -1,0 +1,109 @@
+<style>
+  .panel { background:#282828; color:#ebdbb2; border:1px solid #504945; border-radius:6px; padding:16px; font-family:system-ui,sans-serif; font-size:14px; max-width:980px; margin-bottom:22px; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .mt { margin-top:10px; }
+  .muted { color:#a89984; font-size:12px; }
+  .help { color:#a89984; font-size:12px; font-style:italic; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:14px; background:#3c3836; color:#83a598; font-style:italic; }
+  .chip.on { background:#fe8019; color:#282828; font-style:normal; }
+  .chip.off { background:transparent; border:1px solid #665c54; color:#a89984; font-style:normal; }
+  .chip.cur { background:#83a598; color:#282828; }
+  .chip.pinned { background:transparent; border:1px solid #83a598; }
+  .pin { font-style:normal; font-size:11px; opacity:.85; }
+  .sel { border:1px solid #665c54; border-radius:4px; padding:4px 10px; }
+  .sel small { display:block; font-size:10px; color:#a89984; }
+  .btn { border:1px solid #fe8019; color:#fe8019; border-radius:4px; padding:3px 10px; font-size:12px; text-transform:uppercase; white-space:nowrap; }
+  .btn.solid { background:#fe8019; color:#282828; }
+  .btn.ghost { border:none; }
+  .cols { display:flex; gap:10px; align-items:stretch; margin-top:12px; }
+  .col { flex:1 1 0; border:1px solid #504945; border-radius:6px; padding:8px; display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .col.fixed { flex:0 0 120px; border-style:dashed; align-items:center; justify-content:center; text-align:center; }
+  .col.meaning { border-color:#83a598; }
+  .head { display:flex; align-items:baseline; gap:6px; }
+  .head b { font-size:13px; }
+  .input { border:1px solid #665c54; border-radius:4px; padding:5px 8px; color:#ebdbb2; display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .input.empty { color:#7c6f64; }
+  .input.typed { border-color:#83a598; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; }
+  .foreign { color:#83a598; font-style:italic; }
+  .built { font-size:18px; font-weight:600; }
+  .note { background:#32302f; border-left:3px solid #fabd2f; padding:6px 10px; color:#d5c4a1; font-size:12px; margin-top:8px; }
+  h3.frame { font-family:system-ui,sans-serif; margin:18px 0 6px; }
+  .why { font-family:system-ui,sans-serif; font-size:13px; max-width:980px; color:#555; margin:0 0 8px; }
+</style>
+
+<h2>Name it… with a meaning box on each meaning part</h2>
+<p class="subtitle">Every control says what it does, right where it is. The tooltips only add to what's already on the panel.</p>
+
+<h3 class="frame">1 · Zakan III, People (male), the form with Ul</h3>
+<p class="why">The meaning box sits inside the part it fills. Find there fills that part only; the given and family names stay put.</p>
+<div class="panel">
+  <div class="row"><b>Name it:</b><span class="chip on">Zakan</span><span class="chip on">III</span>
+    <span class="help">click a word to leave it out of the rename</span></div>
+  <div class="row mt">
+    <span class="sel"><small>Language</small>Varovni ▾</span>
+    <span class="sel"><small>Rule</small>People (male) ▾</span>
+    <span class="sel"><small>Form · 2 forms</small>given + family + Ul + a meaning ▾</span>
+    <span class="btn">🎲 Reroll the unpinned parts</span>
+    <span class="btn ghost">✨ Suggest meanings from Zakan's facts</span>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="head"><b>Men's given names</b><span class="muted">rolled · pin one, or type your own</span></div>
+      <div class="input empty">your own name… <span class="pin">📌</span></div>
+      <div class="chips"><span class="chip cur">Dorvak</span><span class="chip">Zemol <span class="pin">○</span></span><span class="chip">Kaven <span class="pin">○</span></span><span class="chip">Lutak <span class="pin">○</span></span></div>
+    </div>
+    <div class="col">
+      <div class="head"><b>Family names (men)</b><span class="muted">rolled</span></div>
+      <div class="input empty">your own name… <span class="pin">📌</span></div>
+      <div class="chips"><span class="chip pinned">Kesterovsk <span class="pin">📌</span></span><span class="chip">Brovsk <span class="pin">○</span></span><span class="chip">Zelovsk <span class="pin">○</span></span></div>
+    </div>
+    <div class="col fixed">
+      <div class="muted">always</div>
+      <div style="font-size:16px">Ul</div>
+      <div class="muted"><span class="foreign">ul</span> “owl-of”</div>
+    </div>
+    <div class="col meaning">
+      <div class="head"><b>What “Ul …” means</b><span class="muted">a meaning, in English</span></div>
+      <div class="input typed">sun <span class="btn" style="padding:1px 6px">Find</span></div>
+      <div class="help">Fills this part only. Leave it empty to roll words from the dictionary.</div>
+      <div class="chips"><span class="chip cur">Svelm</span></div>
+      <div class="muted"><span class="foreign">svelm</span> “sun”: already in the dictionary</div>
+    </div>
+  </div>
+  <div class="row mt"><span class="built">Dorvak Kesterovsk Ul Svelm</span><span class="btn solid">Use this name</span></div>
+  <div class="muted">renames Zakan III everywhere; the old name stays as another name</div>
+</div>
+
+<h3 class="frame">2 · A custom with two meaning parts: [given] Ul [meaning] Ka [meaning]</h3>
+<p class="why">Each meaning part has its own box, so it's always clear which meaning goes where. No commas or "and" to know about.</p>
+<div class="panel">
+  <div class="cols">
+    <div class="col"><div class="head"><b>Given names</b></div><div class="chips"><span class="chip cur">Dorvak</span><span class="chip">Zemol</span></div></div>
+    <div class="col fixed"><div class="muted">always</div><div>Ul</div><div class="muted">“owl-of”</div></div>
+    <div class="col meaning"><div class="head"><b>What “Ul …” means</b></div>
+      <div class="input typed">the frost <span class="btn" style="padding:1px 6px">Find</span></div>
+      <div class="chips"><span class="chip cur">Mrazek</span><span class="chip">Khladek</span></div>
+      <div class="muted"><span class="foreign">mraz</span> “frost”, new word: saved if you use the name · + -ek “the”</div></div>
+    <div class="col fixed"><div class="muted">always</div><div>Ka</div><div class="muted">“keeper-of”</div></div>
+    <div class="col meaning"><div class="head"><b>What “Ka …” means</b></div>
+      <div class="input empty">a meaning… (empty: rolled) <span class="btn" style="padding:1px 6px">Find</span></div>
+      <div class="chips"><span class="chip cur">Skelt</span><span class="chip">Varsa</span><span class="chip">Luna</span></div>
+      <div class="muted">rolled from the dictionary: <span class="foreign">skelt</span> “stone”</div></div>
+  </div>
+  <div class="row mt"><span class="built">Dorvak Ul Mrazek Ka Skelt</span><span class="btn solid">Use this name</span></div>
+</div>
+
+<h3 class="frame">3 · A plain rule (no parts): the whole name from a meaning</h3>
+<p class="why">Only a plain rule keeps the panel-wide box, and its label says it makes a whole name.</p>
+<div class="panel">
+  <div class="row"><span class="sel"><small>Rule</small>Towns, squares and lakes ▾</span><span class="sel"><small>Pattern</small>any ▾</span><span class="btn">🎲 Reroll</span></div>
+  <div class="chips mt"><span class="chip">Khyagovsk <span class="pin">○</span></span><span class="chip">Slozhvovsk <span class="pin">○</span></span><span class="chip">Brekovsk <span class="pin">○</span></span><span class="chip">… ten in all</span></div>
+  <div class="row mt" style="border-top:1px solid #3c3836; padding-top:10px">
+    <b>A whole name from a meaning</b>
+    <span class="input empty" style="min-width:260px">lakeland, the white water…</span><span class="btn ghost">Find</span>
+    <span class="help">Translates your words into one name, in this language's word order.</span>
+  </div>
+</div>
+
+<div class="note"><b>Also for discoverability:</b> every column says what it is in plain words ("What “Ul …” means", "rolled · pin one, or type your own"). Form shows how many forms the rule has. Reroll says "the unpinned parts". Suggest says "meanings", since it only fills meaning parts.</div>

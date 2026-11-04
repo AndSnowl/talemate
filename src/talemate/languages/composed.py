@@ -14,6 +14,7 @@ from talemate.languages.name_grammar import (
     Built,
     MeaningPhrase,
     build_phrase,
+    lookup_word,
     real_words,
 )
 
@@ -139,7 +140,12 @@ def _roll_part(
     depth: int,
 ) -> list[Built]:
     if part.kind == "word":
-        return [Built(text=part.word)]
+        entry = lookup_word(language, part.word)
+        meaning = entry.meanings[0] if entry is not None and entry.meanings else ""
+        said = [
+            {"word": part.word.lower(), "meaning": meaning, "new": False, "steps": []}
+        ]
+        return [Built(text=part.word, parts=said if meaning else [])]
     if part.kind == "rule":
         names = _roll_rule(language, part.rule, count, rng, exclude, depth)
         return [Built(text=name) for name in names]

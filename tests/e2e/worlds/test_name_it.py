@@ -469,6 +469,8 @@ def _builder(app, page, stem):
     )
     # the plain batch's meanings go with it (acceptance run)
     expect(panel.get_by_test_id("name-it-batch-meanings")).to_have_count(0)
+    # a rule made of parts has no panel-wide meaning box (round 4)
+    expect(panel.get_by_test_id("name-it-meaning")).to_have_count(0)
     return panel
 
 
@@ -519,25 +521,48 @@ def test_use_this_name_renames_the_entry(app, page):
     expect(page.get_by_test_id("thing-name")).to_have_text(built, timeout=TIMEOUT_MS)
 
 
-def test_give_a_meaning_fills_the_meaning_part(app, page):
+def _meaning_box(panel, index=2):
+    return panel.get_by_test_id("name-builder-part").nth(index)
+
+
+def test_a_meaning_fills_only_its_part(app, page):
+    """Round 4 (owner, 2026-11-03): the meaning box sits in its part, and
+    Find there changes that part only."""
+
     panel = _builder(app, page, "Builder meaning")
-    panel.get_by_test_id("name-it-meaning").locator("input").fill("of the Stars")
-    panel.get_by_test_id("name-it-find").click()
-    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
-        "Ul Zveski", timeout=TIMEOUT_MS
-    )
-    expect(panel.get_by_test_id("name-it-working")).to_contain_text("zvesk “star”")
+    first = panel.get_by_test_id("name-it-built").inner_text().split(" ")[0]
+    part = _meaning_box(panel)
+    part.get_by_test_id("name-builder-meaning").locator("input").fill("stars")
+    part.get_by_test_id("name-builder-find").click()
+    built = panel.get_by_test_id("name-it-built")
+    expect(built).to_contain_text("Ul Zveski", timeout=TIMEOUT_MS)
+    assert built.inner_text().split(" ")[0] == first
+    expect(part.get_by_test_id("name-it-working")).to_contain_text("zvesk “star”")
 
 
-def test_suggest_fills_from_facts(app, page, fixed_language):
+def test_suggest_fills_only_the_meaning_parts(app, page, fixed_language):
     fixed_language({"noun": "snow", "why": "white plumage"})
     panel = _builder(app, page, "Builder suggest")
+    first = panel.get_by_test_id("name-it-built").inner_text().split(" ")[0]
     panel.get_by_test_id("name-it-suggest").click()
-    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
-        "Ul Varsani", timeout=TIMEOUT_MS
-    )
+    built = panel.get_by_test_id("name-it-built")
+    expect(built).to_contain_text("Ul Varsani", timeout=TIMEOUT_MS)
+    assert built.inner_text().split(" ")[0] == first
     sent = _wait_sent(page, "name_it_suggest")
     assert sent["rule_id"] == "owl"
+
+
+def test_the_panel_keeps_its_size_through_rerolls(app, page):
+    """Owner, 2026-11-03: the panel grew and shrank with the rolls."""
+
+    panel = _builder(app, page, "Builder size")
+    sizes = set()
+    for _ in range(4):
+        box = panel.bounding_box()
+        sizes.add((round(box["width"]), round(box["height"])))
+        panel.get_by_test_id("name-it-reroll").click()
+        page.wait_for_timeout(400)
+    assert len(sizes) == 1, sizes
 
 
 def test_a_plain_rule_keeps_the_batch(app, page):
@@ -547,6 +572,7 @@ def test_a_plain_rule_keeps_the_batch(app, page):
     expect(panel.get_by_test_id("name-builder")).to_have_count(0, timeout=TIMEOUT_MS)
     expect(panel.get_by_test_id("name-it-name")).to_have_count(10, timeout=TIMEOUT_MS)
     expect(panel.get_by_test_id("name-it-batch-meanings")).to_be_visible()
+    expect(panel.get_by_test_id("name-it-meaning")).to_be_visible()
 
 
 def _people(app, page, stem):
@@ -557,22 +583,27 @@ def _people(app, page, stem):
     return panel
 
 
-def test_find_fills_the_form_with_a_meaning(app, page):
-    """Owner, Test2: Find on a rule whose first form has no meaning part
-    only rerolled."""
+def test_a_form_without_a_meaning_part_has_no_meaning_box(app, page):
+    """Owner, Test2: on People (male), Find only rerolled. A form with no
+    meaning part now shows no meaning box, and Suggest says why it's off."""
 
-    panel = _people(app, page, "Builder find form")
+    panel = _people(app, page, "Builder form meaning")
     panel.get_by_test_id("name-it-form").click()
-    page.get_by_role("option", name="Men's names", exact=True).click()
+    # the Form menu's option (the Rule menu has one of the same name)
+    page.get_by_role("option", name="Men's names", exact=True).last.click()
     expect(panel.get_by_test_id("name-builder-part")).to_have_count(
         1, timeout=TIMEOUT_MS
     )
-    panel.get_by_test_id("name-it-meaning").locator("input").fill("sun")
-    panel.get_by_test_id("name-it-find").click()
-    expect(panel.get_by_test_id("name-builder-part")).to_have_count(
-        3, timeout=TIMEOUT_MS
+    expect(panel.get_by_test_id("name-builder-meaning")).to_have_count(0)
+    expect(panel.get_by_test_id("name-it-suggest")).to_be_disabled()
+    panel.get_by_test_id("name-it-form").click()
+    page.get_by_role("option", name="Men's names + Ul + a meaning").click()
+    part = _meaning_box(panel)
+    part.get_by_test_id("name-builder-meaning").locator("input").fill("sun")
+    part.get_by_test_id("name-builder-meaning").locator("input").press("Enter")
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Ul Svelm", timeout=TIMEOUT_MS
     )
-    expect(panel.get_by_test_id("name-it-built")).to_contain_text("Ul Svelm")
 
 
 def test_a_chosen_form_stays_through_rerolls(app, page):

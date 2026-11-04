@@ -269,14 +269,39 @@ async def test_name_it_meaning_with_a_rule_fills_the_meaning_part(plugin):
     assert data["parts"][2]["rolls"][0]["text"] == "Zveski"
 
 
-async def test_name_it_suggest_builds_from_the_entrys_facts(plugin, monkeypatch):
+# --- round 4: a meaning per part (owner, 2026-11-03) --------------------------
+
+
+async def test_a_parts_meaning_fills_only_that_part(plugin):
+    lid, _ = await _owl_world(plugin)
+    await _act(
+        plugin,
+        "name_it_part_meaning",
+        language_id=lid,
+        rule_id="owl",
+        shape=0,
+        index=2,
+        text="stars",
+    )
+    data = _last(plugin, "name_it_part_meaning")["data"]
+    assert (data["rule_id"], data["shape"], data["index"]) == ("owl", 0, 2)
+    assert data["rolls"][0]["text"] == "Zveski"
+
+
+async def test_suggest_fills_only_the_meaning_parts(plugin, monkeypatch):
     lid, dorvak = await _owl_world(plugin)
     monkeypatch.setattr(
         WorldsPlugin, "_language_reply", lambda self: (None, '{"noun": "stars"}')
     )
     await _act(
-        plugin, "name_it_suggest", language_id=lid, rule_id="owl", thing_id=dorvak
+        plugin,
+        "name_it_suggest",
+        language_id=lid,
+        rule_id="owl",
+        thing_id=dorvak,
+        shape=0,
     )
     data = _last(plugin, "name_it_suggest")["data"]
-    assert data["thing_id"] == dorvak
-    assert data["parts"][2]["rolls"][0]["text"] == "Zveski"
+    assert data["shape"] == 0
+    assert list(data["fills"]) == ["2"]
+    assert data["fills"]["2"][0]["text"] == "Zveski"

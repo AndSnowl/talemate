@@ -1,0 +1,148 @@
+<style>
+  .panel { background:#282828; color:#ebdbb2; border:1px solid #504945; border-radius:6px; padding:16px; font-family:system-ui,sans-serif; font-size:14px; width:940px; box-sizing:border-box; margin-bottom:18px; }
+  .row { display:flex; flex-wrap:nowrap; align-items:center; gap:8px; }
+  .mt { margin-top:10px; }
+  .muted { color:#a89984; font-size:12px; }
+  .help { color:#a89984; font-size:12px; font-style:italic; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:12px; }
+  .chip.on { background:#fe8019; color:#282828; }
+  .sel { border:1px solid #665c54; border-radius:4px; padding:3px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sel small { display:block; font-size:10px; color:#a89984; }
+  .btn { border:1px solid #fe8019; color:#fe8019; border-radius:4px; padding:3px 10px; font-size:12px; text-transform:uppercase; white-space:nowrap; }
+  .btn.solid { background:#fe8019; color:#282828; }
+  .btn.ghost { border:none; }
+  /* one grid: every column has the same rows, each a fixed height */
+  .grid { display:grid; grid-template-columns: 1fr 1fr 96px 1fr; grid-template-rows: 20px 18px 34px repeat(8, 26px) 18px; column-gap:10px; margin-top:12px; }
+  .cell { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-width:0; }
+  .title { font-weight:600; font-size:13px; }
+  .what { font-size:11.5px; color:#a89984; }
+  .box { border:1px solid #665c54; border-radius:4px; padding:0 8px; display:flex; align-items:center; justify-content:space-between; color:#7c6f64; font-size:13px; }
+  .box.typed { border-color:#83a598; color:#ebdbb2; }
+  .roll { display:flex; align-items:center; justify-content:space-between; padding:0 8px; border-radius:4px; font-style:italic; color:#83a598; }
+  .roll.cur { background:#83a598; color:#282828; font-style:normal; }
+  .roll.pinned { outline:1px solid #83a598; }
+  .roll.blank { }
+  .roll .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pin { font-style:normal; font-size:11px; opacity:.8; }
+  .fixedw { display:flex; align-items:center; justify-content:center; border:1px dashed #665c54; border-radius:4px; font-size:15px; }
+  .colbox { grid-row: 1 / -1; border:1px solid #504945; border-radius:6px; margin:-6px -5px; pointer-events:none; }
+  .colbox.meaning { border-color:#83a598; }
+  .foreign { color:#83a598; font-style:italic; }
+  .built { font-size:17px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:620px; }
+  h3.frame { font-family:system-ui,sans-serif; margin:16px 0 6px; }
+  .why { font-family:system-ui,sans-serif; font-size:13px; color:#555; max-width:940px; margin:0 0 6px; }
+</style>
+
+<h2>The builder on a fixed grid</h2>
+<p class="subtitle">Two rolls of the same rule, one with short names and one with long ones. The panel is the same size, and every box and row sits in the same place.</p>
+
+<h3 class="frame">Roll 1 · short names</h3>
+<div class="panel">
+  <div class="row"><b>Name it:</b><span class="chip on">Zakan</span><span class="chip on">III</span><span class="help">click a word to leave it out of the rename</span></div>
+  <div class="row mt">
+    <span class="sel" style="width:150px"><small>Language</small>Varovni ▾</span>
+    <span class="sel" style="width:170px"><small>Rule</small>People (male) ▾</span>
+    <span class="sel" style="width:250px"><small>Form · 2 forms</small>given + family + Ul + a meaning ▾</span>
+    <span class="btn">🎲 Reroll the unpinned parts</span>
+  </div>
+  <div class="row mt"><span class="btn ghost">✨ Suggest meanings from Zakan's facts</span></div>
+  <div class="grid">
+    <!-- column 1 -->
+    <div class="cell title" style="grid-column:1;grid-row:1">Men's given names</div>
+    <div class="cell what" style="grid-column:1;grid-row:2">rolled · pin one, or type your own</div>
+    <div class="box" style="grid-column:1;grid-row:3">your own name… <span class="pin">📌</span></div>
+    <div class="roll cur" style="grid-column:1;grid-row:4"><span class="t">Nerkyel</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:5"><span class="t">Trolnal</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:6"><span class="t">Lovyol</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:7"><span class="t">Garzol</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:8"><span class="t">Mortsol</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:9"><span class="t">Drashak</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:10"><span class="t">Vonryak</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:11"><span class="t">Svirzhin</span><span class="pin">○</span></div>
+    <!-- column 2 -->
+    <div class="cell title" style="grid-column:2;grid-row:1">Family names (men)</div>
+    <div class="cell what" style="grid-column:2;grid-row:2">rolled · pin one, or type your own</div>
+    <div class="box" style="grid-column:2;grid-row:3">your own name… <span class="pin">📌</span></div>
+    <div class="roll cur pinned" style="grid-column:2;grid-row:4"><span class="t">Tubovsk</span><span class="pin">📌</span></div>
+    <div class="roll" style="grid-column:2;grid-row:5"><span class="t">Latovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:6"><span class="t">Zerkovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:7"><span class="t">Gnoslovsk</span><span class="pin">○</span></div>
+    <div class="roll blank" style="grid-column:2;grid-row:8"></div>
+    <div class="roll blank" style="grid-column:2;grid-row:9"></div>
+    <div class="roll blank" style="grid-column:2;grid-row:10"></div>
+    <div class="roll blank" style="grid-column:2;grid-row:11"></div>
+    <!-- column 3: the fixed word sits where a box would -->
+    <div class="cell title" style="grid-column:3;grid-row:1">Ul</div>
+    <div class="cell what" style="grid-column:3;grid-row:2">always · “owl-of”</div>
+    <div class="fixedw" style="grid-column:3;grid-row:3">Ul</div>
+    <!-- column 4 -->
+    <div class="cell title" style="grid-column:4;grid-row:1">What “Ul …” means</div>
+    <div class="cell what" style="grid-column:4;grid-row:2">a meaning in English · empty: rolled</div>
+    <div class="box typed" style="grid-column:4;grid-row:3">sun <span class="btn" style="padding:0 6px">Find</span></div>
+    <div class="roll cur" style="grid-column:4;grid-row:4"><span class="t">Svelm</span><span class="pin">○</span></div>
+    <div class="roll blank" style="grid-column:4;grid-row:5"></div>
+    <div class="roll blank" style="grid-column:4;grid-row:6"></div>
+    <div class="roll blank" style="grid-column:4;grid-row:7"></div>
+    <div class="roll blank" style="grid-column:4;grid-row:8"></div>
+    <div class="roll blank" style="grid-column:4;grid-row:9"></div>
+    <div class="roll blank" style="grid-column:4;grid-row:10"></div>
+    <div class="roll blank" style="grid-column:4;grid-row:11"></div>
+    <div class="cell muted" style="grid-column:4;grid-row:12"><span class="foreign">svelm</span> “sun”: in the dictionary</div>
+  </div>
+  <div class="row mt"><span class="built">Nerkyel Tubovsk Ul Svelm</span><span class="btn solid">Use this name</span></div>
+  <div class="muted">renames Zakan III everywhere; the old name stays as another name</div>
+</div>
+
+<h3 class="frame">Roll 2 · long names: nothing moves</h3>
+<div class="panel">
+  <div class="row"><b>Name it:</b><span class="chip on">Zakan</span><span class="chip on">III</span><span class="help">click a word to leave it out of the rename</span></div>
+  <div class="row mt">
+    <span class="sel" style="width:150px"><small>Language</small>Varovni ▾</span>
+    <span class="sel" style="width:170px"><small>Rule</small>People (male) ▾</span>
+    <span class="sel" style="width:250px"><small>Form · 2 forms</small>given + family + Ul + a meaning ▾</span>
+    <span class="btn">🎲 Reroll the unpinned parts</span>
+  </div>
+  <div class="row mt"><span class="btn ghost">✨ Suggest meanings from Zakan's facts</span></div>
+  <div class="grid">
+    <div class="cell title" style="grid-column:1;grid-row:1">Men's given names</div>
+    <div class="cell what" style="grid-column:1;grid-row:2">rolled · pin one, or type your own</div>
+    <div class="box" style="grid-column:1;grid-row:3">your own name… <span class="pin">📌</span></div>
+    <div class="roll cur" style="grid-column:1;grid-row:4"><span class="t">Vlyustvyon</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:5"><span class="t">Smonchvyuk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:6"><span class="t">Zdyovron</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:7" title="Snyalnyonvekvarshtyol"><span class="t">Snyalnyonvekvarshtyol</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:8"><span class="t">Krinkyel</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:9"><span class="t">Glodyek</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:10"><span class="t">Dvomol</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:1;grid-row:11"><span class="t">Govlol</span><span class="pin">○</span></div>
+    <div class="cell title" style="grid-column:2;grid-row:1">Family names (men)</div>
+    <div class="cell what" style="grid-column:2;grid-row:2">rolled · pin one, or type your own</div>
+    <div class="box" style="grid-column:2;grid-row:3">your own name… <span class="pin">📌</span></div>
+    <div class="roll cur pinned" style="grid-column:2;grid-row:4"><span class="t">Tubovsk</span><span class="pin">📌</span></div>
+    <div class="roll" style="grid-column:2;grid-row:5"><span class="t">Spostrovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:6"><span class="t">Dvagvovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:7"><span class="t">Ryapovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:8"><span class="t">Gnablovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:9"><span class="t">Svizhrovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:10"><span class="t">Tazhrovsk</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:2;grid-row:11"><span class="t">Skrechovsk</span><span class="pin">○</span></div>
+    <div class="cell title" style="grid-column:3;grid-row:1">Ul</div>
+    <div class="cell what" style="grid-column:3;grid-row:2">always · “owl-of”</div>
+    <div class="fixedw" style="grid-column:3;grid-row:3">Ul</div>
+    <div class="cell title" style="grid-column:4;grid-row:1">What “Ul …” means</div>
+    <div class="cell what" style="grid-column:4;grid-row:2">a meaning in English · empty: rolled</div>
+    <div class="box" style="grid-column:4;grid-row:3">a meaning… <span class="btn" style="padding:0 6px">Find</span></div>
+    <div class="roll cur" style="grid-column:4;grid-row:4"><span class="t">Kherva</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:5"><span class="t">Sobra</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:6"><span class="t">Vlesta</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:7"><span class="t">Lyudra</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:8"><span class="t">Zuvna</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:9"><span class="t">Verka</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:10"><span class="t">Godra</span><span class="pin">○</span></div>
+    <div class="roll" style="grid-column:4;grid-row:11"><span class="t">Spolna</span><span class="pin">○</span></div>
+    <div class="cell muted" style="grid-column:4;grid-row:12"><span class="foreign">kherva</span> “tower”: rolled from the dictionary</div>
+  </div>
+  <div class="row mt"><span class="built" title="Vlyustvyon Tubovsk Ul Kherva">Vlyustvyon Tubovsk Ul Kherva</span><span class="btn solid">Use this name</span></div>
+  <div class="muted">renames Zakan III everywhere; the old name stays as another name</div>
+</div>
+<p class="why">Rows are one line each. A name too long for its column is cut with "…" and shown in full on hover (row 4 of roll 2, "Snyalnyon…"). The panel width is fixed (940 px here), and columns share it evenly.</p>

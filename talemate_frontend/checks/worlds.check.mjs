@@ -4209,7 +4209,7 @@ check('a builder reply for another rule is dropped (4b-1 final review I5)', () =
     // the owner switches rule before Suggest answers
     store.nameItRollParts('l1', 'men');
     store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'men', shape: 0, parts: [{ index: 0, kind: 'rule', label: 'Men', pinned: false, rolls: [{ text: 'Zemol', parts: [] }] }] }));
-    store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', ...OWL_PARTS }));
+    store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', shape: 0, fills: { 2: [{ text: 'Zveski', parts: [] }] } }));
     assert.equal(store.nameItBuilt, 'Zemol');
     assert.equal(store.nameItBuilding, false);
 });
@@ -4235,6 +4235,47 @@ check('the chosen form goes with Reroll, Find and Suggest (owner, Test2)', () =>
     assert.equal(last('name_it_meaning').shape, 0);
     store.closeNameIt();
     assert.equal(store.nameItShapeChoice, null);
+});
+
+check('a part\'s meaning fills only that part (round 4)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItChoosePart(0, 'Zemol');
+    store.nameItPartMeaning('l1', 'owl', 2, 'stars');
+    const asked = sent.filter((m) => m.action === 'name_it_part_meaning').at(-1);
+    const data = asked.data ?? asked;
+    assert.deepEqual([data.shape, data.index, data.text], [0, 2, 'stars']);
+    assert.equal(store.nameItPartPending[2], true);
+    store.handleMessage(reply('name_it_part_meaning', { language_id: 'l1', rule_id: 'owl', shape: 0, index: 2, rolls: [{ text: 'Zveskini', parts: [{ word: 'zvesk', meaning: 'star', new: false, steps: [] }] }] }));
+    assert.equal(store.nameItBuilt, 'Zemol Ul Zveskini');
+    assert.equal(store.nameItPartPending[2], false);
+    assert.equal(store.nameItPartMeanings[2], 'stars');
+});
+
+check('a typed meaning keeps its part through a reroll; emptied, it rolls again (round 4)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItPartMeaning('l1', 'owl', 2, 'stars');
+    store.handleMessage(reply('name_it_part_meaning', { language_id: 'l1', rule_id: 'owl', shape: 0, index: 2, rolls: [{ text: 'Zveskini', parts: [] }] }));
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    assert.equal(store.nameItPartChosen[2], 'Zveskini');
+    store.nameItPartMeaning('l1', 'owl', 2, '');
+    assert.deepEqual(store.nameItPartMeanings, {});
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    assert.equal(store.nameItPartChosen[2], 'Zveski');
+});
+
+check('Suggest fills only the meaning parts (round 4)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItChoosePart(0, 'Zemol');
+    store.nameItSuggest('l1', 'owl', 't1');
+    store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', shape: 0, fills: { 2: [{ text: 'Varsani', parts: [] }] } }));
+    assert.equal(store.nameItBuilt, 'Zemol Ul Varsani');
+    assert.equal(store.nameItBuilding, false);
 });
 
 if (failures.length) {

@@ -29,6 +29,7 @@ from talemate.worldplay.ai import world_ai_call
 
 __all__ = [
     "give_meaning",
+    "part_meaning",
     "read_english",
     "resolve_words",
     "singular",
@@ -629,6 +630,48 @@ async def suggest_phrases(
     return out
 
 
+async def part_meaning(
+    view: WorldView,
+    client,
+    language_id: str,
+    rule_id: str,
+    shape: int,
+    index: int,
+    text: str,
+    *,
+    reply: str | None = None,
+) -> dict:
+    """One meaning part's rolls built from the owner's meaning, the rest of
+    the name left alone (round 4, owner 2026-11-03): `{shape, index,
+    rolls}`, the coined word's other options as more rolls. A fixed word of
+    the form that already says some of it ("Ul", owl-of) isn't said
+    twice."""
+
+    state = view.thing(language_id)
+    if state is None or state.kind != "language":
+        raise ValueError("there's no such language")
+    language = language_of(state)
+    generator = next((g for g in language.generators if g.id == rule_id), None)
+    if generator is None or not 0 <= shape < len(generator.shapes):
+        raise ValueError(f"no form {shape} of the name rule {rule_id!r}")
+    parts = generator.shapes[shape].parts
+    if not 0 <= index < len(parts) or parts[index].kind != "meaning":
+        raise ValueError("that part doesn't take a meaning")
+    text, after_of = _drop_fixed(language, rule_id, shape, text)
+    (phrase,) = await split_meaning(client, language, text, [parts[index]], reply=reply)
+    if after_of:
+        grammar = language.name_grammar
+        the = grammar.of.the if grammar is not None and grammar.of else False
+        phrase = phrase.model_copy(update={"of": False, "the": the})
+    if not phrase.noun:
+        return {"shape": shape, "index": index, "rolls": []}
+    words, new, options = await resolve_words(
+        client, language, _meanings(phrase), what=text, reply=reply
+    )
+    rolls = _phrase_rolls(language, phrase, words, new, options)
+    return {"shape": shape, "index": index, "rolls": [r.model_dump() for r in rolls]}
+
+
 async def suggest_for(
     view: WorldView,
     client,
@@ -636,48 +679,43 @@ async def suggest_for(
     rule_id: str,
     thing_id: str,
     *,
-    pinned: dict[int, str] | None = None,
     shape: int | None = None,
     reply: str | None = None,
+    pinned: dict[int, str] | None = None,
 ) -> dict:
-    """✨ Suggest from its facts: `{shape, parts}` with each meaning part
-    built from the meaning the model suggests for the entry; a rule with
-    no meaning parts has the model pick from a batch of its rolls."""
+    """✨ Suggest meanings from its facts: `{shape, fills}`, each meaning
+    part of the form (by index) with rolls built from the meaning the
+    model suggests for the entry; the other parts are left alone (round
+    4). A form without meaning parts gets no fills."""
 
     state = view.thing(language_id)
     thing = view.thing(thing_id)
     if state is None or state.kind != "language" or thing is None:
         raise ValueError("there's no such entry or language")
     language = language_of(state)
+    generator = next((g for g in language.generators if g.id == rule_id), None)
+    if generator is None or not generator.shapes:
+        return {"shape": shape, "fills": {}}
+    shape = shape if shape is not None and 0 <= shape < len(generator.shapes) else 0
+    slots = [
+        (i, p)
+        for i, p in enumerate(generator.shapes[shape].parts)
+        if p.kind == "meaning"
+    ]
+    if not slots:
+        return {"shape": shape, "fills": {}}
     name = view.name_of(thing_id) or ""
     facts = [f.text for f in thing.facts][:20]
-    shape = _meaning_shape(language, rule_id, shape)
-    slots = _meaning_slots(language, rule_id, shape)
-    if not slots:
-        shape_used, parts = roll_parts(language, rule_id, pinned=pinned, shape=shape)
-        out = []
-        for part in parts:
-            texts = [b.text for b in part.rolls]
-            if part.kind == "rule" and not part.pinned and len(texts) > 1:
-                chosen, _why = await pick(client, language, texts, name, reply=reply)
-                part = part.model_copy(
-                    update={"rolls": sorted(part.rolls, key=lambda b: b.text != chosen)}
-                )
-            out.append(part)
-        return {"shape": shape_used, "parts": [p.model_dump() for p in out]}
-    if shape is None:
-        shape = 0
     phrases = await suggest_phrases(
         client, language, [p for _i, p in slots], facts, name=name, reply=reply
     )
-    found = {i: phrase for (i, _p), phrase in zip(slots, phrases) if phrase is not None}
-    return await _fill_parts(
-        client,
-        language,
-        rule_id,
-        found,
-        pinned=pinned,
-        shape=shape,
-        what=name,
-        reply=reply,
-    )
+    fills: dict[str, list] = {}
+    for (i, _p), phrase in zip(slots, phrases):
+        if phrase is None or not phrase.noun:
+            continue
+        words, new, options = await resolve_words(
+            client, language, _meanings(phrase), what=name, reply=reply
+        )
+        rolls = _phrase_rolls(language, phrase, words, new, options)
+        fills[str(i)] = [r.model_dump() for r in rolls]
+    return {"shape": shape, "fills": fills}

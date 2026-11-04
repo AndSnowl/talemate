@@ -729,6 +729,11 @@ export const useWorldsStore = defineStore('worlds', {
         // the form of a composed rule the owner chose (an index into its
         // shapes), or null for any (owner, Test2)
         nameItShapeChoice: null,
+        // round 4: each meaning part's own meaning (the box), whether its
+        // Find is out, and why it failed, by part index
+        nameItPartMeanings: {},
+        nameItPartPending: {},
+        nameItPartError: {},
         // a language's grammar for names in plain words, by its id (the
         // Names chapter, languages 4b-1): `{rows, has_grammar}`
         nameGrammar: {},
@@ -1428,6 +1433,35 @@ export const useWorldsStore = defineStore('worlds', {
             if (pinned[index]) this.nameItChoosePart(index, text);
         },
 
+        // one meaning part filled from the owner's meaning; the other
+        // parts stay as they are (round 4)
+        nameItPartMeaning(languageId, ruleId, index, text) {
+            if (!text.trim()) {
+                // emptied: that part rolls from the dictionary again
+                const meanings = { ...this.nameItPartMeanings };
+                delete meanings[index];
+                this.nameItPartMeanings = meanings;
+                return;
+            }
+            if (!languageId || !ruleId || !this.nameItParts) return;
+            this.nameItAsked = { languageId, ruleId };
+            this.nameItPartMeanings = { ...this.nameItPartMeanings, [index]: text.trim() };
+            this.nameItPartPending = { ...this.nameItPartPending, [index]: true };
+            this.nameItPartError = { ...this.nameItPartError, [index]: '' };
+            this.request('name_it_part_meaning', { language_id: languageId, rule_id: ruleId, shape: this.nameItParts.shape, index, text: text.trim() });
+        },
+
+        // a part's rolls replaced (a meaning, or Suggest), its first chosen
+        nameItFillPart(index, rolls) {
+            if (!this.nameItParts) return;
+            const parts = this.nameItParts.parts.map((part) => (part.index === index ? { ...part, rolls: rolls || [], pinned: false } : part));
+            this.nameItParts = { ...this.nameItParts, parts };
+            const pinned = { ...this.nameItPartPinned };
+            delete pinned[index];
+            this.nameItPartPinned = pinned;
+            this.nameItChoosePart(index, rolls?.[0]?.text || '');
+        },
+
         // the form a meaning or Suggest goes into: the one chosen, else
         // the one on screen (the server moves to a form with a meaning part)
         nameItFormShown() {
@@ -1460,10 +1494,22 @@ export const useWorldsStore = defineStore('worlds', {
             const asked = this.nameItAsked;
             if (asked && (asked.ruleId !== data.rule_id || asked.languageId !== data.language_id)) return;
             this.nameItBuilding = false;
-            this.nameItParts = { rule_id: data.rule_id, shape: data.shape, parts: data.parts || [] };
+            const before = this.nameItParts;
+            const sameForm = before && before.rule_id === data.rule_id && before.shape === data.shape;
+            // a part with a typed meaning keeps its rolls (round 4)
+            const parts = (data.parts || []).map((part) => {
+                const kept = sameForm && this.nameItPartMeanings[part.index] ? before.parts.find((p) => p.index === part.index) : null;
+                return kept || part;
+            });
+            if (!sameForm) {
+                this.nameItPartMeanings = {};
+                this.nameItPartError = {};
+            }
+            this.nameItParts = { rule_id: data.rule_id, shape: data.shape, parts };
             const chosen = {};
             for (const part of this.nameItParts.parts) {
-                chosen[part.index] = this.nameItPartPinned[part.index] || part.rolls[0]?.text || '';
+                const kept = sameForm && this.nameItPartMeanings[part.index] ? this.nameItPartChosen[part.index] : null;
+                chosen[part.index] = kept || this.nameItPartPinned[part.index] || part.rolls[0]?.text || '';
             }
             this.nameItPartChosen = chosen;
         },
@@ -1483,6 +1529,9 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameItBuilding = false;
             this.nameItAsked = null;
             this.nameItShapeChoice = null;
+            this.nameItPartMeanings = {};
+            this.nameItPartPending = {};
+            this.nameItPartError = {};
             this.nameItWordRolls = {};
             this.nameItWordPinned = {};
             this.nameItBatch = [];
@@ -2888,8 +2937,28 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'name_it_parts':
                     if (this.nameIt) this.nameItTakeParts(data);
                     break;
-                case 'name_it_suggest':
-                    if (this.nameIt) this.nameItTakeParts(data);
+                case 'name_it_suggest': {
+                    if (!this.nameIt) break;
+                    const asked = this.nameItAsked;
+                    if (asked && (asked.ruleId !== data.rule_id || asked.languageId !== data.language_id)) break;
+                    this.nameItBuilding = false;
+                    if (this.nameItParts && this.nameItParts.shape === data.shape) {
+                        for (const [index, rolls] of Object.entries(data.fills || {})) this.nameItFillPart(Number(index), rolls);
+                    }
+                    break;
+                }
+                case 'name_it_part_meaning': {
+                    if (!this.nameIt) break;
+                    const asked = this.nameItAsked;
+                    if (asked && (asked.ruleId !== data.rule_id || asked.languageId !== data.language_id)) break;
+                    this.nameItPartPending = { ...this.nameItPartPending, [data.index]: false };
+                    if (this.nameItParts && this.nameItParts.shape === data.shape) this.nameItFillPart(data.index, data.rolls);
+                    if (!(data.rolls || []).length) this.nameItPartError = { ...this.nameItPartError, [data.index]: 'No words came back for that.' };
+                    break;
+                }
+                case 'name_it_part_meaning_failed':
+                    this.nameItPartPending = { ...this.nameItPartPending, [data.index]: false };
+                    this.nameItPartError = { ...this.nameItPartError, [data.index]: message.message || 'No words came back.' };
                     break;
                 case 'name_it_suggest_failed':
                     this.nameItBuilding = false;

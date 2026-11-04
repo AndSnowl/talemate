@@ -1,5 +1,5 @@
 <template>
-    <v-dialog :model-value="!!request" max-width="780" @update:model-value="!$event && worlds.closeNameIt()">
+    <v-dialog :model-value="!!request" width="980" @update:model-value="!$event && worlds.closeNameIt()">
         <v-card v-if="request" class="name-it pa-4" data-testid="name-it">
             <!-- an entry's name as chips: the words chosen are renamed, the
                  rest stays (owner, Test3) -->
@@ -21,6 +21,7 @@
                 <span v-else class="words">{{ request.words || 'a new name' }}</span>
                 <span class="text-caption text-muted" data-testid="name-it-effect">{{ effect }}</span>
             </div>
+            <div v-if="parts.length > 1" class="text-caption text-muted font-italic mt-1">click a word to leave it out of the rename</div>
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
                 <v-select
@@ -61,7 +62,7 @@
                     v-if="composed && shapeItems.length > 2"
                     :model-value="worlds.nameItShapeChoice"
                     :items="shapeItems"
-                    label="Form"
+                    :label="`Form · ${shapeItems.length - 1} forms`"
                     density="compact"
                     variant="outlined"
                     hide-details
@@ -69,7 +70,7 @@
                     data-testid="name-it-form"
                     @update:model-value="chooseForm"
                 ></v-select>
-                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll unpinned' : 'Reroll' }}</v-btn>
+                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll the unpinned parts' : 'Reroll' }}</v-btn>
                 <v-btn
                     v-if="composed && request.target?.thingId"
                     color="accent"
@@ -77,9 +78,11 @@
                     size="small"
                     prepend-icon="mdi-creation"
                     :loading="worlds.nameItBuilding"
+                    :disabled="!formHasMeaning"
+                    :title="formHasMeaning ? '' : 'This form has no part that takes a meaning'"
                     data-testid="name-it-suggest"
                     @click="worlds.nameItSuggest(languageId, ruleId, request.target.thingId)"
-                >Suggest from its facts</v-btn>
+                >Suggest meanings from {{ suggestName }}'s facts</v-btn>
             </div>
             <div v-if="!languageId" class="text-body-2 text-muted mt-2">Pick the language to name it in.</div>
 
@@ -88,12 +91,15 @@
             <NameRolls v-else class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
             <div v-if="meaningShown && !composed" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
+            <!-- a plain rule only: the whole name from a meaning (a rule made
+                 of parts has a meaning box in each meaning part, round 4) -->
+            <template v-if="!composed">
             <v-divider class="my-3"></v-divider>
             <div class="d-flex align-center flex-wrap ga-2">
-                <span class="text-body-2"><b>From a meaning</b></span>
+                <span class="text-body-2"><b>A whole name from a meaning</b></span>
                 <v-text-field
                     v-model="meaning"
-                    placeholder="lakeland, grey water…"
+                    placeholder="lakeland, the white water…"
                     density="compact"
                     variant="outlined"
                     hide-details
@@ -102,6 +108,7 @@
                     @keydown.enter="find"
                 ></v-text-field>
                 <v-btn variant="text" color="accent" size="small" :loading="worlds.nameItMeaning.pending" :disabled="!languageId || !meaning.trim()" data-testid="name-it-find" @click="find">Find</v-btn>
+                <span class="text-caption text-muted font-italic">Translates your words into one name, in this language's word order.</span>
             </div>
             <div v-if="worlds.nameItMeaning.error" class="text-caption text-error mt-1">{{ worlds.nameItMeaning.error }}</div>
             <div v-for="(candidate, ci) in worlds.nameItMeaning.candidates" :key="ci" class="d-flex align-center flex-wrap ga-2 mt-2" data-testid="name-it-candidate">
@@ -126,6 +133,7 @@
                     @pin="worlds.nameItPinWord(part.index, $event)"
                 />
             </div>
+            </template>
         </v-card>
     </v-dialog>
 </template>
@@ -173,6 +181,14 @@ export default {
             return [{ title: 'any', value: null }, ...(rule?.shapes || []).map((title, i) => ({ title, value: i }))];
         },
         // the picked rule is made of parts (languages 4b-1)
+        // the entry's name, for "Suggest meanings from …'s facts"
+        suggestName() {
+            return this.request?.target?.fullName || this.request?.words || 'its';
+        },
+        // the form on screen has a meaning part (Suggest has something to fill)
+        formHasMeaning() {
+            return (this.worlds.nameItParts?.parts || []).some((p) => p.kind === 'meaning');
+        },
         composed() {
             const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
             return !!(rule && (rule.parts || []).length);

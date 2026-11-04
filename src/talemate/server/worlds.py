@@ -438,7 +438,7 @@ from talemate.languages.check import check_language, repair_note
 from talemate.languages import naming_panel
 from talemate.languages.composed import roll_parts
 from talemate.languages.name_grammar import grammar_rows
-from talemate.languages.naming_meaning import give_meaning, suggest_for
+from talemate.languages.naming_meaning import give_meaning, part_meaning, suggest_for
 from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.cleaning import model as clean_model
 from talemate.worldplay.cleaning import (
@@ -6386,6 +6386,42 @@ class WorldsPlugin(Plugin):
                     **found,
                 },
                 failure_data={"language_id": state.id, "text": text},
+            ),
+        )
+
+    async def handle_name_it_part_meaning(self, data: dict):
+        """One meaning part of the builder filled from the owner's meaning,
+        in the background (round 4): `{language_id, rule_id, shape, index,
+        text, rolls}`; the rest of the name is left as it is."""
+
+        state = self._language_entry(data.get("language_id"))
+        rule_id = str(data.get("rule_id") or "")
+        text = str(data.get("text") or "").strip()
+        if not text:
+            raise ValueError("type what it should mean")
+        shape = int(data.get("shape") or 0)
+        index = int(data.get("index") or 0)
+        view = self._require_world().view()
+        client, reply = self._language_reply()
+        self._spawn(
+            part_meaning(
+                view, client, state.id, rule_id, shape, index, text, reply=reply
+            ),
+            self.create_task_done_callback(
+                "name_it_part_meaning",
+                "name_it_part_meaning_failed",
+                "Error naming from a meaning",
+                success_data=lambda found: {
+                    "language_id": state.id,
+                    "rule_id": rule_id,
+                    "text": text,
+                    **found,
+                },
+                failure_data={
+                    "language_id": state.id,
+                    "rule_id": rule_id,
+                    "index": index,
+                },
             ),
         )
 

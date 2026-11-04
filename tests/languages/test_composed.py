@@ -134,3 +134,15 @@ def test_a_built_name_fits():
 
 def test_samples_include_composed_rules():
     assert check_language(_lang()).samples["owl"]
+
+
+def test_a_fixed_word_says_what_it_means():
+    """Round 4: the builder shows "always · owl-of" for Ul."""
+
+    lang = _lang().model_copy(
+        update={"dictionary": [*WORDS, DictionaryEntry(word="ul", meanings=["owl-of"])]}
+    )
+    _shape, parts = roll_parts(lang, "owl", rng=random.Random(1))
+    assert parts[1].rolls[0].parts == [
+        {"word": "ul", "meaning": "owl-of", "new": False, "steps": []}
+    ]
