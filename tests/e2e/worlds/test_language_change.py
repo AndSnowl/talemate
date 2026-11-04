@@ -138,7 +138,10 @@ def test_no_fill_button_when_nothing_is_missing(app, page):
     panel = _open_panel(page, thing)
     expect(panel.get_by_test_id("change-request")).to_be_visible(timeout=TIMEOUT_MS)
     expect(panel.get_by_test_id("change-fill")).to_have_count(0)
-    expect(panel.get_by_test_id("change-still")).to_have_count(0)
+    # 4b-1: only the grammar for names, which it has none of
+    expect(panel.get_by_test_id("change-still")).to_have_text(
+        re.compile(r"^Still to fill in\s*Grammar for names: not written yet")
+    )
 
 
 def test_drop_keeps_the_request(app, page, fake_claude_mode):
@@ -323,3 +326,40 @@ def test_closing_another_languages_panel_keeps_a_finished_change(
     expect(
         page.get_by_test_id("language-change").get_by_test_id("language-diff")
     ).to_contain_text("torg", timeout=TIMEOUT_MS)
+
+
+# --- 4b-1: Fill them in from the grammar --------------------------------------
+
+
+def test_fill_them_in_starts_a_names_change(app, page, fake_claude_mode):
+    fake_claude_mode("names")
+    thing = _language_page(app, page, "Fill names")
+    thing.get_by_test_id("language-tab-language").click()
+    thing.get_by_test_id("language-chapters").get_by_test_id("language-chapter").filter(
+        has_text="Name rules"
+    ).first.click()
+    card = thing.get_by_test_id("name-grammar")
+    # one click: the panel opens and the run starts (owner, 2026-11-02)
+    card.get_by_test_id("name-grammar-fill").click()
+    panel = page.get_by_test_id("language-change")
+    review = panel.get_by_test_id("review-name-grammar")
+    expect(review).to_contain_text("vel → velen", timeout=LONG_MS)
+    panel.get_by_test_id("language-accept").click()
+    expect(page.get_by_test_id("language-change")).to_have_count(0, timeout=TIMEOUT_MS)
+    row = card.get_by_test_id("name-grammar-row").filter(has_text='"the"')
+    expect(row).to_contain_text("vel → velen", timeout=TIMEOUT_MS)
+
+
+def test_fill_them_in_is_offered_when_nothing_else_is_missing(app, page):
+    """Acceptance run (Tsevrani): a language with no other gaps hid the
+    button with the "Still to fill in" block."""
+
+    thing = _language_page(app, page, "Fill names only", depth="naming")
+    thing.get_by_test_id("language-tab-language").click()
+    thing.get_by_test_id("language-chapters").get_by_test_id("language-chapter").filter(
+        has_text="Name rules"
+    ).first.click()
+    thing.get_by_test_id("name-grammar").get_by_test_id("name-grammar-fill").click()
+    panel = page.get_by_test_id("language-change")
+    expect(panel.get_by_test_id("change-names")).to_be_visible(timeout=TIMEOUT_MS)
+    expect(panel.get_by_test_id("change-still")).to_contain_text("Grammar for names")

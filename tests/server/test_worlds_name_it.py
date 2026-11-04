@@ -9,7 +9,16 @@ import pytest
 import talemate.instance as instance
 from conftest import MockClient
 from talemate.languages.entry import fields_of
-from talemate.languages.models import DictionaryEntry, GeneratorDef, Language
+from talemate.languages.models import (
+    DictionaryEntry,
+    FormChange,
+    GeneratorDef,
+    Language,
+    NameGrammar,
+    NamePart,
+    NameShape,
+    OfRule,
+)
 from talemate.server.worlds import WorldsPlugin
 from talemate.world.store import Source
 
@@ -80,10 +89,12 @@ async def test_name_it_actions_answer(plugin):
     assert names == ["Syevinsk"]
     await _act(plugin, "name_it_meaning", language_id=lid, text="grey hill")
     data = _last(plugin, "name_it_meaning")["data"]
+    # built by the engine (languages 4b-1): each word with its steps
     assert data["candidates"][0]["built_from"][0] == {
         "word": "syev",
         "meaning": "grey",
         "new": False,
+        "steps": [],
     }
 
 
@@ -187,3 +198,110 @@ async def test_a_batch_echoes_its_slot(plugin):
         slot="0:1",
     )
     assert _last(plugin, "name_it_batch")["data"]["slot"] == "0:1"
+
+
+# --- the builder (languages 4b-1, Task 6) ------------------------------------
+
+OWL_LANG = LANG.model_copy(
+    update={
+        "generators": [
+            *LANG.generators,
+            GeneratorDef(
+                id="men",
+                name="Men's names",
+                use="character",
+                patterns=["[dorvak|zemol]"],
+            ),
+            GeneratorDef(
+                id="owl",
+                name="Owl-names",
+                use="character",
+                shapes=[
+                    NameShape(
+                        parts=[
+                            NamePart(kind="rule", rule="men"),
+                            NamePart(kind="word", word="Ul"),
+                            NamePart(kind="meaning", forms=["more_than_one"]),
+                        ]
+                    )
+                ],
+            ),
+        ],
+        "dictionary": [
+            DictionaryEntry(word="syev", meanings=["grey"], part="adjective"),
+            DictionaryEntry(word="zvesk", meanings=["star"], part="noun"),
+        ],
+        "name_grammar": NameGrammar(
+            of=OfRule(text="ul"), more_than_one=[FormChange(kind="ending", text="i")]
+        ),
+    }
+)
+
+
+async def _owl_world(plugin):
+    await _act(plugin, "create_world", name="Test")
+    with plugin.world.revision(Source.manual()) as rev:
+        lid = rev.create_thing("language", {"name": "Otsyenyan", **fields_of(OWL_LANG)})
+        dorvak = rev.create_thing("character", {"name": "Dorvak"})
+        rev.add_fact(dorvak, "personality", "Dorvak watches the stars every night.")
+    return lid, dorvak
+
+
+async def test_name_it_parts_answers_without_a_model(plugin):
+    lid, _ = await _owl_world(plugin)
+    await _act(
+        plugin, "name_it_parts", language_id=lid, rule_id="owl", pinned={"0": "Dorvak"}
+    )
+    data = _last(plugin, "name_it_parts")["data"]
+    assert (
+        data["language_id"] == lid and data["rule_id"] == "owl" and data["shape"] == 0
+    )
+    parts = data["parts"]
+    assert [r["text"] for r in parts[0]["rolls"]] == ["Dorvak"] and parts[0]["pinned"]
+    assert parts[2]["rolls"][0]["text"] == "Zveski"
+
+
+async def test_name_it_meaning_with_a_rule_fills_the_meaning_part(plugin):
+    lid, _ = await _owl_world(plugin)
+    await _act(plugin, "name_it_meaning", language_id=lid, text="stars", rule_id="owl")
+    data = _last(plugin, "name_it_meaning")["data"]
+    assert data["rule_id"] == "owl"
+    assert data["parts"][2]["rolls"][0]["text"] == "Zveski"
+
+
+# --- round 4: a meaning per part (owner, 2026-11-03) --------------------------
+
+
+async def test_a_parts_meaning_fills_only_that_part(plugin):
+    lid, _ = await _owl_world(plugin)
+    await _act(
+        plugin,
+        "name_it_part_meaning",
+        language_id=lid,
+        rule_id="owl",
+        shape=0,
+        index=2,
+        text="stars",
+    )
+    data = _last(plugin, "name_it_part_meaning")["data"]
+    assert (data["rule_id"], data["shape"], data["index"]) == ("owl", 0, 2)
+    assert data["rolls"][0]["text"] == "Zveski"
+
+
+async def test_suggest_fills_only_the_meaning_parts(plugin, monkeypatch):
+    lid, dorvak = await _owl_world(plugin)
+    monkeypatch.setattr(
+        WorldsPlugin, "_language_reply", lambda self: (None, '{"noun": "stars"}')
+    )
+    await _act(
+        plugin,
+        "name_it_suggest",
+        language_id=lid,
+        rule_id="owl",
+        thing_id=dorvak,
+        shape=0,
+    )
+    data = _last(plugin, "name_it_suggest")["data"]
+    assert data["shape"] == 0
+    assert list(data["fills"]) == ["2"]
+    assert data["fills"]["2"][0]["text"] == "Zveski"

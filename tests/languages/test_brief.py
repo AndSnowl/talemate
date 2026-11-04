@@ -198,3 +198,47 @@ def test_fill_step_order_and_none_when_complete():
 
     assert fill_step(SAMPLE_FILE.language) == "words"
     assert fill_step(Language(name="x", level="naming")) is None
+
+
+# --- 4b-1: the grammar for names --------------------------------------------
+
+
+def test_a_names_brief_asks_for_name_grammar_only():
+    request = MakeRequest(kind="names", target_id="x", text="")
+    brief = write_brief(None, request, current=SAMPLE_FILE)
+    assert brief.startswith("# Change a language for a fantasy world")
+    assert "## What to add: the grammar for names" in brief
+    assert "`name_grammar`" in brief
+    assert "Change nothing else" in brief
+    assert "Every rule must build the examples the language's tables give" in brief
+    for condition in (
+        "after_vowel",
+        "after_consonant",
+        "before_vowel",
+        "plural",
+        "ends:",
+    ):
+        assert condition in brief
+    assert "## The language now" in brief
+
+
+def test_the_full_brief_describes_name_grammar_and_composed_rules():
+    brief = write_brief(None, MakeRequest(text=REQUEST))
+    assert "`name_grammar`" in brief and "`shapes`" in brief
+    example = next(
+        json.loads(b) for b in _blocks(brief) if '"format": "fantasymate.language"' in b
+    )
+    language = example["language"]
+    assert language.get("name_grammar")
+    assert any(g.get("shapes") for g in language["generators"])
+
+
+def test_a_names_brief_turns_naming_customs_into_rules_made_of_parts():
+    """Owner, Test2: Varovni's owl-names were faked with "Ul Kerd" in its
+    People (male) patterns, so the builder never showed."""
+
+    brief = write_brief(
+        None, MakeRequest(kind="names", target_id="x", text=""), current=SAMPLE_FILE
+    )
+    assert "naming customs" in brief and "`shapes`" in brief
+    assert "take those patterns out" in brief

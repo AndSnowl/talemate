@@ -40,6 +40,8 @@ def fields_of(language: Language) -> dict[str, object]:
         ]
     if not language.writable:
         rules["writable"] = False
+    if language.name_grammar is not None:
+        rules["name_grammar"] = language.name_grammar.model_dump(mode="json")
     return {
         "depth": language.level,
         "flavour": language.flavour,
@@ -79,6 +81,7 @@ def language_of(state: ThingState, view: WorldView | None = None) -> Language:
         dictionary=[DictionaryEntry(**w) for w in fields.get("words") or []],
         phrases=[Phrase(**p) for p in fields.get("phrases") or []],
         similar=similar,
+        name_grammar=rules.get("name_grammar"),
     )
 
 

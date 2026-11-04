@@ -1,0 +1,1759 @@
+{
+ "b": {
+  "model": "koboldcpp/Skyfall-31B-v4.2-i1-Q4_K_M",
+  "split": [
+   {
+    "text": "of the Stars",
+    "got": {
+     "noun": "stars",
+     "describing": [
+      "of",
+      "the"
+     ],
+     "of": true,
+     "the": true,
+     "more_than_one": true,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "white lake",
+    "got": {
+     "noun": "lake",
+     "describing": [
+      "white"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "joined": true,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "the old grey stones",
+    "got": {
+     "noun": "stones",
+     "describing": [
+      "old",
+      "grey"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": true,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "lakeland",
+    "got": {
+     "noun": "land",
+     "describing": [
+      "lake"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "joined": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "Owl-of-Frost",
+    "got": {
+     "noun": "owl",
+     "describing": [
+      "of",
+      "frost"
+     ],
+     "of": true,
+     "the": false,
+     "more_than_one": false,
+     "joined": false,
+     "ending": "of"
+    },
+    "ok": false
+   },
+   {
+    "text": "of the Sun",
+    "got": {
+     "noun": "sun",
+     "describing": [],
+     "of": true,
+     "the": true,
+     "more_than_one": false,
+     "joined": false,
+     "ending": "of the"
+    },
+    "ok": false
+   },
+   {
+    "text": "grey water",
+    "got": {
+     "noun": "water",
+     "describing": [
+      "grey"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "joined": true,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "the river",
+    "got": {
+     "noun": "river",
+     "describing": [],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "rivers",
+    "got": {
+     "noun": "rivers",
+     "describing": [],
+     "of": false,
+     "the": false,
+     "more_than_one": true,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "of the Seven Hills",
+    "got": {
+     "noun": "hills",
+     "describing": [
+      "seven"
+     ],
+     "of": true,
+     "the": true,
+     "more_than_one": true,
+     "joined": false,
+     "ending": "land of"
+    },
+    "ok": false
+   },
+   {
+    "text": "Blackwater",
+    "got": {
+     "noun": "water",
+     "describing": [
+      "black"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "joined": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "the frozen north",
+    "got": {
+     "noun": "north",
+     "describing": [
+      "frozen"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "of iron",
+    "got": {
+     "noun": "iron",
+     "describing": [],
+     "of": true,
+     "the": false,
+     "more_than_one": false,
+     "joined": false,
+     "ending": "of"
+    },
+    "ok": false
+   },
+   {
+    "text": "the high pass",
+    "got": {
+     "noun": "pass",
+     "describing": [
+      "high"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "land of owls",
+    "got": {
+     "noun": "owls",
+     "describing": [],
+     "of": true,
+     "the": false,
+     "more_than_one": true,
+     "joined": false,
+     "ending": "land of"
+    },
+    "ok": false
+   },
+   {
+    "text": "the silver moons",
+    "got": {
+     "noun": "moons",
+     "describing": [
+      "silver"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": true,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "ashen",
+    "got": {
+     "noun": "ash",
+     "describing": [
+      "ashen"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "of the deep woods",
+    "got": {
+     "noun": "woods",
+     "describing": [
+      "deep"
+     ],
+     "of": true,
+     "the": true,
+     "more_than_one": true,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": false
+   },
+   {
+    "text": "Stormwatch",
+    "got": {
+     "noun": "watch",
+     "describing": [
+      "storm"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "joined": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "the last light",
+    "got": {
+     "noun": "light",
+     "describing": [
+      "last"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "joined": false,
+     "ending": ""
+    },
+    "ok": true
+   }
+  ],
+  "split_score": 7,
+  "suggest": [
+   {
+    "entry": "Tsevrani",
+    "got": {
+     "noun": "Tsevrani",
+     "describing": [],
+     "more_than_one": false,
+     "why": "Tsevrani is the name of a language, which is an artifact of culture and civilization rather than directly tied to nature."
+    }
+   },
+   {
+    "entry": "Principality of Drassone",
+    "got": {
+     "noun": "Eared Owl-folk",
+     "describing": [
+      "transitional border regions",
+      "intermediaries"
+     ],
+     "more_than_one": true,
+     "why": "Eared Owl-folk in Drassone are specifically described as residing in transitional border regions where they mediate between human and Tsevranyan Owl communities, making them valued intermediaries in local governance and trade."
+    }
+   },
+   {
+    "entry": "Drassonais",
+    "got": {
+     "noun": "language",
+     "describing": [],
+     "more_than_one": false,
+     "why": "Drassonais is explicitly described as a language, specifically the French-like language spoken in the Principality of Drassone."
+    }
+   },
+   {
+    "entry": "Eared Owl-folk",
+    "got": {
+     "noun": "Eared Owl-folk",
+     "describing": [
+      "border",
+      "mixed heritage",
+      "mediators"
+     ],
+     "more_than_one": false,
+     "why": "The entry focuses on Eared Owl-folk as creatures of the border—they live at the edges between human and Owl worlds, between the Tsardom of Tsevranya and its neighbors, and between two heritages. Their name reflects this liminal, boundary-dwelling nature."
+    }
+   },
+   {
+    "entry": "Tsardom of Tsevranya",
+    "got": {
+     "noun": "Tsevranya",
+     "describing": [
+      "Tsardom",
+      "boreal forest",
+      "taiga",
+      "northern"
+     ],
+     "more_than_one": false,
+     "why": "Tsevranya is a single country, a Tsardom in the north."
+    }
+   },
+   {
+    "entry": "Tsevranyan Owl",
+    "got": {
+     "noun": "owl",
+     "describing": [
+      "Tsevranyan"
+     ],
+     "more_than_one": false,
+     "why": "The name 'Tsevranyan Owl' references the forest, as the transformation event and the species' strong territorial attachment to their former homes ties them deeply to the land and natural environments they inhabit."
+    }
+   },
+   {
+    "entry": "Snowy Owl-folk",
+    "got": {
+     "noun": "snow",
+     "describing": [
+      "white",
+      "uniform"
+     ],
+     "more_than_one": false,
+     "why": "The Snowy Owl-folk are defined by their predominantly white plumage and minimal dark markings, directly referencing the snow and cold weather as their naming source."
+    }
+   }
+  ]
+ },
+ "a": {
+  "fill": {
+   "Tsevrani": {
+    "world": "Test3",
+    "reply": "```json\n{\n  \"describing\": \"before\",\n  \"of\": {\n    \"how\": \"word\",\n    \"text\": \"tre\",\n    \"word_side\": \"before\",\n    \"place\": \"after\",\n    \"the\": false\n  },\n  \"joining\": \"describing_first\",\n  \"clip_first\": false,\n  \"the\": [\n    {\"when\": \"after_vowel\", \"kind\": \"ending\", \"text\": \"k\", \"drop\": \"\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ek\", \"drop\": \"\"}\n  ],\n  \"more_than_one\": [\n    {\"when\": \"ends:a|o\", \"kind\": \"swap\", \"text\": \"y\", \"drop\": \"a|o\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"y\", \"drop\": \"\"}\n  ],\n  \"endings\": [\n    {\n      \"ending\": \"-ov\",\n      \"meaning\": \"one who does\",\n      \"example\": \"okhvelov (hunter)\",\n      \"changes\": [\n        {\"when\": \"ends:a|o\", \"kind\": \"swap\", \"text\": \"ov\", \"drop\": \"a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ov\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-yk\",\n      \"meaning\": \"small, dear\",\n      \"example\": \"pyrtyk (little bird)\",\n      \"changes\": [\n        {\"when\": \"ends:a|o\", \"kind\": \"swap\", \"text\": \"yk\", \"drop\": \"a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"yk\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-ya\",\n      \"meaning\": \"land of\",\n      \"example\": \"Tsevranya\",\n      \"changes\": [\n        {\"when\": \"ends:a|o\", \"kind\": \"swap\", \"text\": \"ya\", \"drop\": \"a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ya\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-de\",\n      \"meaning\": \"place\",\n      \"example\": \"tashde (there)\"\n    },\n    {\n      \"ending\": \"-yn\",\n      \"meaning\": \"one who is\",\n      \"example\": \"zarubyn (foreigner)\",\n      \"changes\": [\n        {\"when\": \"ends:a|o\", \"kind\": \"swap\", \"text\": \"yn\", \"drop\": \"a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"yn\", \"drop\": \"\"}\n      ]\n    }\n  ]\n}\n```\n",
+    "grammar": {
+     "describing": "before",
+     "of": {
+      "how": "word",
+      "text": "tre",
+      "word_side": "before",
+      "place": "after",
+      "the": false
+     },
+     "joining": "describing_first",
+     "clip_first": false,
+     "the": [
+      {
+       "when": "after_vowel",
+       "kind": "ending",
+       "text": "k",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "ek",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "ends:a|o",
+       "kind": "swap",
+       "text": "y",
+       "drop": "a|o"
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "y",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-ov",
+       "meaning": "one who does",
+       "example": "okhvelov (hunter)",
+       "changes": [
+        {
+         "when": "ends:a|o",
+         "kind": "swap",
+         "text": "ov",
+         "drop": "a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ov",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-yk",
+       "meaning": "small, dear",
+       "example": "pyrtyk (little bird)",
+       "changes": [
+        {
+         "when": "ends:a|o",
+         "kind": "swap",
+         "text": "yk",
+         "drop": "a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "yk",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-ya",
+       "meaning": "land of",
+       "example": "Tsevranya",
+       "changes": [
+        {
+         "when": "ends:a|o",
+         "kind": "swap",
+         "text": "ya",
+         "drop": "a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ya",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-de",
+       "meaning": "place",
+       "example": "tashde (there)",
+       "changes": []
+      },
+      {
+       "ending": "-yn",
+       "meaning": "one who is",
+       "example": "zarubyn (foreigner)",
+       "changes": [
+        {
+         "when": "ends:a|o",
+         "kind": "swap",
+         "text": "yn",
+         "drop": "a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "yn",
+         "drop": ""
+        }
+       ]
+      }
+     ]
+    },
+    "score": {
+     "hits": 3,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "dyeshy",
+       "base": "dyesh",
+       "got": "dyeshy",
+       "ok": true
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "dyeshek",
+       "base": "dyesh",
+       "got": "dyeshek",
+       "ok": true
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "dyeshyk",
+       "base": "dyesh",
+       "got": "dyeshyk",
+       "ok": true
+      }
+     ]
+    }
+   },
+   "Drassonais": {
+    "world": "Test3",
+    "reply": "{\"describing\":\"after\",\"of\":{\"how\":\"word\",\"text\":\"di\",\"word_side\":\"before\",\"place\":\"after\",\"the\":false},\"joining\":\"main_first\",\"clip_first\":false,\"the\":[{\"when\":\"before_vowel\",\"kind\":\"word_before\",\"text\":\"l'\"},{\"when\":\"\",\"kind\":\"word_before\",\"text\":\"lo\"}],\"more_than_one\":[{\"when\":\"\",\"kind\":\"ending\",\"text\":\"s\"}],\"endings\":[{\"ending\":\"-el\",\"meaning\":\"little, dear\",\"example\":\"ausselinel, little bird\"},{\"ending\":\"-aud\",\"meaning\":\"one who does\",\"example\":\"chantaud, singer\",\"changes\":[{\"when\":\"ends:ir|or\",\"kind\":\"swap\",\"drop\":\"ir|or\",\"text\":\"aud\"},{\"when\":\"\",\"kind\":\"ending\",\"text\":\"aud\"}]},{\"ending\":\"-auve\",\"meaning\":\"place of\",\"example\":\"peirecauve, quarry\"},{\"ending\":\"-ais\",\"meaning\":\"person from\",\"example\":\"Drassonais, person of Drassone\",\"changes\":[{\"when\":\"ends:e\",\"kind\":\"swap\",\"drop\":\"e\",\"text\":\"ais\"},{\"when\":\"\",\"kind\":\"ending\",\"text\":\"ais\"}]}]}\n",
+    "grammar": {
+     "describing": "after",
+     "of": {
+      "how": "word",
+      "text": "di",
+      "word_side": "before",
+      "place": "after",
+      "the": false
+     },
+     "joining": "main_first",
+     "clip_first": false,
+     "the": [
+      {
+       "when": "before_vowel",
+       "kind": "word_before",
+       "text": "l'",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "word_before",
+       "text": "lo",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "s",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-el",
+       "meaning": "little, dear",
+       "example": "ausselinel, little bird",
+       "changes": []
+      },
+      {
+       "ending": "-aud",
+       "meaning": "one who does",
+       "example": "chantaud, singer",
+       "changes": [
+        {
+         "when": "ends:ir|or",
+         "kind": "swap",
+         "text": "aud",
+         "drop": "ir|or"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "aud",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-auve",
+       "meaning": "place of",
+       "example": "peirecauve, quarry",
+       "changes": []
+      },
+      {
+       "ending": "-ais",
+       "meaning": "person from",
+       "example": "Drassonais, person of Drassone",
+       "changes": [
+        {
+         "when": "ends:e",
+         "kind": "swap",
+         "text": "ais",
+         "drop": "e"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ais",
+         "drop": ""
+        }
+       ]
+      }
+     ]
+    },
+    "score": {
+     "hits": 1,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "quelc chinous",
+       "base": "chinou",
+       "got": "chinous",
+       "ok": false
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "lo chinou",
+       "base": "chinou",
+       "got": "lo chinou",
+       "ok": true
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "lou chinous",
+       "base": "chinou",
+       "got": "lo chinous",
+       "ok": false
+      }
+     ]
+    }
+   },
+   "Varsenyk": {
+    "world": "Test",
+    "reply": "```json\n{\n  \"describing\": \"before\",\n  \"of\": {\n    \"how\": \"word\",\n    \"text\": \"dre\",\n    \"word_side\": \"before\",\n    \"place\": \"after\",\n    \"the\": false\n  },\n  \"joining\": \"describing_first\",\n  \"clip_first\": false,\n  \"the\": [\n    {\"when\": \"after_consonant\", \"kind\": \"ending\", \"text\": \"ar\", \"drop\": \"\"},\n    {\"when\": \"after_vowel\", \"kind\": \"ending\", \"text\": \"r\", \"drop\": \"\"}\n  ],\n  \"more_than_one\": [\n    {\"when\": \"after_consonant\", \"kind\": \"ending\", \"text\": \"y\", \"drop\": \"\"},\n    {\"when\": \"after_vowel\", \"kind\": \"ending\", \"text\": \"ny\", \"drop\": \"\"}\n  ],\n  \"endings\": [\n    {\n      \"ending\": \"-oy\",\n      \"meaning\": \"having, like\",\n      \"example\": \"pelyroy, feathered\",\n      \"changes\": []\n    },\n    {\n      \"ending\": \"-ev\",\n      \"meaning\": \"to do\",\n      \"example\": \"ozharev, to set alight\",\n      \"changes\": []\n    },\n    {\n      \"ending\": \"-enya\",\n      \"meaning\": \"land of\",\n      \"example\": \"Varsenya, snow-land\",\n      \"changes\": [\n        {\"when\": \"after_vowel\", \"kind\": \"swap\", \"text\": \"enya\", \"drop\": \"a|e|i|o|u|y\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"enya\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-ets\",\n      \"meaning\": \"person of\",\n      \"example\": \"Varsenets\",\n      \"changes\": [\n        {\"when\": \"after_vowel\", \"kind\": \"swap\", \"text\": \"ets\", \"drop\": \"ya|a|e|o|y\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ets\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-tsy\",\n      \"meaning\": \"people of\",\n      \"example\": \"Varsentsy\",\n      \"changes\": [\n        {\"when\": \"after_vowel\", \"kind\": \"swap\", \"text\": \"tsy\", \"drop\": \"ya|a|e|o|y\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"tsy\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-nik\",\n      \"meaning\": \"one who does\",\n      \"example\": \"letavnik, flier\",\n      \"changes\": []\n    }\n  ]\n}\n```\n",
+    "grammar": {
+     "describing": "before",
+     "of": {
+      "how": "word",
+      "text": "dre",
+      "word_side": "before",
+      "place": "after",
+      "the": false
+     },
+     "joining": "describing_first",
+     "clip_first": false,
+     "the": [
+      {
+       "when": "after_consonant",
+       "kind": "ending",
+       "text": "ar",
+       "drop": ""
+      },
+      {
+       "when": "after_vowel",
+       "kind": "ending",
+       "text": "r",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "after_consonant",
+       "kind": "ending",
+       "text": "y",
+       "drop": ""
+      },
+      {
+       "when": "after_vowel",
+       "kind": "ending",
+       "text": "ny",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-oy",
+       "meaning": "having, like",
+       "example": "pelyroy, feathered",
+       "changes": []
+      },
+      {
+       "ending": "-ev",
+       "meaning": "to do",
+       "example": "ozharev, to set alight",
+       "changes": []
+      },
+      {
+       "ending": "-enya",
+       "meaning": "land of",
+       "example": "Varsenya, snow-land",
+       "changes": [
+        {
+         "when": "after_vowel",
+         "kind": "swap",
+         "text": "enya",
+         "drop": "a|e|i|o|u|y"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "enya",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-ets",
+       "meaning": "person of",
+       "example": "Varsenets",
+       "changes": [
+        {
+         "when": "after_vowel",
+         "kind": "swap",
+         "text": "ets",
+         "drop": "ya|a|e|o|y"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ets",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-tsy",
+       "meaning": "people of",
+       "example": "Varsentsy",
+       "changes": [
+        {
+         "when": "after_vowel",
+         "kind": "swap",
+         "text": "tsy",
+         "drop": "ya|a|e|o|y"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "tsy",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-nik",
+       "meaning": "one who does",
+       "example": "letavnik, flier",
+       "changes": []
+      }
+     ]
+    },
+    "score": {
+     "hits": 3,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "khuvely",
+       "base": "khuvel",
+       "got": "khuvely",
+       "ok": true
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "khuvelar",
+       "base": "khuvel",
+       "got": "khuvelar",
+       "ok": true
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "khuvelyr",
+       "base": "khuvel",
+       "got": "khuvelyr",
+       "ok": true
+      }
+     ]
+    }
+   },
+   "Bumbagoo": {
+    "world": "Test",
+    "reply": "```json\n{\n  \"describing\": \"after\",\n  \"of\": {\n    \"how\": \"word\",\n    \"text\": \"bi\",\n    \"word_side\": \"before\",\n    \"place\": \"after\",\n    \"the\": false\n  },\n  \"joining\": \"describing_first\",\n  \"clip_first\": false,\n  \"the\": [\n    {\"when\": \"after_consonant\", \"kind\": \"ending\", \"text\": \"aga\", \"drop\": \"\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ga\", \"drop\": \"\"}\n  ],\n  \"more_than_one\": [\n    {\"when\": \"\", \"kind\": \"double\", \"text\": \"\", \"drop\": \"\"}\n  ],\n  \"endings\": [\n    {\"ending\": \"-ba\", \"meaning\": \"person\", \"example\": \"\", \"changes\": []},\n    {\"ending\": \"-bo\", \"meaning\": \"person\", \"example\": \"Wazubo\", \"changes\": []},\n    {\"ending\": \"-goo\", \"meaning\": \"person\", \"example\": \"Nelagoo\", \"changes\": []},\n    {\"ending\": \"-gonk\", \"meaning\": \"place (stone land); also items\", \"example\": \"Dibagonk\", \"changes\": []},\n    {\"ending\": \"-mobba\", \"meaning\": \"place (lake)\", \"example\": \"\", \"changes\": []},\n    {\"ending\": \"-bumpa\", \"meaning\": \"place (tree)\", \"example\": \"\", \"changes\": []},\n    {\"ending\": \"-tok\", \"meaning\": \"item\", \"example\": \"Pozzatok\", \"changes\": []},\n    {\"ending\": \"-chuchumba\", \"meaning\": \"group (friends of a place)\", \"example\": \"\", \"changes\": []},\n    {\"ending\": \"gogol\", \"meaning\": \"group (they of a place)\", \"example\": \"Gogol Dibagonk\", \"changes\": [\n      {\"when\": \"\", \"kind\": \"word_before\", \"text\": \"gogol\", \"drop\": \"\"}\n    ]},\n    {\"ending\": \"-doli\", \"meaning\": \"people (named after its home)\", \"example\": \"Dibadoli\", \"changes\": []}\n  ]\n}\n```\n",
+    "grammar": {
+     "describing": "after",
+     "of": {
+      "how": "word",
+      "text": "bi",
+      "word_side": "before",
+      "place": "after",
+      "the": false
+     },
+     "joining": "describing_first",
+     "clip_first": false,
+     "the": [
+      {
+       "when": "after_consonant",
+       "kind": "ending",
+       "text": "aga",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "ga",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "",
+       "kind": "double",
+       "text": "",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-ba",
+       "meaning": "person",
+       "example": "",
+       "changes": []
+      },
+      {
+       "ending": "-bo",
+       "meaning": "person",
+       "example": "Wazubo",
+       "changes": []
+      },
+      {
+       "ending": "-goo",
+       "meaning": "person",
+       "example": "Nelagoo",
+       "changes": []
+      },
+      {
+       "ending": "-gonk",
+       "meaning": "place (stone land); also items",
+       "example": "Dibagonk",
+       "changes": []
+      },
+      {
+       "ending": "-mobba",
+       "meaning": "place (lake)",
+       "example": "",
+       "changes": []
+      },
+      {
+       "ending": "-bumpa",
+       "meaning": "place (tree)",
+       "example": "",
+       "changes": []
+      },
+      {
+       "ending": "-tok",
+       "meaning": "item",
+       "example": "Pozzatok",
+       "changes": []
+      },
+      {
+       "ending": "-chuchumba",
+       "meaning": "group (friends of a place)",
+       "example": "",
+       "changes": []
+      },
+      {
+       "ending": "gogol",
+       "meaning": "group (they of a place)",
+       "example": "Gogol Dibagonk",
+       "changes": [
+        {
+         "when": "",
+         "kind": "word_before",
+         "text": "gogol",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-doli",
+       "meaning": "people (named after its home)",
+       "example": "Dibadoli",
+       "changes": []
+      }
+     ]
+    },
+    "score": {
+     "hits": 1,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "bubumpa",
+       "base": "bumpa",
+       "got": "bubumpa",
+       "ok": true
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "nu bumpa",
+       "base": "bumpa",
+       "got": "bumpaga",
+       "ok": false
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "bubumpa",
+       "base": "bumpa",
+       "got": "bubumpaga",
+       "ok": false
+      }
+     ]
+    }
+   },
+   "Skrathik": {
+    "world": "Test",
+    "reply": "```json\n{\n  \"describing\": \"after\",\n  \"of\": {\n    \"how\": \"word\",\n    \"text\": \"uk\",\n    \"word_side\": \"before\",\n    \"place\": \"after\",\n    \"the\": false\n  },\n  \"joining\": \"main_first\",\n  \"clip_first\": false,\n  \"the\": [\n    {\"when\": \"after_vowel\", \"kind\": \"ending\", \"text\": \"kh\", \"drop\": \"\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ikh\", \"drop\": \"\"}\n  ],\n  \"more_than_one\": [\n    {\"when\": \"\", \"kind\": \"double\", \"text\": \"\", \"drop\": \"\"}\n  ],\n  \"endings\": [\n    {\"ending\": \"-ik\", \"meaning\": \"thing of\", \"example\": \"suth (water) → suthik (fish)\"},\n    {\"ending\": \"-esh\", \"meaning\": \"place of\", \"example\": \"tras (walk) → trasesh (road)\"},\n    {\"ending\": \"-ar\", \"meaning\": \"one who\", \"example\": \"grokh (bad) → grokhar (enemy)\"},\n    {\"ending\": \"-i\", \"meaning\": \"like, of the kind\", \"example\": \"zith (snow) → zithi (white)\"},\n    {\"ending\": \"-k\", \"meaning\": \"speech of\", \"example\": \"Skrathi → Skrathik\"}\n  ]\n}\n```\n",
+    "grammar": {
+     "describing": "after",
+     "of": {
+      "how": "word",
+      "text": "uk",
+      "word_side": "before",
+      "place": "after",
+      "the": false
+     },
+     "joining": "main_first",
+     "clip_first": false,
+     "the": [
+      {
+       "when": "after_vowel",
+       "kind": "ending",
+       "text": "kh",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "ikh",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "",
+       "kind": "double",
+       "text": "",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-ik",
+       "meaning": "thing of",
+       "example": "suth (water) → suthik (fish)",
+       "changes": []
+      },
+      {
+       "ending": "-esh",
+       "meaning": "place of",
+       "example": "tras (walk) → trasesh (road)",
+       "changes": []
+      },
+      {
+       "ending": "-ar",
+       "meaning": "one who",
+       "example": "grokh (bad) → grokhar (enemy)",
+       "changes": []
+      },
+      {
+       "ending": "-i",
+       "meaning": "like, of the kind",
+       "example": "zith (snow) → zithi (white)",
+       "changes": []
+      },
+      {
+       "ending": "-k",
+       "meaning": "speech of",
+       "example": "Skrathi → Skrathik",
+       "changes": []
+      }
+     ]
+    },
+    "score": {
+     "hits": 3,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "totok",
+       "base": "tok",
+       "got": "totok",
+       "ok": true
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "tokikh",
+       "base": "tok",
+       "got": "tokikh",
+       "ok": true
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "totokikh",
+       "base": "tok",
+       "got": "totokikh",
+       "ok": true
+      }
+     ]
+    }
+   },
+   "Moscavian": {
+    "world": "Moscavia",
+    "reply": "```json\n{\n  \"describing\": \"before\",\n  \"of\": {\n    \"how\": \"word\",\n    \"text\": \"dye\",\n    \"word_side\": \"before\",\n    \"place\": \"after\",\n    \"the\": true\n  },\n  \"joining\": \"describing_first\",\n  \"clip_first\": false,\n  \"the\": [\n    {\"when\": \"ends:y|i\", \"kind\": \"ending\", \"text\": \"te\", \"drop\": \"\"},\n    {\"when\": \"ends:a|o\", \"kind\": \"ending\", \"text\": \"ta\", \"drop\": \"\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ot\", \"drop\": \"\"}\n  ],\n  \"more_than_one\": [\n    {\"when\": \"ends:a|o\", \"kind\": \"swap\", \"text\": \"i\", \"drop\": \"a|o\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"y\", \"drop\": \"\"}\n  ],\n  \"endings\": [\n    {\n      \"ending\": \"-ets\",\n      \"meaning\": \"a man who / from\",\n      \"example\": \"moskavets\",\n      \"changes\": [\n        {\"when\": \"ends:ya|a|o\", \"kind\": \"swap\", \"text\": \"ets\", \"drop\": \"ya|a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ets\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-ka\",\n      \"meaning\": \"a woman who / from\",\n      \"example\": \"moskavka\",\n      \"changes\": [\n        {\"when\": \"ends:ya|a|o\", \"kind\": \"swap\", \"text\": \"ka\", \"drop\": \"ya|a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ka\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-itsa\",\n      \"meaning\": \"a woman who / from\",\n      \"example\": \"\",\n      \"changes\": [\n        {\"when\": \"ends:ya|a|o\", \"kind\": \"swap\", \"text\": \"itsa\", \"drop\": \"ya|a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"itsa\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-tsi\",\n      \"meaning\": \"the people of\",\n      \"example\": \"moskavtsi\",\n      \"changes\": [\n        {\"when\": \"ends:ya|a|o\", \"kind\": \"swap\", \"text\": \"tsi\", \"drop\": \"ya|a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"tsi\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-stvo\",\n      \"meaning\": \"realm, state\",\n      \"example\": \"tsevarstvo\",\n      \"changes\": [\n        {\"when\": \"ends:ya|a|o\", \"kind\": \"swap\", \"text\": \"stvo\", \"drop\": \"ya|a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"stvo\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-enka\",\n      \"meaning\": \"little, dear\",\n      \"example\": \"syerdenka\",\n      \"changes\": [\n        {\"when\": \"ends:ya|a|o\", \"kind\": \"swap\", \"text\": \"enka\", \"drop\": \"ya|a|o\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"enka\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-evik\",\n      \"meaning\": \"son of\",\n      \"example\": \"Borodevik\",\n      \"changes\": [\n        {\"when\": \"ends:ey\", \"kind\": \"swap\", \"text\": \"evik\", \"drop\": \"ey\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"evik\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-evra\",\n      \"meaning\": \"daughter of\",\n      \"example\": \"Borodevra\",\n      \"changes\": [\n        {\"when\": \"ends:ey\", \"kind\": \"swap\", \"text\": \"evra\", \"drop\": \"ey\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"evra\", \"drop\": \"\"}\n      ]\n    }\n  ]\n}\n```\n",
+    "grammar": {
+     "describing": "before",
+     "of": {
+      "how": "word",
+      "text": "dye",
+      "word_side": "before",
+      "place": "after",
+      "the": true
+     },
+     "joining": "describing_first",
+     "clip_first": false,
+     "the": [
+      {
+       "when": "ends:y|i",
+       "kind": "ending",
+       "text": "te",
+       "drop": ""
+      },
+      {
+       "when": "ends:a|o",
+       "kind": "ending",
+       "text": "ta",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "ot",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "ends:a|o",
+       "kind": "swap",
+       "text": "i",
+       "drop": "a|o"
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "y",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-ets",
+       "meaning": "a man who / from",
+       "example": "moskavets",
+       "changes": [
+        {
+         "when": "ends:ya|a|o",
+         "kind": "swap",
+         "text": "ets",
+         "drop": "ya|a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ets",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-ka",
+       "meaning": "a woman who / from",
+       "example": "moskavka",
+       "changes": [
+        {
+         "when": "ends:ya|a|o",
+         "kind": "swap",
+         "text": "ka",
+         "drop": "ya|a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ka",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-itsa",
+       "meaning": "a woman who / from",
+       "example": "",
+       "changes": [
+        {
+         "when": "ends:ya|a|o",
+         "kind": "swap",
+         "text": "itsa",
+         "drop": "ya|a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "itsa",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-tsi",
+       "meaning": "the people of",
+       "example": "moskavtsi",
+       "changes": [
+        {
+         "when": "ends:ya|a|o",
+         "kind": "swap",
+         "text": "tsi",
+         "drop": "ya|a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "tsi",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-stvo",
+       "meaning": "realm, state",
+       "example": "tsevarstvo",
+       "changes": [
+        {
+         "when": "ends:ya|a|o",
+         "kind": "swap",
+         "text": "stvo",
+         "drop": "ya|a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "stvo",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-enka",
+       "meaning": "little, dear",
+       "example": "syerdenka",
+       "changes": [
+        {
+         "when": "ends:ya|a|o",
+         "kind": "swap",
+         "text": "enka",
+         "drop": "ya|a|o"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "enka",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-evik",
+       "meaning": "son of",
+       "example": "Borodevik",
+       "changes": [
+        {
+         "when": "ends:ey",
+         "kind": "swap",
+         "text": "evik",
+         "drop": "ey"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "evik",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-evra",
+       "meaning": "daughter of",
+       "example": "Borodevra",
+       "changes": [
+        {
+         "when": "ends:ey",
+         "kind": "swap",
+         "text": "evra",
+         "drop": "ey"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "evra",
+         "drop": ""
+        }
+       ]
+      }
+     ]
+    },
+    "score": {
+     "hits": 3,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "glazovy",
+       "base": "glazov",
+       "got": "glazovy",
+       "ok": true
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "glazovot",
+       "base": "glazov",
+       "got": "glazovot",
+       "ok": true
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "glazovyte",
+       "base": "glazov",
+       "got": "glazovyte",
+       "ok": true
+      }
+     ]
+    }
+   },
+   "Varovni": {
+    "world": "Test2",
+    "reply": "```json\n{\n  \"describing\": \"before\",\n  \"of\": {\n    \"how\": \"word\",\n    \"text\": \"dez\",\n    \"word_side\": \"before\",\n    \"place\": \"after\",\n    \"the\": false\n  },\n  \"joining\": \"describing_first\",\n  \"clip_first\": true,\n  \"the\": [\n    {\"when\": \"after_vowel\", \"kind\": \"ending\", \"text\": \"k\", \"drop\": \"\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ek\", \"drop\": \"\"}\n  ],\n  \"more_than_one\": [\n    {\"when\": \"after_vowel\", \"kind\": \"ending\", \"text\": \"ni\", \"drop\": \"\"},\n    {\"when\": \"\", \"kind\": \"ending\", \"text\": \"i\", \"drop\": \"\"}\n  ],\n  \"endings\": [\n    {\n      \"ending\": \"-ets\",\n      \"meaning\": \"one from\",\n      \"example\": \"Otsyenets (a person of Otsyenya)\",\n      \"changes\": [\n        {\"when\": \"ends:ya|ni\", \"kind\": \"swap\", \"text\": \"ets\", \"drop\": \"ya|ni\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ets\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-nya\",\n      \"meaning\": \"land of\",\n      \"example\": \"gosvarnya (tsardom)\"\n    },\n    {\n      \"ending\": \"-ovna\",\n      \"meaning\": \"thing that does\",\n      \"example\": \"parovna (engine)\",\n      \"changes\": [\n        {\"when\": \"ends:a|o|e|i|u\", \"kind\": \"swap\", \"text\": \"ovna\", \"drop\": \"a|o|e|i|u\"},\n        {\"when\": \"\", \"kind\": \"ending\", \"text\": \"ovna\", \"drop\": \"\"}\n      ]\n    },\n    {\n      \"ending\": \"-in\",\n      \"meaning\": \"-ly / related person\",\n      \"example\": \"dovroin (well), voyarin (husband)\"\n    },\n    {\n      \"ending\": \"-ush\",\n      \"meaning\": \"honoured\",\n      \"example\": \"Gosvarush (Your Majesty)\"\n    }\n  ]\n}\n```\n",
+    "grammar": {
+     "describing": "before",
+     "of": {
+      "how": "word",
+      "text": "dez",
+      "word_side": "before",
+      "place": "after",
+      "the": false
+     },
+     "joining": "describing_first",
+     "clip_first": true,
+     "the": [
+      {
+       "when": "after_vowel",
+       "kind": "ending",
+       "text": "k",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "ek",
+       "drop": ""
+      }
+     ],
+     "more_than_one": [
+      {
+       "when": "after_vowel",
+       "kind": "ending",
+       "text": "ni",
+       "drop": ""
+      },
+      {
+       "when": "",
+       "kind": "ending",
+       "text": "i",
+       "drop": ""
+      }
+     ],
+     "endings": [
+      {
+       "ending": "-ets",
+       "meaning": "one from",
+       "example": "Otsyenets (a person of Otsyenya)",
+       "changes": [
+        {
+         "when": "ends:ya|ni",
+         "kind": "swap",
+         "text": "ets",
+         "drop": "ya|ni"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ets",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-nya",
+       "meaning": "land of",
+       "example": "gosvarnya (tsardom)",
+       "changes": []
+      },
+      {
+       "ending": "-ovna",
+       "meaning": "thing that does",
+       "example": "parovna (engine)",
+       "changes": [
+        {
+         "when": "ends:a|o|e|i|u",
+         "kind": "swap",
+         "text": "ovna",
+         "drop": "a|o|e|i|u"
+        },
+        {
+         "when": "",
+         "kind": "ending",
+         "text": "ovna",
+         "drop": ""
+        }
+       ]
+      },
+      {
+       "ending": "-in",
+       "meaning": "-ly / related person",
+       "example": "dovroin (well), voyarin (husband)",
+       "changes": []
+      },
+      {
+       "ending": "-ush",
+       "meaning": "honoured",
+       "example": "Gosvarush (Your Majesty)",
+       "changes": []
+      }
+     ]
+    },
+    "score": {
+     "hits": 3,
+     "of": 3,
+     "rows": [
+      {
+       "form": [
+        "more_than_one"
+       ],
+       "want": "skelti",
+       "base": "skelt",
+       "got": "skelti",
+       "ok": true
+      },
+      {
+       "form": [
+        "the"
+       ],
+       "want": "skeltek",
+       "base": "skelt",
+       "got": "skeltek",
+       "ok": true
+      },
+      {
+       "form": [
+        "more_than_one",
+        "the"
+       ],
+       "want": "skeltik",
+       "base": "skelt",
+       "got": "skeltik",
+       "ok": true
+      }
+     ]
+    }
+   }
+  }
+ },
+ "c": {
+  "model": "koboldcpp/Skyfall-31B-v4.2-i1-Q4_K_M",
+  "split": [
+   {
+    "text": "of the Stars",
+    "got": {
+     "noun": "star",
+     "describing": [],
+     "of": true,
+     "the": true,
+     "more_than_one": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "white lake",
+    "got": {
+     "noun": "lake",
+     "describing": [
+      "white"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "the old grey stones",
+    "got": {
+     "noun": "stone",
+     "describing": [
+      "old",
+      "grey"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "lakeland",
+    "got": {
+     "noun": "land",
+     "describing": [
+      "lake"
+     ],
+     "joined": true
+    },
+    "ok": true
+   },
+   {
+    "text": "Owl-of-Frost",
+    "got": {
+     "noun": "frost",
+     "describing": [],
+     "of": true,
+     "the": false,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "of the Sun",
+    "got": {
+     "noun": "sun",
+     "describing": [],
+     "of": true,
+     "the": true,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "grey water",
+    "got": {
+     "noun": "water",
+     "describing": [
+      "grey"
+     ],
+     "of": false,
+     "the": false,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "the river",
+    "got": {
+     "noun": "river",
+     "describing": [],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "rivers",
+    "got": {
+     "noun": "river",
+     "describing": [],
+     "of": false,
+     "the": false,
+     "more_than_one": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "of the Seven Hills",
+    "got": {
+     "noun": "hill",
+     "describing": [
+      "seven"
+     ],
+     "of": true,
+     "the": true,
+     "more_than_one": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "Blackwater",
+    "got": {
+     "noun": "water",
+     "describing": [
+      "black"
+     ],
+     "joined": true
+    },
+    "ok": true
+   },
+   {
+    "text": "the frozen north",
+    "got": {
+     "noun": "north",
+     "describing": [
+      "frozen"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "of iron",
+    "got": {
+     "noun": "iron",
+     "describing": [],
+     "of": true,
+     "the": false,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "the high pass",
+    "got": {
+     "noun": "pass",
+     "describing": [
+      "high"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "land of owls",
+    "got": {
+     "noun": "owl",
+     "describing": [],
+     "of": false,
+     "the": false,
+     "more_than_one": true,
+     "ending": "land of"
+    },
+    "ok": true
+   },
+   {
+    "text": "the silver moons",
+    "got": {
+     "noun": "moon",
+     "describing": [
+      "silver"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "ashen",
+    "got": {
+     "noun": "ash",
+     "describing": [
+      "-en"
+     ],
+     "joined": true
+    },
+    "ok": false
+   },
+   {
+    "text": "of the deep woods",
+    "got": {
+     "noun": "wood",
+     "describing": [
+      "deep"
+     ],
+     "of": true,
+     "the": true,
+     "more_than_one": true,
+     "ending": ""
+    },
+    "ok": true
+   },
+   {
+    "text": "Stormwatch",
+    "got": {
+     "noun": "watch",
+     "describing": [
+      "storm"
+     ],
+     "joined": true
+    },
+    "ok": true
+   },
+   {
+    "text": "the last light",
+    "got": {
+     "noun": "light",
+     "describing": [
+      "last"
+     ],
+     "of": false,
+     "the": true,
+     "more_than_one": false,
+     "ending": ""
+    },
+    "ok": true
+   }
+  ],
+  "split_score": 19,
+  "suggest": [
+   {
+    "entry": "Tsevrani",
+    "got": {
+     "noun": "forest",
+     "why": "The Owl-folk of Tsevranya are named from the forest — 'owl' itself references nocturnal forest creatures, and the Tsevrani language and culture are rooted in the vast boreal and temperate forests of their empire."
+    }
+   },
+   {
+    "entry": "Principality of Drassone",
+    "got": {
+     "noun": "field",
+     "why": "Drassone is described as a pastoral and agricultural nation with rolling farmlands where grain cultivation and livestock raising are the primary economic activities. The word 'field' directly represents the agricultural landscape that defines the principality."
+    }
+   },
+   {
+    "entry": "Drassonais",
+    "got": {
+     "noun": "tongue",
+     "why": "Drassonais is a language, and 'tongue' is a common noun for a language or way of speaking."
+    }
+   },
+   {
+    "entry": "Eared Owl-folk",
+    "got": {
+     "noun": "threshold",
+     "why": "The Eared Owl-folk are described as feeling a 'liminal sense of belonging, as though they stand at the threshold between human and Owl worlds.'"
+    }
+   },
+   {
+    "entry": "Tsardom of Tsevranya",
+    "got": {
+     "noun": "snow",
+     "why": "The pure-line Tsevranyan Owls resemble snowy owls with predominantly white plumage, connecting the owl-folk to snow/ice as a naming element."
+    }
+   },
+   {
+    "entry": "Tsevranyan Owl",
+    "got": {
+     "noun": "snow",
+     "why": "The Tsevranyan Owl's plumage is predominantly white with grey barring, resembling a snowy owl. 'Snow' is the key descriptive element tied to their appearance."
+    }
+   },
+   {
+    "entry": "Snowy Owl-folk",
+    "got": {
+     "noun": "snow",
+     "why": "The Snowy Owl-folk's predominantly white plumage and minimal dark mottling are inspired by snowy landscapes."
+    }
+   }
+  ]
+ }
+}

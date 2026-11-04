@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from talemate.languages.completeness import Completeness, completeness
 from talemate.languages.generator import fits, roll, validate_language
+from talemate.languages.name_grammar import parse_condition
 from talemate.languages.models import Language
 
 __all__ = [
@@ -176,12 +177,54 @@ def _check_real(language: Language, report: CheckReport) -> None:
         report.warnings.append(f"{len(report.real_hits)} {what}: {shown}")
 
 
+def _name_grammar_problems(language: Language) -> list[str]:
+    """What can't be read in the grammar for names and the composed rules
+    (languages 4b-1): a condition no one knows, a part naming no rule, a
+    rule with neither patterns nor parts."""
+
+    problems: list[str] = []
+    grammar = language.name_grammar
+    if grammar is not None:
+        changes = [*grammar.the, *grammar.more_than_one]
+        changes += [c for ending in grammar.endings for c in ending.changes]
+        for change in changes:
+            try:
+                parse_condition(change.when)
+            except ValueError as exc:
+                problems.append(f"The grammar for names can't be read: {exc}")
+    ids = {g.id for g in language.generators}
+    endings = (
+        {e.meaning.strip().lower() for e in grammar.endings}
+        if grammar is not None
+        else set()
+    )
+    for generator in language.generators:
+        if not generator.patterns and not generator.shapes:
+            problems.append(f"The name rule {generator.id!r} has no patterns or parts")
+        for shape in generator.shapes:
+            for part in shape.parts:
+                if part.ending and part.ending.strip().lower() not in endings:
+                    problems.append(
+                        f"The name rule {generator.id!r} uses an ending the "
+                        f"grammar for names doesn't have: {part.ending!r}"
+                    )
+                if part.kind == "rule" and part.rule not in ids:
+                    problems.append(
+                        f"The name rule {generator.id!r} uses a rule that "
+                        f"doesn't exist: {part.rule!r}"
+                    )
+    return problems
+
+
 def check_language(
     language: Language, *, samples: int = 20, seed: int = 0
 ) -> CheckReport:
     """Check `language`: what blocks it, what's worth fixing, and sample
     names per generator."""
     report = CheckReport(dictionary_size=len(language.dictionary))
+    # problems in the grammar for names block, but every rule's samples
+    # are still rolled (final review I3)
+    grammar_problems = _name_grammar_problems(language)
     try:
         validate_language(language)
     except Exception as exc:  # GeneratorError, or a bad regex reaching it
@@ -197,6 +240,7 @@ def check_language(
             report.blocking.append(
                 f"The name rule {generator.id!r} can't make names: {exc}"
             )
+    report.blocking.extend(grammar_problems)
     if report.blocking:
         return report
     _check_fit(language, report)

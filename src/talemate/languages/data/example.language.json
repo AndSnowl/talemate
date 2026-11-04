@@ -38,6 +38,28 @@
           "CVCVC",
           "CVCVCVC"
         ]
+      },
+      {
+        "id": "from-a-place",
+        "name": "Names from a place",
+        "use": "people",
+        "patterns": [],
+        "shapes": [
+          {
+            "weight": 1,
+            "parts": [
+              {
+                "kind": "rule",
+                "rule": "people"
+              },
+              {
+                "kind": "meaning",
+                "of": true,
+                "hint": "the place they come from"
+              }
+            ]
+          }
+        ]
       }
     ],
     "grammar": [
@@ -169,6 +191,35 @@
         "original": "Kor vel!",
         "translation": "The great river take you!"
       }
-    ]
+    ],
+    "name_grammar": {
+      "describing": "before",
+      "of": {
+        "how": "word",
+        "text": "da",
+        "word_side": "before",
+        "place": "after",
+        "the": true
+      },
+      "joining": "describing_first",
+      "clip_first": false,
+      "the": [
+        {
+          "when": "",
+          "kind": "ending",
+          "text": "en",
+          "drop": ""
+        }
+      ],
+      "more_than_one": [
+        {
+          "when": "",
+          "kind": "ending",
+          "text": "i",
+          "drop": ""
+        }
+      ],
+      "endings": []
+    }
   }
 }

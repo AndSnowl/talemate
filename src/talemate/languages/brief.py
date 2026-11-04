@@ -162,6 +162,30 @@ def _file() -> list[str]:
         "(its `flavour`): every word is invented.",
         "- A full language needs a `words` generator, whose patterns the "
         "dictionary's own words follow.",
+        *_name_grammar_rules(),
+    ]
+
+
+def _name_grammar_rules() -> list[str]:
+    """How the grammar for names and composed rules are written (languages
+    4b-1); probe 4b-1's wording."""
+
+    return [
+        "- `name_grammar` is the grammar names are built with: where describing "
+        'words go, how "of" is said, how joined words go, how "the" and '
+        '"more than one" are formed (each a list of changes tried in order; '
+        "the first whose condition holds is used), and the endings with a "
+        "meaning from the word-building table.",
+        "- A change's `kind` is `ending` (adds `text`), `swap` (takes off one "
+        "of the `|`-listed endings in `drop`, then adds `text`), `word_before`, "
+        "`word_after`, or `double` (the first syllable doubled). Its `when` is "
+        '`""` (always), `after_vowel`, `after_consonant`, `before_vowel`, '
+        '`plural` ("the" on a word made more than one), or `ends:a|o`.',
+        "- A name rule can have `shapes` instead of patterns: a name made of "
+        "parts, each another rule (`rule`), a fixed word (`word`), or a meaning "
+        "(`meaning`: words of the language built from a meaning, with `forms`, "
+        "`of` and a `hint` saying what it takes). Use it for naming customs "
+        "the grammar describes, such as a name after a place or a deed.",
     ]
 
 
@@ -238,6 +262,30 @@ def _fill(current, used) -> list[str]:
     return [*lines, "", *_now(current)]
 
 
+def _names(current, used) -> list[str]:
+    lines = [
+        "## What to add: the grammar for names",
+        "",
+        "Write `name_grammar` from this language's grammar sections and tables below.",
+        "",
+        "Then turn the language's naming customs into rules made of parts "
+        "(`shapes`): a custom that puts words with a meaning into a name, such "
+        'as a second name after the given name ("Owl-of-Stars") or a family '
+        'named for its home ("of the Forest"), becomes its own rule, with a '
+        "`meaning` part for the words that mean something. When an existing "
+        "rule fakes such a custom with fixed words in its patterns, take those "
+        "patterns out of it and keep its plain names. Change nothing else.",
+        "",
+        "Every rule must build the examples the language's tables give: if a "
+        "table says a word's forms, the rules applied to that word give them.",
+        "",
+        *_name_grammar_rules(),
+        "",
+        *_change_rules(used),
+    ]
+    return [*lines, "", *_now(current)]
+
+
 def write_brief(
     view: WorldView | None,
     request: MakeRequest,
@@ -251,12 +299,13 @@ def write_brief(
     chosen entries' facts), the file format, and how to check it (with
     `check_command` where the assistant can run the app's check)."""
 
-    if request.kind in ("change", "fill") and current is not None:
-        body = (
-            _change(request, current, used)
-            if request.kind == "change"
-            else _fill(current, used)
-        )
+    if request.kind in ("change", "fill", "names") and current is not None:
+        if request.kind == "change":
+            body = _change(request, current, used)
+        elif request.kind == "names":
+            body = _names(current, used)
+        else:
+            body = _fill(current, used)
         head = [
             "# Change a language for a fantasy world",
             "",

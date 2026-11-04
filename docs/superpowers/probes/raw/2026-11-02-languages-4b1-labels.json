@@ -1,0 +1,38 @@
+{
+  "about": "Probe 4b-1 labels, written before any call. split: each meaning with the MeaningPhrase a good split gives (fields left out are false/empty); 'any_of' lists acceptable nouns where English allows more than one reading. suggest: Test3 entries (by name) whose facts go to Suggest, scored by hand for fit.",
+  "split": [
+    {"text": "of the Stars", "want": {"noun": "star", "of": true, "more_than_one": true, "the": true}},
+    {"text": "white lake", "want": {"noun": "lake", "describing": ["white"]}},
+    {"text": "the old grey stones", "want": {"noun": "stone", "describing": ["old", "grey"], "the": true, "more_than_one": true}},
+    {"text": "lakeland", "want": {"noun": "lake", "ending": "land of"}, "any_of": [{"noun": "lakeland"}, {"noun": "land", "describing": ["lake"], "joined": true}]},
+    {"text": "Owl-of-Frost", "want": {"noun": "frost", "of": true}},
+    {"text": "of the Sun", "want": {"noun": "sun", "of": true, "the": true}},
+    {"text": "grey water", "want": {"noun": "water", "describing": ["grey"]}},
+    {"text": "the river", "want": {"noun": "river", "the": true}},
+    {"text": "rivers", "want": {"noun": "river", "more_than_one": true}},
+    {"text": "of the Seven Hills", "want": {"noun": "hill", "describing": ["seven"], "of": true, "the": true, "more_than_one": true}},
+    {"text": "Blackwater", "want": {"noun": "water", "describing": ["black"], "joined": true}},
+    {"text": "the frozen north", "want": {"noun": "north", "describing": ["frozen"], "the": true}},
+    {"text": "of iron", "want": {"noun": "iron", "of": true}},
+    {"text": "the high pass", "want": {"noun": "pass", "describing": ["high"], "the": true}},
+    {"text": "land of owls", "want": {"noun": "owl", "more_than_one": true, "ending": "land of"}, "any_of": [{"noun": "land", "of": true}]},
+    {"text": "the silver moons", "want": {"noun": "moon", "describing": ["silver"], "the": true, "more_than_one": true}},
+    {"text": "ashen", "want": {"noun": "ash", "describing": []}, "any_of": [{"noun": "", "describing": ["ashen"]}]},
+    {"text": "of the deep woods", "want": {"noun": "wood", "describing": ["deep"], "of": true, "the": true, "more_than_one": true}},
+    {"text": "Stormwatch", "want": {"noun": "watch", "describing": ["storm"], "joined": true}},
+    {"text": "the last light", "want": {"noun": "light", "describing": ["last"], "the": true}}
+  ],
+  "suggest_rule": {"parts": ["[given name]", "Ul", "[a meaning · plural] hint: something an owl-folk takes a name from: the sky, the weather, the forest"]},
+  "suggest": [
+    "Tsardom of Tsevranya",
+    "Principality of Drassone",
+    "Tsevranyan Owl",
+    "Eared Owl-folk",
+    "Cathedral of Saint Vorogovik",
+    "Tsevrani",
+    "Drassonais",
+    "Snowy Owl-folk",
+    "Tsevranyan Orthodox Church",
+    "Great Hall of the Tsarvenyan Throne"
+  ]
+}

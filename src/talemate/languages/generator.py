@@ -481,6 +481,11 @@ def roll(
         raise GeneratorError(f"unknown generator id: {generator_id!r}")
 
     rng = rng if rng is not None else random.Random()
+    if generator.shapes:
+        # a composed rule (languages 4b-1): rolled part by part
+        from talemate.languages.composed import roll_composed
+
+        return roll_composed(language, generator, count, rng, exclude)
     compiled = _compile_language(_language_cache_key(language))
     categories = compiled.categories
     patterns = compiled.generator_patterns[generator.id]
@@ -549,6 +554,49 @@ def fits(language: Language, name: str) -> bool:
     return False
 
 
+def _built_words(language: Language) -> frozenset[str]:
+    """The words a built name may use (languages 4b-1): dictionary words,
+    those words in each form and with each ending of the grammar for
+    names, and the fixed words of composed rules; lower-case."""
+
+    from talemate.languages.name_grammar import (
+        apply_ending,
+        apply_form,
+        vowels_of,
+    )
+
+    words = {e.word.lower() for e in language.dictionary}
+    grammar = language.name_grammar
+    if grammar is not None:
+        vowels = vowels_of(language)
+        for word in list(words):
+            try:
+                plural = apply_form(grammar, vowels, word, "more_than_one")
+                words.update(
+                    {
+                        plural,
+                        apply_form(grammar, vowels, word, "the"),
+                        apply_form(grammar, vowels, plural, "the", plural=True),
+                    }
+                )
+                for ending in grammar.endings:
+                    words.add(apply_ending(grammar, vowels, word, ending.meaning))
+            except (ValueError, KeyError):
+                continue
+        # the words a form or "of" puts beside a word (lo, lou, dez)
+        changes = [*grammar.the, *grammar.more_than_one]
+        changes += [c for ending in grammar.endings for c in ending.changes]
+        for change in changes:
+            if change.kind in ("word_before", "word_after"):
+                words.update(w.lower().strip("'’-") for w in change.text.split())
+        if grammar.of is not None and grammar.of.how == "word":
+            words.update(w.lower() for w in grammar.of.text.split())
+    for generator in language.generators:
+        for shape in generator.shapes:
+            words.update(p.word.lower() for p in shape.parts if p.kind == "word")
+    return frozenset(w for w in words if w)
+
+
 # Words skipped when a multi-word name is checked word by word: a leading
 # article and the connectors that join name parts ("Ilsa of the Birches",
 # "Anne de la Croix").
@@ -567,11 +615,17 @@ def name_fits(language: Language, text: str) -> bool:
     name mixing a fitting word with a foreign one doesn't.
     """
     words = _normalize_whitespace(text).split()
+    built = _built_words(language)
+
+    def word_fits(word: str) -> bool:
+        # a word the name engine can build fits too (languages 4b-1)
+        return word.lower() in built or fits(language, word)
+
     if len(words) <= 1:
-        return fits(language, text)
+        return word_fits(text.strip())
     if fits(language, text):
         return True
     words = [word for word in words if word.lower() not in _NAME_CONNECTORS]
     if not words:
         return False
-    return all(fits(language, word) for word in words)
+    return all(word_fits(word) for word in words)

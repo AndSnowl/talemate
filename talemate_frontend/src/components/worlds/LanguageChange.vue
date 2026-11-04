@@ -105,6 +105,7 @@
                     <ul class="report-list text-body-2">
                         <li v-for="(line, index) in stillLines" :key="index">{{ line }}</li>
                     </ul>
+                    <v-btn v-if="namesWanted" size="small" color="primary" variant="tonal" :disabled="running || otherBusy" data-testid="change-names" @click="fillNames">Fill in: the grammar for names</v-btn>
                     <v-btn v-if="fillStep" size="small" color="primary" variant="tonal" :disabled="running || otherBusy" data-testid="change-fill" @click="fill">Fill in next: {{ fillStep }}</v-btn>
                 </div>
             </div>
@@ -220,8 +221,11 @@ export default {
         },
         stillLines() {
             const found = this.completeness;
-            if (!found) return [];
-            const lines = [];
+            // the grammar for names is offered whatever else is missing
+            // (acceptance run: a complete language hid it)
+            const names = this.namesWanted ? ['Grammar for names: not written yet'] : [];
+            if (!found) return names;
+            const lines = [...names];
             const missing = found.meanings_missing || [];
             if (missing.length) {
                 const shown = missing.slice(0, 6).join(', ') + (missing.length > 6 ? ', …' : '');
@@ -240,11 +244,24 @@ export default {
             if ((found.grammar_topics_missing || []).length) return 'grammar';
             return null;
         },
+        // offered when the panel was opened for it, or the language has none
+        namesWanted() {
+            if (!this.targetId) return false;
+            if (this.draft?.names) return true;
+            const target = this.targetId === this.thing.id ? this.thing : null;
+            return !!target && target.kind === 'language' && !target.fields?.rules?.name_grammar;
+        },
         canStart() {
             return !!this.draft.text.trim() && !this.running && !this.otherBusy;
         },
     },
     watch: {
+        'worlds.languageMakeRoute'() {
+            this.autoStart();
+        },
+        'draft.autoNames'() {
+            this.autoStart();
+        },
         'worlds.languageChangeFocus'() {
             this.focusRequest();
         },
@@ -264,6 +281,7 @@ export default {
     },
     mounted() {
         this.worlds.loadLanguageMakeRoute();
+        this.autoStart();
         if (this.fromEntry) this.worlds.loadLanguageMenu(this.draft.originId);
         this.focusRequest();
     },
@@ -285,7 +303,7 @@ export default {
             return {
                 kind,
                 target_id: this.targetId,
-                text: kind === 'fill' ? '' : this.draft.text.trim(),
+                text: kind === 'fill' || kind === 'names' ? '' : this.draft.text.trim(),
                 context_ids: this.contextIds,
                 route: this.route,
                 ...(this.route === 'claude_code' ? { claude_model: this.claudeModel } : {}),
@@ -299,6 +317,17 @@ export default {
         fill() {
             if (this.briefOnly) this.copyBrief('fill');
             else this.start('fill');
+        },
+        // opened by the card's Fill them in: start once the route is known
+        autoStart() {
+            if (!this.draft?.autoNames || !this.worlds.languageMakeRoute || this.running || this.otherBusy) return;
+            this.worlds.languageChange = { ...this.draft, autoNames: false };
+            this.fillNames();
+        },
+        // the grammar for names from the grammar (languages 4b-1)
+        fillNames() {
+            if (this.briefOnly) this.copyBrief('names');
+            else this.start('names');
         },
         copyBrief(kind) {
             this.copied = false;

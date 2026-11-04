@@ -61,6 +61,9 @@ class Completeness(BaseModel):
     structural_missing: list[str]
     phrase_categories_missing: list[str]
     grammar_topics_missing: list[str]
+    # no grammar for names yet (languages 4b-1): names are built in the
+    # owner's word order until it's filled in
+    name_grammar_missing: bool = False
 
 
 def _key(meaning: str) -> str:
@@ -93,6 +96,7 @@ def completeness(language: Language) -> Completeness:
         grammar_topics_missing=[
             title for topic, title in GRAMMAR_TOPICS if topic not in topics
         ],
+        name_grammar_missing=language.name_grammar is None,
     )
 
 

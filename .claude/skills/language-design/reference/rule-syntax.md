@@ -88,3 +88,10 @@ of two or more of the language's own fitting words counts as fitting).
 dictionary that fits the `words` generator. To see whether two languages
 read as distinct, roll names from one and check them against the other's
 rules: aim for close to none fitting the neighbour.
+
+## Grammar for names and composed rules
+
+`name_grammar` and a rule's `shapes` are described in `SKILL.md`. The app's
+engine applies them: the model only ever chooses meanings. A language
+without them still works; names are then built in the owner's English
+word order.

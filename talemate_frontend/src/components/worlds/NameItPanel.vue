@@ -1,5 +1,5 @@
 <template>
-    <v-dialog :model-value="!!request" max-width="780" @update:model-value="!$event && worlds.closeNameIt()">
+    <v-dialog :model-value="!!request" width="980" @update:model-value="!$event && worlds.closeNameIt()">
         <v-card v-if="request" class="name-it pa-4" data-testid="name-it">
             <!-- an entry's name as chips: the words chosen are renamed, the
                  rest stays (owner, Test3) -->
@@ -20,6 +20,10 @@
                 </template>
                 <span v-else class="words">{{ request.words || 'a new name' }}</span>
                 <span class="text-caption text-muted" data-testid="name-it-effect">{{ effect }}</span>
+            </div>
+            <div v-if="parts.length > 1" class="text-caption text-muted mt-1">
+                <span class="font-italic">click a word to keep it out of the rename</span>
+                <span class="ml-2">gives <b data-testid="name-it-result">{{ result }}</b></span>
             </div>
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
@@ -45,6 +49,7 @@
                     data-testid="name-it-rule"
                 ></v-select>
                 <v-select
+                    v-if="!composed"
                     v-model="pattern"
                     :items="patternItems"
                     label="Pattern"
@@ -55,19 +60,49 @@
                     :disabled="!ruleId"
                     data-testid="name-it-pattern"
                 ></v-select>
-                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">Reroll</v-btn>
+                <!-- a composed rule's form: any, or one chosen (owner, Test2) -->
+                <v-select
+                    v-if="composed && shapeItems.length > 2"
+                    :model-value="worlds.nameItShapeChoice"
+                    :items="shapeItems"
+                    :label="`Form · ${shapeItems.length - 1} forms`"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="field form"
+                    data-testid="name-it-form"
+                    @update:model-value="chooseForm"
+                ></v-select>
+                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll the unpinned parts' : 'Reroll' }}</v-btn>
+                <v-btn
+                    v-if="composed && request.target?.thingId"
+                    color="accent"
+                    variant="text"
+                    size="small"
+                    prepend-icon="mdi-creation"
+                    :loading="worlds.nameItBuilding"
+                    :disabled="!formHasMeaning"
+                    :title="formHasMeaning ? '' : 'This form has no part that takes a meaning'"
+                    data-testid="name-it-suggest"
+                    @click="worlds.nameItSuggest(languageId, ruleId, request.target.thingId)"
+                >Suggest meanings from {{ suggestName }}'s facts</v-btn>
             </div>
             <div v-if="!languageId" class="text-body-2 text-muted mt-2">Pick the language to name it in.</div>
 
-            <NameRolls class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
-            <div v-if="meaningShown" class="text-caption text-muted mt-1">{{ meaningShown }}</div>
+            <!-- a composed rule: the builder, part by part (languages 4b-1) -->
+            <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
+            <NameRolls v-else class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
+            <div v-if="meaningShown && !composed" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
+            <!-- a plain rule only: the whole name from a meaning (a rule made
+                 of parts has a meaning box in each meaning part, round 4) -->
+            <template v-if="!composed">
             <v-divider class="my-3"></v-divider>
             <div class="d-flex align-center flex-wrap ga-2">
-                <span class="text-body-2"><b>From a meaning</b></span>
+                <span class="text-body-2"><b>A whole name from a meaning</b></span>
                 <v-text-field
                     v-model="meaning"
-                    placeholder="lakeland, grey water…"
+                    placeholder="lakeland, the white water…"
                     density="compact"
                     variant="outlined"
                     hide-details
@@ -76,6 +111,7 @@
                     @keydown.enter="find"
                 ></v-text-field>
                 <v-btn variant="text" color="accent" size="small" :loading="worlds.nameItMeaning.pending" :disabled="!languageId || !meaning.trim()" data-testid="name-it-find" @click="find">Find</v-btn>
+                <span class="text-caption text-muted font-italic">Translates your words into one name, in this language's word order.</span>
             </div>
             <div v-if="worlds.nameItMeaning.error" class="text-caption text-error mt-1">{{ worlds.nameItMeaning.error }}</div>
             <div v-for="(candidate, ci) in worlds.nameItMeaning.candidates" :key="ci" class="d-flex align-center flex-wrap ga-2 mt-2" data-testid="name-it-candidate">
@@ -100,12 +136,15 @@
                     @pin="worlds.nameItPinWord(part.index, $event)"
                 />
             </div>
+            </template>
         </v-card>
     </v-dialog>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import NameBuilder from './NameBuilder.vue';
+import { resultLine } from './nameParts.js';
 import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
@@ -117,7 +156,7 @@ const BUCKETS = { character: 'people', being: 'people', place: 'places' };
 // (`worlds.pickNameIt`) and adds the word to the language.
 export default {
     name: 'NameItPanel',
-    components: { NameRolls },
+    components: { NameBuilder, NameRolls },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -129,6 +168,10 @@ export default {
         request() {
             return this.worlds.nameIt;
         },
+        // what the rename gives: "King + new name + III"
+        result() {
+            return resultLine(this.request?.target?.fullName || '', this.picked);
+        },
         // an entry's name, word by word, when the panel renames an entry
         parts() {
             const full = this.request?.target?.fullName || '';
@@ -139,6 +182,24 @@ export default {
         },
         ruleItems() {
             return this.worlds.nameItRules.map((r) => ({ title: r.name, value: r.id }));
+        },
+        // a composed rule's forms, with "any" first
+        shapeItems() {
+            const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
+            return [{ title: 'any', value: null }, ...(rule?.shapes || []).map((title, i) => ({ title, value: i }))];
+        },
+        // the picked rule is made of parts (languages 4b-1)
+        // the entry's name, for "Suggest meanings from …'s facts"
+        suggestName() {
+            return this.request?.target?.fullName || this.request?.words || 'its';
+        },
+        // the form on screen has a meaning part (Suggest has something to fill)
+        formHasMeaning() {
+            return (this.worlds.nameItParts?.parts || []).some((p) => p.kind === 'meaning');
+        },
+        composed() {
+            const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
+            return !!(rule && (rule.parts || []).length);
         },
         patternItems() {
             const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
@@ -196,6 +257,11 @@ export default {
         },
         ruleId() {
             this.pattern = null;
+            // another rule: the builder starts again, no pins
+            this.worlds.nameItParts = null;
+            this.worlds.nameItPartPinned = {};
+            this.worlds.nameItPartChosen = {};
+            this.worlds.nameItShapeChoice = null;
             this.roll();
         },
         pattern() {
@@ -215,22 +281,32 @@ export default {
         chosen(i) {
             return this.picked.includes(i);
         },
-        // a word on or off; the words renamed run from the first chosen to
-        // the last
+        // a click changes only the word clicked (owner, 2026-11-04):
+        // picked words are renamed, the others kept where they are; the
+        // last picked word stays (something has to be renamed)
         togglePart(i) {
-            const all = this.picked.length === this.parts.length;
-            let picked = all ? [i] : this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i];
-            if (!picked.length) picked = this.parts.map((_, j) => j);
-            const from = Math.min(...picked);
-            const to = Math.max(...picked);
-            this.picked = Array.from({ length: to - from + 1 }, (_, j) => from + j);
-            this.worlds.nameIt = { ...this.worlds.nameIt, words: this.parts.slice(from, to + 1).join(' ') };
+            if (this.chosen(i) && this.picked.length === 1) return;
+            this.picked = this.chosen(i) ? this.picked.filter((p) => p !== i) : [...this.picked, i].sort((a, b) => a - b);
+            this.worlds.nameIt = {
+                ...this.worlds.nameIt,
+                words: this.picked.map((p) => this.parts[p]).join(' '),
+                picked: [...this.picked],
+            };
+        },
+        chooseForm(shape) {
+            this.worlds.nameItShapeChoice = shape;
+            // another form: its pins no longer fit
+            this.worlds.nameItPartPinned = {};
+            this.roll();
         },
         roll() {
-            this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
+            if (this.composed) this.worlds.nameItRollParts(this.languageId, this.ruleId);
+            else this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
         },
+        // a composed rule's meaning parts take the meaning; else names
+        // built from it alone
         find() {
-            this.worlds.nameItFromMeaning(this.languageId, this.meaning);
+            this.worlds.nameItFromMeaning(this.languageId, this.meaning, this.composed ? this.ruleId : null);
         },
         meaningOf(candidate) {
             return (candidate.built_from || []).map((p) => p.meaning).join(' ');
@@ -258,6 +334,9 @@ export default {
 }
 .field {
     flex: 0 1 200px;
+}
+.form {
+    flex: 0 1 340px;
 }
 .meaning {
     flex: 0 1 260px;

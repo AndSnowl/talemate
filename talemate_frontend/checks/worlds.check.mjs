@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
+import { composeName, partLabel, resultLine } from '../src/components/worlds/nameParts.js';
 import {
     akaAdded,
     akaChanged,
@@ -4144,6 +4145,156 @@ check('a meaning\'s new word rolls like the batch, once for both forms (owner, T
     store.handleMessage(reply('name_it_batch', { slot: 'word:1', names: [{ name: 'Tova', meaning: '' }] }));
     assert.deepEqual(store.nameItWordShown(1).map((n) => [n.name, !!n.pinned]), [['lusa', true], ['tova', false]]);
     assert.deepEqual(store.nameItBatch, []);
+});
+
+check('a composed rule\'s parts read as the server labels them (4b-1)', () => {
+    const generators = [{ id: 'men', name: "Men's names" }];
+    assert.equal(partLabel({ kind: 'rule', rule: 'men' }, generators), "Men's names");
+    assert.equal(partLabel({ kind: 'rule', rule: 'gone' }, generators), '(missing rule)');
+    assert.equal(partLabel({ kind: 'word', word: 'Ul' }), 'Ul');
+    assert.equal(partLabel({ kind: 'meaning', forms: ['more_than_one'] }), 'a meaning · plural');
+    assert.equal(partLabel({ kind: 'meaning', slot: 'describing_noun', of: true, forms: ['the'] }), 'a description · of · the');
+});
+
+const OWL_PARTS = {
+    shape: 0,
+    parts: [
+        { index: 0, kind: 'rule', label: "Men's names", pinned: false, rolls: [{ text: 'Dorvak', parts: [] }, { text: 'Zemol', parts: [] }] },
+        { index: 1, kind: 'word', label: 'fixed', pinned: false, rolls: [{ text: 'Ul', parts: [] }] },
+        { index: 2, kind: 'meaning', label: 'a meaning · plural', pinned: false, rolls: [{ text: 'Zveski', parts: [{ word: 'zvesk', meaning: 'star', new: false, steps: ['-i more than one'] }] }] },
+        { index: 3, kind: 'meaning', label: 'a meaning', pinned: false, rolls: [] },
+    ],
+};
+
+check('the builder joins chosen parts and drops empty optional ones (4b-1)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    assert.equal(store.nameItBuilt, 'Dorvak Ul Zveski');
+    store.nameItChoosePart(0, 'Zemol');
+    assert.equal(store.nameItBuilt, 'Zemol Ul Zveski');
+    assert.deepEqual(store.nameItBuiltFrom.map((p) => p.word), ['zvesk']);
+});
+
+check('typing a part pins it (4b-1)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItTypePart(0, 'Kodik');
+    assert.deepEqual(store.nameItPartPinned, { 0: 'Kodik' });
+    assert.equal(store.nameItBuilt, 'Kodik Ul Zveski');
+    store.nameItTypePart(0, '');
+    assert.deepEqual(store.nameItPartPinned, {});
+});
+
+check('reroll sends the pinned parts and keeps them (4b-1)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItPinPart(2, 'Zveski');
+    store.nameItRollParts('l1', 'owl');
+    const asked = sent.filter((m) => m.action === 'name_it_parts').at(-1);
+    assert.deepEqual(asked.pinned ?? asked.data?.pinned, { 2: 'Zveski' });
+    assert.equal(asked.shape ?? asked.data?.shape, 0);
+    store.nameItPinPart(2, 'Zveski');
+    assert.deepEqual(store.nameItPartPinned, {});
+    store.closeNameIt();
+    assert.equal(store.nameItParts, null);
+});
+
+check('a builder reply for another rule is dropped (4b-1 final review I5)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.nameItSuggest('l1', 'owl', 't1');
+    // the owner switches rule before Suggest answers
+    store.nameItRollParts('l1', 'men');
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'men', shape: 0, parts: [{ index: 0, kind: 'rule', label: 'Men', pinned: false, rolls: [{ text: 'Zemol', parts: [] }] }] }));
+    store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', shape: 0, fills: { 2: [{ text: 'Zveski', parts: [] }] } }));
+    assert.equal(store.nameItBuilt, 'Zemol');
+    assert.equal(store.nameItBuilding, false);
+});
+
+check('the chosen form goes with Reroll, Find and Suggest (owner, Test2)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Zakan', target: { thingId: 't1' } });
+    const last = (action) => {
+        const m = sent.filter((x) => x.action === action).at(-1);
+        return m.data ?? m;
+    };
+    store.nameItShapeChoice = 1;
+    store.nameItRollParts('l1', 'people');
+    assert.equal(last('name_it_parts').shape, 1);
+    store.nameItFromMeaning('l1', 'owl of the sun', 'people');
+    assert.equal(last('name_it_meaning').shape, 1);
+    store.nameItSuggest('l1', 'people', 't1');
+    assert.equal(last('name_it_suggest').shape, 1);
+    // with no choice, Find sends the form on screen
+    store.nameItShapeChoice = null;
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'people', shape: 0, parts: [] }));
+    store.nameItFromMeaning('l1', 'sun', 'people');
+    assert.equal(last('name_it_meaning').shape, 0);
+    store.closeNameIt();
+    assert.equal(store.nameItShapeChoice, null);
+});
+
+check('a part\'s meaning fills only that part (round 4)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItChoosePart(0, 'Zemol');
+    store.nameItPartMeaning('l1', 'owl', 2, 'stars');
+    const asked = sent.filter((m) => m.action === 'name_it_part_meaning').at(-1);
+    const data = asked.data ?? asked;
+    assert.deepEqual([data.shape, data.index, data.text], [0, 2, 'stars']);
+    assert.equal(store.nameItPartPending[2], true);
+    store.handleMessage(reply('name_it_part_meaning', { language_id: 'l1', rule_id: 'owl', shape: 0, index: 2, rolls: [{ text: 'Zveskini', parts: [{ word: 'zvesk', meaning: 'star', new: false, steps: [] }] }] }));
+    assert.equal(store.nameItBuilt, 'Zemol Ul Zveskini');
+    assert.equal(store.nameItPartPending[2], false);
+    assert.equal(store.nameItPartMeanings[2], 'stars');
+});
+
+check('a typed meaning keeps its part through a reroll; emptied, it rolls again (round 4)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItPartMeaning('l1', 'owl', 2, 'stars');
+    store.handleMessage(reply('name_it_part_meaning', { language_id: 'l1', rule_id: 'owl', shape: 0, index: 2, rolls: [{ text: 'Zveskini', parts: [] }] }));
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    assert.equal(store.nameItPartChosen[2], 'Zveskini');
+    store.nameItPartMeaning('l1', 'owl', 2, '');
+    assert.deepEqual(store.nameItPartMeanings, {});
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    assert.equal(store.nameItPartChosen[2], 'Zveski');
+});
+
+check('Suggest fills only the meaning parts (round 4)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Dorvak', target: { thingId: 't1' } });
+    store.handleMessage(reply('name_it_parts', { language_id: 'l1', rule_id: 'owl', ...OWL_PARTS }));
+    store.nameItChoosePart(0, 'Zemol');
+    store.nameItSuggest('l1', 'owl', 't1');
+    store.handleMessage(reply('name_it_suggest', { language_id: 'l1', rule_id: 'owl', thing_id: 't1', shape: 0, fills: { 2: [{ text: 'Varsani', parts: [] }] } }));
+    assert.equal(store.nameItBuilt, 'Zemol Ul Varsani');
+    assert.equal(store.nameItBuilding, false);
+});
+
+check('kept words stay where they are; the new name takes the first picked word\'s place (owner, 2026-11-04)', () => {
+    assert.equal(composeName('King Zakan III', [1], 'Velmar'), 'King Velmar III');
+    assert.equal(composeName('Zakan III', [0], 'Velmar'), 'Velmar III');
+    assert.equal(composeName('Commander Zakan of the Watch', [1], 'Velmar'), 'Commander Velmar of the Watch');
+    assert.equal(composeName('King Zakan III', [0, 2], 'Velmar'), 'Velmar Zakan');
+    assert.equal(composeName('King Zakan III', [0, 1, 2], 'Velmar Ul Svelm'), 'Velmar Ul Svelm');
+    assert.equal(resultLine('King Zakan III', [1]), 'King + new name + III');
+    assert.equal(resultLine('King Zakan III', []), '');
+    assert.equal(resultLine('Commander Zakan of the Watch', [1]), 'Commander + new name + of the Watch');
+});
+
+check('a rename keeps the words left out (owner, 2026-11-04)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Zakan', target: { thingId: 't1', fullName: 'King Zakan III' }, picked: [1] });
+    store.pickNameIt(null, 'Velmar');
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name ?? asked.data?.name, 'King Velmar III');
 });
 
 if (failures.length) {

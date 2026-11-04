@@ -36,6 +36,71 @@
       "title": "DictionaryEntry",
       "type": "object"
     },
+    "Ending": {
+      "description": "A meaningful ending (\"-nya\", land of). No `changes` means the plain\nending added.",
+      "properties": {
+        "ending": {
+          "title": "Ending",
+          "type": "string"
+        },
+        "meaning": {
+          "title": "Meaning",
+          "type": "string"
+        },
+        "example": {
+          "default": "",
+          "title": "Example",
+          "type": "string"
+        },
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/FormChange"
+          },
+          "title": "Changes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ending",
+        "meaning"
+      ],
+      "title": "Ending",
+      "type": "object"
+    },
+    "FormChange": {
+      "description": "One way a word changes for a form or an ending (languages 4b-1):\nan ending added (`text`, after `drop` letters are taken off), a word\nput before or after it, or its first part doubled; only `when` its\ncondition holds (`name_grammar.parse_condition`).",
+      "properties": {
+        "when": {
+          "default": "",
+          "title": "When",
+          "type": "string"
+        },
+        "kind": {
+          "default": "ending",
+          "enum": [
+            "ending",
+            "swap",
+            "word_before",
+            "word_after",
+            "double"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "drop": {
+          "default": "",
+          "title": "Drop",
+          "type": "string"
+        }
+      },
+      "title": "FormChange",
+      "type": "object"
+    },
     "GeneratorDef": {
       "properties": {
         "id": {
@@ -55,6 +120,13 @@
             "type": "string"
           },
           "title": "Patterns",
+          "type": "array"
+        },
+        "shapes": {
+          "items": {
+            "$ref": "#/$defs/NameShape"
+          },
+          "title": "Shapes",
           "type": "array"
         },
         "reject": {
@@ -83,8 +155,7 @@
       "required": [
         "id",
         "name",
-        "use",
-        "patterns"
+        "use"
       ],
       "title": "GeneratorDef",
       "type": "object"
@@ -270,6 +341,17 @@
           },
           "title": "Similar",
           "type": "array"
+        },
+        "name_grammar": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NameGrammar"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -277,6 +359,215 @@
         "level"
       ],
       "title": "Language",
+      "type": "object"
+    },
+    "NameGrammar": {
+      "description": "A language's grammar for names (languages 4b-1): word order, the\nforms \"the\" and \"more than one\", and its meaningful endings. The name\nengine (`name_grammar`) applies it; the model never does.",
+      "properties": {
+        "describing": {
+          "default": "before",
+          "enum": [
+            "before",
+            "after"
+          ],
+          "title": "Describing",
+          "type": "string"
+        },
+        "of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OfRule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "joining": {
+          "default": "describing_first",
+          "enum": [
+            "describing_first",
+            "main_first"
+          ],
+          "title": "Joining",
+          "type": "string"
+        },
+        "clip_first": {
+          "default": false,
+          "title": "Clip First",
+          "type": "boolean"
+        },
+        "the": {
+          "items": {
+            "$ref": "#/$defs/FormChange"
+          },
+          "title": "The",
+          "type": "array"
+        },
+        "more_than_one": {
+          "items": {
+            "$ref": "#/$defs/FormChange"
+          },
+          "title": "More Than One",
+          "type": "array"
+        },
+        "endings": {
+          "items": {
+            "$ref": "#/$defs/Ending"
+          },
+          "title": "Endings",
+          "type": "array"
+        }
+      },
+      "title": "NameGrammar",
+      "type": "object"
+    },
+    "NamePart": {
+      "description": "One part of a composed name rule: another rule, a fixed word, or a\nmeaning part (words of the language built from a meaning).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "rule",
+            "word",
+            "meaning"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "rule": {
+          "default": "",
+          "title": "Rule",
+          "type": "string"
+        },
+        "word": {
+          "default": "",
+          "title": "Word",
+          "type": "string"
+        },
+        "slot": {
+          "default": "noun",
+          "enum": [
+            "noun",
+            "describing_noun"
+          ],
+          "title": "Slot",
+          "type": "string"
+        },
+        "forms": {
+          "items": {
+            "enum": [
+              "the",
+              "more_than_one"
+            ],
+            "type": "string"
+          },
+          "title": "Forms",
+          "type": "array"
+        },
+        "of": {
+          "default": false,
+          "title": "Of",
+          "type": "boolean"
+        },
+        "joined": {
+          "default": false,
+          "title": "Joined",
+          "type": "boolean"
+        },
+        "ending": {
+          "default": "",
+          "title": "Ending",
+          "type": "string"
+        },
+        "hint": {
+          "default": "",
+          "title": "Hint",
+          "type": "string"
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "NamePart",
+      "type": "object"
+    },
+    "NameShape": {
+      "description": "One way a composed rule's name goes, its parts in order; shapes are\npicked by `weight`, as patterns are.",
+      "properties": {
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/NamePart"
+          },
+          "title": "Parts",
+          "type": "array"
+        },
+        "weight": {
+          "default": 1,
+          "title": "Weight",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parts"
+      ],
+      "title": "NameShape",
+      "type": "object"
+    },
+    "OfRule": {
+      "description": "How \"of X\" is said: a word (on `word_side` of X) or an ending on X;\nthe of-phrase goes `place`d before or after the thing it belongs to;\nwith `the`, X takes \"the\".",
+      "properties": {
+        "how": {
+          "default": "word",
+          "enum": [
+            "word",
+            "ending"
+          ],
+          "title": "How",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "word_side": {
+          "default": "before",
+          "enum": [
+            "before",
+            "after"
+          ],
+          "title": "Word Side",
+          "type": "string"
+        },
+        "place": {
+          "default": "after",
+          "enum": [
+            "before",
+            "after"
+          ],
+          "title": "Place",
+          "type": "string"
+        },
+        "the": {
+          "default": false,
+          "title": "The",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "OfRule",
       "type": "object"
     },
     "Phrase": {
