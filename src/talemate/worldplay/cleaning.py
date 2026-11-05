@@ -116,9 +116,25 @@ async def clean_preview(
         }
     )
     language_id = _main_language(used)
+    if preview.kind == "character" and not language_id:
+        # a person: their parents' language, from the model's parent rows
+        # (unticked, ruling F7) when nothing else gives one (4b-2)
+        language_id = _main_language(_parent_languages(view, preview))
     if preview.kind == "character" and language_id:
         cleaned = name_person(view, cleaned, language_id)
     return cleaned
+
+
+def _parent_languages(view, preview: CreatePreview) -> list:
+    """The languages of the draft's parent rows, ticked or not."""
+
+    from talemate.languages.person_names import PARENT_WORDS, role_matches
+
+    rows: list = []
+    for row in preview.filings:
+        if row.target_id and role_matches(list(PARENT_WORDS), row.role or ""):
+            rows += languages_for(view, row.target_id)
+    return rows
 
 
 def _main_language(rows: list) -> str | None:
@@ -209,10 +225,12 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
 
     from talemate.languages.entry import language_of
     from talemate.languages.person_names import (
+        PARENT_WORDS,
         PersonContext,
         build_person_name,
         choose,
         connections_of,
+        role_matches,
         roll_pet_name,
         stored_written,
     )
@@ -234,8 +252,12 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
         # the owner's own name: never rebuilt
         return preview
     rng = random.Random()
+    # ticked rows, and the model's parent rows (they arrive unticked,
+    # ruling F7, but the prompt said whose child this is)
     filings = [
-        (f.target_id, f.role) for f in preview.filings if f.target_id and f.ticked
+        (f.target_id, f.role)
+        for f in preview.filings
+        if f.target_id and (f.ticked or role_matches(list(PARENT_WORDS), f.role or ""))
     ]
     ctx = PersonContext(
         built_as=choose(language, preview.person),

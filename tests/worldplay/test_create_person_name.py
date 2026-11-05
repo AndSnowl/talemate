@@ -252,3 +252,52 @@ def test_person_block_parses_without_the_opening_brace():
         "name_meaning": "of the stars",
         "title": "Lady",
     }
+
+
+async def test_an_unticked_parent_row_from_the_model_still_passes_the_name_down(test3):
+    """The model's "In" rows arrive unticked (ruling F7); a parent's still
+    gives the inherited part (4b-2 acceptance)."""
+
+    ids = test3.ids
+    preview = _preview(
+        test3, "a daughter of Eilhaud", person={"sex": "woman", "rank": "noble"}
+    )
+    preview = preview.model_copy(
+        update={
+            "filings": [
+                *preview.filings,
+                PreviewFiling(
+                    target_id=ids["eilhaud"],
+                    target_name="Eilhaud of Drassone",
+                    role="daughter of",
+                    ticked=False,
+                ),
+            ]
+        }
+    )
+    cleaned = await clean_preview(test3, preview, None)
+    assert cleaned.fields["name_parts"]["parts"][-1]["from_id"] == ids["eilhaud"]
+    assert not any(f.new_name for f in cleaned.filings)
+
+
+async def test_a_person_with_only_a_parent_row_is_named_in_the_parents_language(test3):
+    ids = test3.ids
+    preview = CreatePreview(
+        kind="character",
+        prompt="a daughter of Eilhaud",
+        name="Elise",
+        facts=[PreviewFact(category="background", text="Elise grew up at court.")],
+        prose={},
+        filings=[
+            PreviewFiling(
+                target_id=ids["eilhaud"],
+                target_name="Eilhaud of Drassone",
+                role="daughter of",
+                ticked=False,
+            )
+        ],
+        person={"sex": "woman", "rank": "noble"},
+    )
+    cleaned = await clean_preview(test3, preview, None)
+    assert cleaned.fields["name_parts"]["language"] == ids["lang"]
+    assert cleaned.name.endswith(" of Drassone")
