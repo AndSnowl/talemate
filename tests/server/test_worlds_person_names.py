@@ -325,3 +325,30 @@ async def test_a_person_without_parts_has_no_name_view_but_its_language(plugin):
     w = await _world(plugin)
     await _act(plugin, "get_thing", id=w.tiboud)
     assert _last(plugin, "get_thing")["data"]["name_view"] is None
+
+
+async def test_name_it_parts_writes_fixed_words_in_english_and_frees_an_inherited_part(
+    plugin,
+):
+    w = await _world(plugin)
+    await _act(
+        plugin,
+        "name_it_parts",
+        language_id=w.lang,
+        thing_id=w.maelis,
+        rule_id="noble-women",
+    )
+    parts = _last(plugin, "name_it_parts")["data"]["parts"]
+    assert parts[1]["english"] == "of"
+    assert parts[2]["pinned"] is True
+    await _act(
+        plugin,
+        "name_it_parts",
+        language_id=w.lang,
+        thing_id=w.maelis,
+        rule_id="noble-women",
+        free=[2],
+    )
+    parts = _last(plugin, "name_it_parts")["data"]["parts"]
+    assert parts[2]["pinned"] is False and parts[2]["source"] == "rolled"
+    assert len(parts[2]["rolls"]) > 1

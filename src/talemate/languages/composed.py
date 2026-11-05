@@ -51,6 +51,8 @@ class PartRoll(BaseModel):
     source: Literal["rolled", "typed", "meaning", "inherited", "word"] = "rolled"
     from_id: str = ""
     from_role: str = ""
+    # a fixed word's English writing ("of" for "di"), when its part has one
+    english: str = ""
 
 
 def _generator(language: Language, rule_id: str) -> GeneratorDef | None:
@@ -243,6 +245,7 @@ def roll_parts(
     rng: random.Random | None = None,
     exclude: frozenset[str] = frozenset(),
     person: PersonContext | None = None,
+    free: frozenset[int] = frozenset(),
 ) -> tuple[int, list[PartRoll]]:
     """The rule's shape (picked by weight unless given) and each part's
     rolls. A pinned (or typed) part's only roll is its text; a pin holds
@@ -252,7 +255,8 @@ def roll_parts(
     With a `person` (languages 4b-2), a connection part takes from their
     connection (pinned, marked inherited; a pin that differs is the
     owner's own), an own part from their own parts, and every rolled part
-    takes the person's form."""
+    takes the person's form. A connection part whose index is in `free`
+    rolls like any part (the owner unpinned it)."""
 
     rng = rng if rng is not None else random.Random()
     generator = _generator(language, rule_id)
@@ -269,7 +273,11 @@ def roll_parts(
     for index, part in enumerate(parts):
         text = (pinned or {}).get(index)
         label = _label(language, part)
-        if person is not None and part.kind in ("connection", "own"):
+        if (
+            person is not None
+            and part.kind in ("connection", "own")
+            and index not in free
+        ):
             found = _person_roll(language, part, index, label, person, text)
             if found is not None:
                 out.append(found)
@@ -301,7 +309,12 @@ def roll_parts(
         source = {"word": "word", "meaning": "meaning"}.get(part.kind, "rolled")
         out.append(
             PartRoll(
-                index=index, kind=part.kind, label=label, rolls=rolls, source=source
+                index=index,
+                kind=part.kind,
+                label=label,
+                rolls=rolls,
+                source=source,
+                english=part.english if part.kind == "word" else "",
             )
         )
     return shape, out

@@ -164,7 +164,7 @@ export default {
     },
     data() {
         // `picked`: the indices of the entry name's words chosen to rename
-        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [] };
+        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [], adopting: false };
     },
     computed: {
         request() {
@@ -205,6 +205,8 @@ export default {
         },
         composed() {
             if (this.titleMode) return false;
+            // a person's rule the server is picking: the builder
+            if (this.request?.person && this.ruleId === '') return true;
             const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
             return !!(rule && (rule.parts || []).length);
         },
@@ -257,6 +259,12 @@ export default {
         },
         'worlds.nameItRules'(rules) {
             if (!rules.length || this.ruleId) return;
+            if (this.request?.person) {
+                // a person's (languages 4b-2): theirs, or the server's pick
+                this.ruleId = this.request.ruleId || '';
+                if (this.ruleId === '') this.roll();
+                return;
+            }
             const kind = this.request?.kind || 'place';
             const names = rules.filter((r) => r.use !== 'words');
             const wanted = [kind, BUCKETS[kind] || 'things', 'places'];
@@ -264,13 +272,29 @@ export default {
             this.ruleId = found?.id || null;
         },
         ruleId() {
+            // the rule the server picked for a person: already rolled
+            if (this.adopting) {
+                this.adopting = false;
+                return;
+            }
             this.pattern = null;
             // another rule: the builder starts again, no pins
             this.worlds.nameItParts = null;
             this.worlds.nameItPartPinned = {};
+            this.worlds.nameItPartFree = [];
             this.worlds.nameItPartChosen = {};
             this.worlds.nameItShapeChoice = null;
+            // a person's own rule: their parts pinned as they are (4b-2)
+            const person = this.request?.person;
+            if (person?.prefill && this.ruleId === this.request.ruleId) this.worlds.nameItPartPinned = { ...person.prefill };
             this.roll();
+        },
+        // the rule the server picked for a person, shown as the panel's
+        'worlds.nameItParts'(parts) {
+            if (this.request?.person && this.ruleId === '' && parts?.rule_id) {
+                this.adopting = true;
+                this.ruleId = parts.rule_id;
+            }
         },
         pattern() {
             this.roll();

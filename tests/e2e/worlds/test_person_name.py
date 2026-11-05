@@ -200,3 +200,109 @@ def test_title_from_a_meaning_opens_name_it_and_saves_a_title(app, page):
         section.get_by_test_id("person-title").filter(has_text="Chef")
     ).to_have_count(1, timeout=TIMEOUT_MS)
     expect(page.get_by_test_id("thing-name")).to_have_text("Maëlis of Drassone")
+
+
+# --- Name it on a person (Task 7) ---------------------------------------------
+
+
+def _builder(page):
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel.get_by_test_id("name-builder-part")).to_have_count(
+        3, timeout=TIMEOUT_MS
+    )
+    return panel
+
+
+def test_name_it_on_a_person_pins_the_inherited_house(app, page):
+    world(app, page, "Person name it")
+    panel = _builder(page)
+    house = panel.get_by_test_id("name-builder-part").nth(2)
+    expect(house.get_by_test_id("name-builder-inherited-pin")).to_be_visible()
+    expect(house).to_contain_text("inherited")
+    expect(panel.get_by_test_id("name-it-built")).to_have_text(
+        "Maëlis of Drassone", timeout=TIMEOUT_MS
+    )
+
+
+def test_reroll_keeps_inherited_parts(app, page):
+    world(app, page, "Person reroll")
+    panel = _builder(page)
+    # the given name, pinned as it is, let go
+    panel.get_by_test_id("name-builder-part").nth(0).get_by_test_id(
+        "name-builder-pin"
+    ).click()
+    for _ in range(20):
+        panel.get_by_test_id("name-it-reroll").click()
+        page.wait_for_timeout(300)
+        built = panel.get_by_test_id("name-it-built").inner_text()
+        assert built.endswith(" of Drassone")
+        if not built.startswith("Maëlis"):
+            break
+    assert not built.startswith("Maëlis")
+
+
+def test_use_this_name_stores_parts(app, page):
+    world(app, page, "Person use")
+    panel = _builder(page)
+    panel.get_by_test_id("name-builder-part").nth(0).get_by_test_id(
+        "name-builder-pin"
+    ).click()
+    panel.get_by_test_id("name-it-reroll").click()
+    rolls = panel.get_by_test_id("name-builder-part").nth(0)
+    other = (
+        rolls.get_by_test_id("name-builder-roll").filter(has_not_text="Maëlis").first
+    )
+    expect(other).to_be_visible(timeout=TIMEOUT_MS)
+    given = other.inner_text().strip()
+    other.click()
+    panel.get_by_test_id("name-it-use").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        f"{given} of Drassone", timeout=TIMEOUT_MS
+    )
+    section = _section(page)
+    expect(section.get_by_test_id("person-name-part").nth(0)).to_contain_text(given)
+    expect(section.get_by_test_id("person-name-part").nth(2)).to_contain_text(
+        "from her father Eilhaud of Drassone"
+    )
+
+
+def test_draft_shows_the_built_name_marked(app, page, fixed_preview, fixed_clean):
+    from e2e.worlds.test_drafts import _draft
+
+    world(app, page, "Person draft")
+    fixed_preview(
+        {
+            "name": "Elise",
+            "person": {
+                "sex": "woman",
+                "rank": "noble",
+                "name_meaning": "",
+                "title": "Lady",
+            },
+            "facts": [
+                {
+                    "category": "background",
+                    "text": "Elise grew up at the Drassonais court.",
+                },
+                {"category": "personality", "text": "Elise is quiet and watchful."},
+            ],
+            "prose": {},
+        }
+    )
+    fixed_clean(
+        {
+            "language-roles": {
+                "languages": [{"language": "Drassonais", "role": "official"}]
+            },
+            "name-flags": {"names": []},
+        }
+    )
+    draft = _draft(page, "character", "a Drassonais noblewoman of the court")
+    flag = draft.get_by_test_id("draft-name-flag")
+    expect(flag).to_contain_text("built from Drassonais's rules", timeout=TIMEOUT_MS)
+    name = flag.locator(".name-flagged").inner_text().strip()
+    assert name != "Elise" and " of " in name
+    expect(draft.locator(".fact-host").filter(has_text="grew up at")).to_contain_text(
+        name
+    )

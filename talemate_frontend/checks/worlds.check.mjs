@@ -4345,6 +4345,69 @@ check('a person name kinds stay out of Other names and the header', () => {
     assert.deepEqual(headerNames(aka).map((a) => a.name), ['Old Name']);
 });
 
+const PERSON_PARTS = {
+    language_id: 'L',
+    rule_id: 'noble-women',
+    shape: 0,
+    parts: [
+        { index: 0, kind: 'rule', label: 'given', rolls: [{ text: 'Maëlis', parts: [] }, { text: 'Ysolde', parts: [] }], pinned: false, source: 'rolled' },
+        { index: 1, kind: 'word', label: 'of', rolls: [{ text: 'di', parts: [] }], pinned: false, source: 'word', english: 'of' },
+        { index: 2, kind: 'connection', label: 'house', rolls: [{ text: 'Drassone', parts: [] }], pinned: true, source: 'inherited', from_id: 'eil', from_role: 'daughter of' },
+    ],
+};
+
+function personNameIt() {
+    const { store, sent } = freshStore();
+    store.openNameIt({
+        words: 'Maëlis of Drassone',
+        languageId: 'L',
+        kind: 'character',
+        target: { thingId: 't1', fullName: 'Maëlis of Drassone' },
+        person: { thingId: 't1', builtAs: { sex: 'woman', rank: 'noble' } },
+    });
+    store.nameItAsked = { languageId: 'L', ruleId: 'noble-women' };
+    store.nameItTakeParts(PERSON_PARTS);
+    return { store, sent };
+}
+
+check('the builder writes a fixed word in English', () => {
+    const { store } = personNameIt();
+    assert.equal(store.nameItBuilt, 'Maëlis of Drassone');
+});
+
+check('a person builder asks with the person and the parts set free', () => {
+    const { store, sent } = personNameIt();
+    store.nameItFreePart(2);
+    store.nameItRollParts('L', 'noble-women');
+    const asked = sent.filter((m) => m.action === 'name_it_parts').at(-1);
+    assert.equal(asked.thing_id, 't1');
+    assert.deepEqual(asked.free, [2]);
+});
+
+check('a person builder with no rule lets the server pick it', () => {
+    const { store, sent } = personNameIt();
+    store.nameItRollParts('L', '');
+    const asked = sent.filter((m) => m.action === 'name_it_parts').at(-1);
+    assert.equal(asked.rule_id, '');
+    store.nameItTakeParts({ ...PERSON_PARTS, rule_id: 'noble-women' });
+    assert.equal(store.nameItParts.rule_id, 'noble-women');
+});
+
+check('use this name on a person stores the parts with the rename', () => {
+    const { store, sent } = personNameIt();
+    store.nameItChoosePart(0, 'Ysolde');
+    store.pickNameIt('L', store.nameItBuilt);
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name, 'Ysolde of Drassone');
+    assert.equal(asked.rule_id, 'noble-women');
+    assert.deepEqual(asked.built_as, { sex: 'woman', rank: 'noble' });
+    assert.deepEqual(asked.parts, [
+        { label: 'given', text: 'Ysolde', source: 'rolled' },
+        { label: 'of', text: 'di', source: 'word' },
+        { label: 'house', text: 'Drassone', source: 'inherited', from_id: 'eil', from_role: 'daughter of' },
+    ]);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

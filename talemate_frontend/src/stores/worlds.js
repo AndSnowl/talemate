@@ -726,6 +726,9 @@ export const useWorldsStore = defineStore('worlds', {
         nameItParts: null,
         nameItPartChosen: {},
         nameItPartPinned: {},
+        // a person's inherited parts the owner unpinned: they roll like any
+        // part (languages 4b-2)
+        nameItPartFree: [],
         nameItBuilding: false,
         // the language and rule the builder last asked for: a reply for
         // another is dropped (final review I5)
@@ -847,7 +850,8 @@ export const useWorldsStore = defineStore('worlds', {
         nameItBuilt: (state) => {
             if (!state.nameItParts) return '';
             return state.nameItParts.parts
-                .map((part) => state.nameItPartChosen[part.index] || '')
+                // a fixed word written in English where the rule says so
+                .map((part) => (part.kind === 'word' && part.english) || state.nameItPartChosen[part.index] || '')
                 .filter((text) => text.trim())
                 .join(' ');
         },
@@ -860,6 +864,22 @@ export const useWorldsStore = defineStore('worlds', {
                 const chosen = state.nameItPartChosen[part.index];
                 const built = part.rolls.find((roll) => roll.text === chosen);
                 return built ? built.parts || [] : [];
+            });
+        },
+        // a person's name parts as Use this name stores them (languages
+        // 4b-2): each part's text and where it came from
+        nameItPartsOut: (state) => {
+            if (!state.nameItParts) return [];
+            return state.nameItParts.parts.map((part) => {
+                const text = part.kind === 'word' ? part.rolls[0]?.text || '' : state.nameItPartChosen[part.index] || '';
+                if (part.source === 'inherited' && !state.nameItPartFree.includes(part.index) && text === part.rolls[0]?.text) {
+                    return { label: part.label, text, source: 'inherited', from_id: part.from_id, from_role: part.from_role };
+                }
+                let source = 'rolled';
+                if (part.kind === 'word') source = 'word';
+                else if (state.nameItPartPinned[part.index] === text && !part.rolls.some((r) => r.text === text)) source = 'typed';
+                else if (part.kind === 'meaning') source = 'meaning';
+                return { label: part.label, text, source };
             });
         },
         // the Name it… batch as shown: the pinned names first, then the
@@ -1432,7 +1452,10 @@ export const useWorldsStore = defineStore('worlds', {
 
         // the builder: a composed rule's parts rolled, its pins kept
         nameItRollParts(languageId, ruleId) {
-            if (!languageId || !ruleId) return;
+            // a person's (languages 4b-2): with no rule, the server picks
+            // the one for them
+            const person = this.nameIt?.person || null;
+            if (!languageId || (!ruleId && !person)) return;
             if (this.nameItAsked?.ruleId !== ruleId || this.nameItAsked?.languageId !== languageId) {
                 // another rule: a Suggest still out is for the old one
                 this.nameItBuilding = false;
@@ -1441,10 +1464,21 @@ export const useWorldsStore = defineStore('worlds', {
             const keep = this.nameItParts && this.nameItParts.rule_id === ruleId && Object.keys(this.nameItPartPinned).length;
             this.request('name_it_parts', {
                 language_id: languageId,
-                rule_id: ruleId,
+                rule_id: ruleId || '',
                 pinned: { ...this.nameItPartPinned },
                 shape: this.nameItShapeChoice ?? (keep ? this.nameItParts.shape : null),
+                ...(person?.thingId ? { thing_id: person.thingId } : {}),
+                ...(person?.draft ? { draft: person.draft } : {}),
+                ...(person ? { free: [...this.nameItPartFree] } : {}),
             });
+        },
+
+        // an inherited part unpinned (it rolls like any part), or pinned
+        // to its source again
+        nameItFreePart(index) {
+            this.nameItPartFree = this.nameItPartFree.includes(index)
+                ? this.nameItPartFree.filter((i) => i !== index)
+                : [...this.nameItPartFree, index];
         },
 
         nameItChoosePart(index, text) {
@@ -1519,7 +1553,10 @@ export const useWorldsStore = defineStore('worlds', {
         // pinned part keeps its text)
         nameItTakeParts(data) {
             const asked = this.nameItAsked;
-            if (asked && (asked.ruleId !== data.rule_id || asked.languageId !== data.language_id)) return;
+            // a person's rule the server picked (asked with none)
+            if (asked && asked.ruleId === '' && asked.languageId === data.language_id) {
+                this.nameItAsked = { ...asked, ruleId: data.rule_id };
+            } else if (asked && (asked.ruleId !== data.rule_id || asked.languageId !== data.language_id)) return;
             this.nameItBuilding = false;
             const before = this.nameItParts;
             const sameForm = before && before.rule_id === data.rule_id && before.shape === data.shape;
@@ -1553,6 +1590,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameItParts = null;
             this.nameItPartChosen = {};
             this.nameItPartPinned = {};
+            this.nameItPartFree = [];
             this.nameItBuilding = false;
             this.nameItAsked = null;
             this.nameItShapeChoice = null;
@@ -1601,8 +1639,20 @@ export const useWorldsStore = defineStore('worlds', {
             const options = { flagged: !!request.markId, kind: request.kind || 'place' };
             const words = languageId ? [...newWords.map((part) => [part.word, part.meaning]), [name, meaning]] : [];
             let renaming = false;
+            // a person's name in parts (languages 4b-2): stored with it
+            const person = request.person && this.nameItParts && this.nameItBuilt === name
+                ? {
+                    language: languageId,
+                    rule: this.nameItParts.rule_id,
+                    shape: this.nameItParts.shape,
+                    built_as: request.person.builtAs || {},
+                    parts: this.nameItPartsOut,
+                }
+                : null;
             if (target.draftKey && this.draft?.key === target.draftKey) {
-                this.editDraft(pickName(this.draft.edited, request.words, name, options));
+                const changes = pickName(this.draft.edited, request.words, name, options);
+                if (person) changes.fields = { ...(this.draft.edited.fields || {}), name_parts: person };
+                this.editDraft(changes);
             } else if (target.smallKey && this.smallDrafts[target.smallKey]?.edited) {
                 this.editSmall(target.smallKey, pickName(this.smallDrafts[target.smallKey].edited, request.words, name, options));
             }
@@ -1623,7 +1673,11 @@ export const useWorldsStore = defineStore('worlds', {
                     : name;
                 this.nameItRenameWords = words.length ? { languageId, words } : null;
                 this.pending = { ...this.pending, name_it_rename: true };
-                this.request('name_it_rename', { thing_id: target.thingId, name: full });
+                this.request('name_it_rename', {
+                    thing_id: target.thingId,
+                    name: full,
+                    ...(person ? { parts: person.parts, rule_id: person.rule, shape: person.shape, language_id: languageId, built_as: person.built_as } : {}),
+                });
             } else if (!target.draftKey && !target.smallKey && typeof target.onPick === 'function') {
                 target.onPick(name);
             }

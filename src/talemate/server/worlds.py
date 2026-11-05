@@ -6501,6 +6501,7 @@ class WorldsPlugin(Plugin):
             shape=self._shape(data),
             exclude=taken,
             person=person,
+            free=frozenset(int(i) for i in data.get("free") or []),
         )
         self._reply(
             "name_it_parts",

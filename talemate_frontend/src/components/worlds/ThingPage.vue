@@ -1526,23 +1526,48 @@ export default {
         },
         nameItOwnName() {
             const mark = this.nameFlag;
+            const stored = this.edited.fields?.name_parts;
+            // a drafted person (languages 4b-2): built from the parents
+            // they're filed under, what's inherited pinned
+            const person = this.edited.kind === 'character'
+                ? {
+                    builtAs: stored?.built_as || this.edited.person || {},
+                    draft: {
+                        filings: (this.edited.filings || []).filter((f) => f.ticked && f.target_id).map((f) => [f.target_id, f.role || '']),
+                        facts: [],
+                        built_as: stored?.built_as || this.edited.person || {},
+                    },
+                }
+                : null;
             this.worlds.openNameIt({
                 words: mark.part || mark.name,
-                languageId: (this.edited.languages || [])[0]?.language || (this.edited.inherited_languages || [])[0]?.language_id || null,
+                languageId: mark.language_id || (this.edited.languages || [])[0]?.language || (this.edited.inherited_languages || [])[0]?.language_id || null,
                 kind: this.edited.kind,
                 markId: mark.id,
                 target: { draftKey: this.worlds.draft?.key },
+                ...(person ? { person, ruleId: stored?.rule || '' } : {}),
             });
         },
         nameItThing() {
             const own = this.thing.languages_own || [];
             const seen = (this.thing.languages_view || []).map((r) => ({ language: r.language_id }));
+            // a person (languages 4b-2): their parts pinned as they are,
+            // what's inherited pinned to its source, the rule theirs
+            const view = this.thing.name_view;
+            const person = view
+                ? {
+                    thingId: this.thing.id,
+                    builtAs: view.built_as || {},
+                    prefill: Object.fromEntries(view.parts.map((p, i) => [i, p]).filter(([, p]) => !['word', 'inherited'].includes(p.source)).map(([i, p]) => [i, p.text])),
+                }
+                : null;
             this.worlds.openNameIt({
                 words: this.thing.name,
-                languageId: [...own, ...seen][0]?.language || null,
+                languageId: view?.language?.id || [...own, ...seen][0]?.language || null,
                 kind: this.thing.kind,
                 // the panel can rename only part of it (owner, Test3)
                 target: { thingId: this.thing.id, fullName: this.thing.name },
+                ...(person ? { person, ruleId: view.rule || '' } : {}),
                 stub: !!this.thing.stub,
             });
         },
