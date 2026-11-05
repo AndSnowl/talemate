@@ -356,3 +356,20 @@ def test_a_fact_linking_several_people_gives_each_only_its_own_words(world):
         rng=random.Random(1),
     )
     assert named.parts[2].text == "Drassone"
+
+
+def test_only_a_person_is_a_parent(world):
+    """Acceptance 4b-2: "heir and daughter of the sovereign" on the realm
+    (a place) isn't a parent; "only child" of Eilhaud is."""
+
+    with world.revision(Source.manual()) as rev:
+        realm = rev.create_thing("place", {"name": "Drassone"})
+        eilhaud = rev.create_thing("character", {"name": "Eilhaud of Sauvaire"})
+    conns = connections_of(
+        world.view(),
+        None,
+        [(realm, "heir and daughter of the sovereign"), (eilhaud, "only child")],
+        [],
+    )
+    part = NamePart(kind="connection", roles=["father", "mother"], take="house")
+    assert parent_for(part, _ctx(connections=conns)).thing_id == eilhaud

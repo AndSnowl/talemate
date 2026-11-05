@@ -85,10 +85,22 @@ def person_context(
         built_as = (
             dict(stored.get("built_as") or {}) if isinstance(stored, dict) else {}
         )
+    connections = connections_of(view, thing_id, filings, facts)
+    # a stored inherited part keeps its source, filed under it or not (a
+    # draft's parent row arrives unticked, acceptance 4b-2)
+    known = {c.thing_id for c in connections}
+    sources = [
+        (str(p["from_id"]), str(p.get("from_role") or ""))
+        for p in (stored.get("parts") or [] if isinstance(stored, dict) else [])
+        if isinstance(p, dict) and p.get("source") == "inherited" and p.get("from_id")
+    ]
+    connections += connections_of(
+        view, thing_id, [s for s in sources if s[0] not in known], []
+    )
     return PersonContext(
         thing_id=thing_id,
         built_as=built_as,
-        connections=connections_of(view, thing_id, filings, facts),
+        connections=connections,
         own=_own(stored),
     )
 

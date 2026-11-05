@@ -411,3 +411,21 @@ async def test_what_one_person_calls_her_leaves_anothers_alone(plugin):
         if a.get("kind") == "own"
     ]
     assert sorted(own) == sorted([("Maë", w.tiboud), ("Maë", sister)])
+
+
+async def test_name_it_keeps_a_stored_inherited_part_without_a_filing(plugin):
+    """Acceptance 4b-2: a drafted daughter's parent row was never ticked,
+    so she isn't filed under him; her stored inherited part still pins."""
+
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.set_field(w.maelis, "filings", [], None)
+    await _act(
+        plugin,
+        "name_it_parts",
+        language_id=w.lang,
+        thing_id=w.maelis,
+        rule_id="noble-women",
+    )
+    house = _last(plugin, "name_it_parts")["data"]["parts"][2]
+    assert house["pinned"] is True and house["from_id"] == w.eilhaud

@@ -80,6 +80,8 @@ class Connection(BaseModel):
     name: str
     parts: dict[str, str] = Field(default_factory=dict)
     built_as: dict[str, str] = Field(default_factory=dict)
+    # the entry's kind; "" when not known
+    kind: str = ""
 
 
 class PersonContext(BaseModel):
@@ -174,6 +176,7 @@ def connections_of(
                 name=str(state.fields.get("name") or ""),
                 parts=parts,
                 built_as=built_as,
+                kind=state.kind,
             )
         )
     return found
@@ -264,7 +267,14 @@ def pick_rule(language: Language, built_as: dict[str, str]) -> GeneratorDef:
     return generator_for(language, "character")
 
 
+# the kinds a parent can be (a realm "daughter of the sovereign" names
+# isn't one, acceptance 4b-2)
+PARENT_KINDS = ("character", "being")
+
+
 def _parent_like(connection: Connection) -> bool:
+    if connection.kind and connection.kind not in PARENT_KINDS:
+        return False
     return role_matches(list(PARENT_WORDS), connection.role)
 
 
