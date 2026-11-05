@@ -7,10 +7,12 @@ things with Name it…."""
 from __future__ import annotations
 
 import re
+import uuid
 
 from talemate.languages.cleaning import model as clean_model
 from talemate.languages.cleaning.languages import language_rows, named_languages
 from talemate.languages.cleaning.lists import effective
+from talemate.languages.cleaning.marks import Mark
 from talemate.languages.cleaning.mark import mark_texts
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import languages_for
@@ -24,7 +26,9 @@ __all__ = [
     "clean_group_draft",
     "clean_preview",
     "inherited_rows",
+    "name_person",
     "owner_kept",
+    "rename_in_preview",
 ]
 
 
@@ -104,11 +108,201 @@ async def clean_preview(
         if from_words
         else [dict(r) for r in rows]
     )
-    return preview.model_copy(
+    cleaned = preview.model_copy(
         update={
             "marks": marks,
             "languages": shown,
             "inherited_languages": _shown_inherited(view, inherited),
+        }
+    )
+    language_id = _main_language(used)
+    if preview.kind == "character" and language_id:
+        cleaned = name_person(view, cleaned, language_id)
+    return cleaned
+
+
+def _main_language(rows: list) -> str | None:
+    """The language a draft's person is named in: an official row's, else
+    the first's."""
+
+    def lid(row) -> str | None:
+        if isinstance(row, dict):
+            return row.get("language") or row.get("language_id")
+        return getattr(row, "language_id", None)
+
+    def role(row) -> str:
+        return (
+            row.get("role") if isinstance(row, dict) else getattr(row, "role", "")
+        ) or ""
+
+    for row in rows:
+        if role(row) == "official" and lid(row):
+            return lid(row)
+    return next((lid(row) for row in rows if lid(row)), None)
+
+
+def _has_people_rules(language) -> bool:
+    return any(
+        g.for_person or any(p.kind == "connection" for s in g.shapes for p in s.parts)
+        for g in language.generators
+    )
+
+
+def rename_in_preview(preview: CreatePreview, old: str, new: str) -> CreatePreview:
+    """`preview` with `old` (whole words) written `new` in its name, facts,
+    summary, elsewhere rows and prose; marks on `old` dropped."""
+
+    if not old or old == new:
+        return preview
+    pattern = re.compile(rf"(?<![\w'’-]){re.escape(old)}(?![\w'’-])")
+
+    def swap(text: str | None) -> str | None:
+        return pattern.sub(lambda _m: new, text) if text else text
+
+    return preview.model_copy(
+        update={
+            "name": new,
+            "facts": [
+                f.model_copy(update={"text": swap(f.text)}) for f in preview.facts
+            ],
+            "summary": swap(preview.summary),
+            "elsewhere": [
+                e.model_copy(update={"text": swap(e.text)}) for e in preview.elsewhere
+            ],
+            "prose": {k: swap(v) or "" for k, v in preview.prose.items()},
+            "marks": [m for m in preview.marks if m.name != old and m.part != old],
+        }
+    )
+
+
+def _draft_facts(view, preview: CreatePreview) -> list[tuple[str, list[str]]]:
+    """The draft's relationship facts, each with the people it names (by
+    their names as the world writes them)."""
+
+    from talemate.worldplay.create import entry_names
+
+    names = entry_names(view)
+    out = []
+    for fact in preview.facts:
+        if fact.category != "relationship":
+            continue
+        refs = [
+            thing_id
+            for name, thing_id in names.items()
+            if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", fact.text)
+        ]
+        if refs:
+            out.append((fact.text, refs))
+    return out
+
+
+def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview:
+    """A drafted person's name built from their language's people rules
+    (languages 4b-2): the owner's own name is kept; otherwise the name is
+    built from who the draft says they are and the parents it's filed
+    under, the draft renamed to it and marked, a title and a pet name
+    offered as other names, and a parent the name implies but the world
+    doesn't have offered as an unticked In row. A language without people
+    rules, or a name already built, is left as it is."""
+
+    import random
+
+    from talemate.languages.entry import language_of
+    from talemate.languages.person_names import (
+        PersonContext,
+        build_person_name,
+        choose,
+        connections_of,
+        roll_pet_name,
+        stored_written,
+    )
+    from talemate.worldplay.create import NewName, PreviewFiling
+    from talemate.worldplay.people import stored_parts
+
+    state = view.thing(language_id)
+    if state is None or state.kind != "language":
+        return preview
+    language = language_of(state)
+    if not _has_people_rules(language):
+        return preview
+    stored = preview.fields.get("name_parts")
+    if stored is not None and stored_written(view, stored) == preview.name:
+        return preview
+    if preview.name and re.search(
+        rf"(?<!\w){re.escape(preview.name)}(?!\w)", preview.prompt, re.I
+    ):
+        # the owner's own name: never rebuilt
+        return preview
+    rng = random.Random()
+    filings = [
+        (f.target_id, f.role) for f in preview.filings if f.target_id and f.ticked
+    ]
+    ctx = PersonContext(
+        built_as=choose(language, preview.person),
+        connections=connections_of(view, None, filings, _draft_facts(view, preview)),
+    )
+    named = build_person_name(
+        language, ctx, meaning=preview.person.get("name_meaning", ""), rng=rng
+    )
+    if not named.name:
+        return preview
+    out = rename_in_preview(preview, preview.name, named.name)
+    parts = stored_parts(
+        language_id,
+        named.rule_id,
+        named.shape,
+        named.built_as,
+        [p.model_dump() for p in named.parts],
+    )
+    aka = [dict(a) for a in out.aka if a.get("kind") not in ("title", "pet")]
+    title = preview.person.get("title", "")
+    if title:
+        aka.append(
+            {
+                "name": title,
+                "tag": "proper",
+                "everyday": False,
+                "kind": "title",
+                "shown": "before",
+            }
+        )
+    pet = roll_pet_name(language, {p.label: p.text for p in named.parts}, rng)
+    if pet is not None:
+        aka.append(
+            {
+                "name": pet[0],
+                "tag": "proper",
+                "everyday": False,
+                "kind": "pet",
+                "rule": pet[1],
+            }
+        )
+    relation = {"woman": "daughter of", "man": "son of"}.get(
+        named.built_as.get("sex", ""), "child of"
+    )
+    offered = [
+        PreviewFiling(
+            new_name=NewName(name=missing.name, kind="character", ticked=False),
+            target_name=missing.name,
+            role=relation,
+            ticked=False,
+        )
+        for missing in named.missing
+    ]
+    mark = Mark(
+        id=uuid.uuid4().hex[:12],
+        name=named.name,
+        part=named.name,
+        why=f"built from {language.name}'s rules",
+        language_id=language_id,
+        entry_kind="character",
+    )
+    return out.model_copy(
+        update={
+            "fields": {**out.fields, "name_parts": parts},
+            "aka": aka,
+            "filings": [*out.filings, *offered],
+            "marks": [*out.marks, mark],
         }
     )
 

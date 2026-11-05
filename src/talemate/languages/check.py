@@ -257,6 +257,13 @@ def _people_names_problems(language: Language) -> list[str]:
                     )
                 for form in part.person_forms:
                     unknown(f"A form in the name rule {generator.id!r}", form.when)
+                    for change in form.changes:
+                        try:
+                            parse_condition(change.when)
+                        except ValueError as exc:
+                            problems.append(
+                                f"A form in the name rule {generator.id!r} can't be read: {exc}"
+                            )
     if language.people_names is not None:
         known = labels | {"title", "pet name"}
         for row in language.people_names.address:

@@ -1520,6 +1520,12 @@ async def _fixed_preview(
         filings=filings,
         file_into=file_into,
         move_here=move_here,
+        # a person's `person` block, as the draft call gives it (4b-2)
+        person=(
+            {k: str(v) for k, v in fixed["person"].items()}
+            if kind == "character" and isinstance(fixed.get("person"), dict)
+            else {}
+        ),
     )
 
 

@@ -520,6 +520,9 @@ class CreatePreview(BaseModel):
     inherited_languages: list[dict] = Field(default_factory=list)
     # the names cleaning flagged (`cleaning.marks.Mark`)
     marks: list[Mark] = Field(default_factory=list)
+    # who a person is, from the draft call (languages 4b-2): sex, rank, a
+    # meaning for a meaning part, an English title (`parse_person_block`)
+    person: dict[str, str] = Field(default_factory=dict)
     # words the owner linked on the draft with "add as another name" (P4):
     # accept teaches each its pick's target as a common other name; the
     # router keeps only those its own copy of the draft holds
@@ -829,6 +832,30 @@ def parse_create_reply(
     # the format example's placeholder name, copied as is, is no name
     name = scrub_emphasis(name).strip() if name and name.strip(" .*_") else None
     return name, age, facts[:MAX_FACTS]
+
+
+# the keys of a draft's `person` block (languages 4b-2)
+PERSON_KEYS: tuple[str, ...] = ("sex", "rank", "name_meaning", "title")
+
+
+def parse_person_block(reply: str) -> dict[str, str]:
+    """A `world/create-thing` reply's `person` block (a character's: who
+    they are, for naming them), each key's text stripped; `{}` without
+    one."""
+
+    found: dict | None = None
+    for obj in json_objects(reply):
+        if isinstance(obj.get("person"), dict):
+            found = obj["person"]
+            break
+        # the reply comes without its first "{" (the prompt primes it,
+        # probe 4b-2): the block is then an object of its own
+        keys = set(obj)
+        if found is None and {"sex", "rank"} & keys and keys <= set(PERSON_KEYS):
+            found = obj
+    if found is None:
+        return {}
+    return {key: " ".join(str(found.get(key) or "").split()) for key in PERSON_KEYS}
 
 
 def _aka_entries(value: object) -> list[dict[str, Any]]:
@@ -3424,6 +3451,7 @@ async def preview_thing(
         filings=filings,
         file_into=file_into,
         move_here=move_here,
+        person=parse_person_block(reply) if kind == "character" else {},
     )
     from talemate.worldplay.cleaning import clean_preview
 
@@ -3841,7 +3869,9 @@ def _write_preview(
         )
         if stub is None:
             fields: dict[str, Any] = {
-                **_kind_fields(preview.kind, preview.fields, notes),
+                **_live_parts(
+                    view, preview, _kind_fields(preview.kind, preview.fields, notes)
+                ),
                 "name": preview.name,
             }
             if preview.aka:
@@ -3860,6 +3890,7 @@ def _write_preview(
             # the fields its (perhaps changed) kind has, as a new entry's
             # are (final review I1); its names are `name_thing`'s to write
             own = {f: v for f, v in preview.fields.items() if f not in ("name", "aka")}
+            own = _live_parts(view, preview, own)
             for field, value in _kind_fields(preview.kind, own, notes).items():
                 rev.set_field(thing_id, field, value, None)
             # filling a stub the preview wasn't made from keeps the stub's
@@ -4005,6 +4036,20 @@ def _write_preview(
                 ]
             )
     return thing_id, made, notes, moved, removed
+
+
+def _live_parts(
+    view: WorldView, preview: CreatePreview, fields: dict[str, Any]
+) -> dict[str, Any]:
+    """`fields` without a person's `name_parts` that no longer write the
+    draft's name (the owner renamed it): the text wins (languages 4b-2)."""
+
+    from talemate.languages.person_names import stored_written
+
+    stored = fields.get("name_parts")
+    if stored is None or stored_written(view, stored) == preview.name:
+        return fields
+    return {k: v for k, v in fields.items() if k != "name_parts"}
 
 
 def _kind_fields(kind: str, fields: dict[str, Any], notes: list[str]) -> dict[str, Any]:

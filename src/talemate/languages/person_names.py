@@ -189,24 +189,44 @@ def _people_rules(language: Language) -> list[GeneratorDef]:
     return [g for g in language.generators if g.use in PEOPLE_USES]
 
 
+def _building_blocks(language: Language) -> set[str]:
+    """The rules other rules use as a part (or roll a connection from):
+    pieces of a name, never a person's whole name."""
+
+    return {
+        part.rule
+        for generator in language.generators
+        for shape in generator.shapes
+        for part in shape.parts
+        if part.kind in ("rule", "connection") and part.rule
+    }
+
+
 def pick_rule(language: Language, built_as: dict[str, str]) -> GeneratorDef:
     """The people rule for who the person is: the one whose `for_person`
-    matches most, none contradicted; plain before composed on a tie."""
+    matches most, none contradicted. A rule another rule uses as a part is
+    a piece of a name, never picked while a whole-name rule fits (probe
+    4b-2); on a tie, plain before composed."""
 
     from talemate.languages.naming import generator_for
 
-    best: tuple[int, int, GeneratorDef] | None = None
+    blocks = _building_blocks(language)
+    best: tuple[int, int, int, GeneratorDef] | None = None
     for generator in _people_rules(language):
         wanted = generator.for_person
         if any(k in built_as and built_as[k] != v for k, v in wanted.items()):
             continue
         if any(k not in built_as for k in wanted):
             continue
-        key = (len(wanted), 0 if not generator.shapes else -1)
-        if best is None or key > best[:2]:
+        key = (
+            0 if generator.id in blocks else 1,
+            len(wanted),
+            0 if not generator.shapes else -1,
+        )
+        if best is None or key > best[:3]:
             best = (*key, generator)
     if best is not None:
-        return best[2]
+        return best[3]
     return generator_for(language, "character")
 
 
@@ -245,7 +265,12 @@ def person_text(
         return text
     for form in part.person_forms:
         if all(built_as.get(k) == v for k, v in form.when.items()):
-            return _apply_changes(form.changes, vowels_of(language), text)
+            try:
+                return _apply_changes(form.changes, vowels_of(language), text)
+            except ValueError:
+                # a change the engine can't read (the check names it):
+                # the text as it is, never a broken name
+                return text
     return text
 
 

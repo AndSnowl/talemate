@@ -7,7 +7,7 @@ import random
 
 from talemate.languages.composed import roll_parts
 from _people_names_helpers import DRASSONAIS, EILHAUD, VAROVNI, _composed, _rule
-from talemate.languages.models import Language, NamePart
+from talemate.languages.models import GeneratorDef, Language, NamePart, NameShape
 from talemate.languages.person_names import (
     Connection,
     PersonContext,
@@ -233,3 +233,54 @@ def test_old_rules_roll_as_before():
     a = roll_parts(VAROVNI, "people", rng=random.Random(5))
     b = roll_parts(VAROVNI, "people", rng=random.Random(5), person=None)
     assert a == b
+
+
+def test_a_building_block_is_never_the_persons_rule():
+    """Probe 4b-2: Moscavian's "given_men" (for men, plain) is a part of
+    "people" (for men, composed); a man gets "people", the full name."""
+
+    lang = Language(
+        name="Moscavian",
+        level="full",
+        categories={"C": "k v", "V": "a o"},
+        generators=[
+            GeneratorDef(
+                id="given_men",
+                name="Men",
+                use="character",
+                for_person={"sex": "man"},
+                patterns=["[ivan|oleg]"],
+            ),
+            GeneratorDef(
+                id="people",
+                name="People",
+                use="character",
+                for_person={"sex": "man"},
+                shapes=[
+                    NameShape(
+                        parts=[NamePart(kind="rule", rule="given_men", label="given")]
+                    )
+                ],
+            ),
+        ],
+    )
+    assert pick_rule(lang, {"sex": "man"}).id == "people"
+
+
+def test_a_form_with_an_unknown_condition_leaves_the_text_and_check_says_so():
+    """Probe 4b-2: Fill them in wrote "ends in ey"; building never breaks,
+    and the check names it."""
+
+    from talemate.languages.check import check_language
+
+    bad = VAROVNI.model_copy(deep=True)
+    part = bad.generators[3].shapes[0].parts[1]
+    part.person_forms[0].changes[0].when = "ends in ey"
+    named = build_person_name(
+        bad,
+        _ctx(sex="woman", parent_parts={"family": "Kesterovsk"}),
+        rule_id="people",
+        rng=random.Random(1),
+    )
+    assert named.parts[1].text == "Kesterovsk"
+    assert any("ends in ey" in w for w in check_language(bad).warnings)
