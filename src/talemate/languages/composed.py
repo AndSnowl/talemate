@@ -6,6 +6,7 @@ is asked. Pins keep a part through a reroll."""
 from __future__ import annotations
 
 import random
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
@@ -17,6 +18,9 @@ from talemate.languages.name_grammar import (
     lookup_word,
     real_words,
 )
+
+if TYPE_CHECKING:
+    from talemate.languages.person_names import PersonContext
 
 __all__ = [
     "MISSING_RULE",
@@ -42,6 +46,11 @@ class PartRoll(BaseModel):
     label: str
     rolls: list[Built] = Field(default_factory=list)
     pinned: bool = False
+    # where its text comes from (languages 4b-2): an inherited part names
+    # the connection it came from
+    source: Literal["rolled", "typed", "meaning", "inherited", "word"] = "rolled"
+    from_id: str = ""
+    from_role: str = ""
 
 
 def _generator(language: Language, rule_id: str) -> GeneratorDef | None:
@@ -149,6 +158,14 @@ def _roll_part(
     if part.kind == "rule":
         names = _roll_rule(language, part.rule, count, rng, exclude, depth)
         return [Built(text=name) for name in names]
+    if part.kind == "connection":
+        # with no connection to take from: its fallback rule's rolls
+        names = _roll_rule(
+            language, _fallback(language, part), count, rng, exclude, depth
+        )
+        return [Built(text=name) for name in names]
+    if part.kind == "own":
+        return []
     built: dict[str, Built] = {}
     for _ in range(count * 6):
         if len(built) >= count:
@@ -162,6 +179,60 @@ def _roll_part(
     return list(built.values())
 
 
+def _fallback(language: Language, part: NamePart) -> str:
+    """The rule a connection part rolls from when it has no connection:
+    its own `rule`, else the language's rule for people."""
+
+    if part.rule:
+        return part.rule
+    from talemate.languages.naming import generator_for
+
+    try:
+        return generator_for(language, "character").id
+    except ValueError:
+        return ""
+
+
+def _person_roll(
+    language: Language,
+    part: NamePart,
+    index: int,
+    label: str,
+    person: PersonContext,
+    pinned_text: str | None,
+) -> PartRoll | None:
+    """A connection or own part's roll from the person: the connection's
+    part (pinned, marked inherited), or the person's own part; None when
+    there's nothing to take."""
+
+    from talemate.languages.person_names import inherited_text, parent_for, person_text
+
+    if part.kind == "own":
+        text = person.own.get(part.take, "")
+        if not text:
+            return None
+        text = person_text(language, part, text, person.built_as)
+        return PartRoll(
+            index=index, kind=part.kind, label=label, rolls=[Built(text=text)]
+        )
+    parent = parent_for(part, person)
+    if parent is None:
+        return None
+    text = person_text(language, part, inherited_text(part, parent), person.built_as)
+    if not text or (pinned_text and pinned_text != text):
+        return None
+    return PartRoll(
+        index=index,
+        kind=part.kind,
+        label=label,
+        rolls=[Built(text=text)],
+        pinned=True,
+        source="inherited",
+        from_id=parent.thing_id,
+        from_role=parent.role,
+    )
+
+
 def roll_parts(
     language: Language,
     rule_id: str,
@@ -171,11 +242,17 @@ def roll_parts(
     shape: int | None = None,
     rng: random.Random | None = None,
     exclude: frozenset[str] = frozenset(),
+    person: PersonContext | None = None,
 ) -> tuple[int, list[PartRoll]]:
     """The rule's shape (picked by weight unless given) and each part's
     rolls. A pinned (or typed) part's only roll is its text; a pin holds
     only where the shape has a part, not a fixed word, at its index. A
-    plain pattern rule is one part, itself."""
+    plain pattern rule is one part, itself.
+
+    With a `person` (languages 4b-2), a connection part takes from their
+    connection (pinned, marked inherited; a pin that differs is the
+    owner's own), an own part from their own parts, and every rolled part
+    takes the person's form."""
 
     rng = rng if rng is not None else random.Random()
     generator = _generator(language, rule_id)
@@ -192,6 +269,11 @@ def roll_parts(
     for index, part in enumerate(parts):
         text = (pinned or {}).get(index)
         label = _label(language, part)
+        if person is not None and part.kind in ("connection", "own"):
+            found = _person_roll(language, part, index, label, person, text)
+            if found is not None:
+                out.append(found)
+                continue
         if text and part.kind != "word":
             out.append(
                 PartRoll(
@@ -200,11 +282,28 @@ def roll_parts(
                     label=label,
                     rolls=[Built(text=text)],
                     pinned=True,
+                    source="typed",
                 )
             )
             continue
         rolls = _roll_part(language, part, count, rng, exclude, 0)
-        out.append(PartRoll(index=index, kind=part.kind, label=label, rolls=rolls))
+        if person is not None and part.person_forms:
+            from talemate.languages.person_names import person_text
+
+            rolls = [
+                r.model_copy(
+                    update={
+                        "text": person_text(language, part, r.text, person.built_as)
+                    }
+                )
+                for r in rolls
+            ]
+        source = {"word": "word", "meaning": "meaning"}.get(part.kind, "rolled")
+        out.append(
+            PartRoll(
+                index=index, kind=part.kind, label=label, rolls=rolls, source=source
+            )
+        )
     return shape, out
 
 

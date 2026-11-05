@@ -104,6 +104,8 @@ KINDS: dict[str, KindSpec] = {
             ("voice", "json"),
             ("color", "text"),
             ("heritage", "thing"),
+            # its name in labelled parts (languages 4b-2)
+            ("name_parts", "json"),
         ),
         categories=[
             "appearance",

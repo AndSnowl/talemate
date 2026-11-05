@@ -54,11 +54,18 @@ class NameInResult(BaseModel):
     parts: list[dict] = []
 
 
-def generator_for(language: Language, kind: str) -> GeneratorDef:
+def generator_for(
+    language: Language, kind: str, person: dict[str, str] | None = None
+) -> GeneratorDef:
     """The name rules for an entry `kind`: its own, else its bucket's
     (people, places, things), else places, else the first that isn't for
-    ordinary words."""
+    ordinary words. With `person` (who a person is built as, languages
+    4b-2), the people rule for them (`person_names.pick_rule`)."""
 
+    if person is not None:
+        from talemate.languages.person_names import pick_rule
+
+        return pick_rule(language, person)
     names = [g for g in language.generators if g.use != "words"]
     for wanted in (kind, _BUCKETS.get(kind, "things"), "places"):
         # a plain rule first: a composed one (languages 4b-1) is used when
