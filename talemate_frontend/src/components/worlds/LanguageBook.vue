@@ -34,6 +34,7 @@
                     <LanguageGrammar v-if="nameSections.length" class="mt-4" :thing="thing" :only="nameSections" />
                     <!-- the rules the name engine applies (languages 4b-1) -->
                     <NameGrammarCard class="mt-4" :thing="thing" @fill="$emit('fill-names')" @change="$emit('change-names')" />
+                    <PeopleNamesCard class="mt-4" :thing="thing" @fill="$emit('fill-names')" @change="$emit('change-names')" />
                 </div>
             </div>
             <LanguageGrammar v-else :thing="thing" :only="[chapter]" class="mt-2" />
@@ -45,6 +46,7 @@
 import LanguageGrammar from './LanguageGrammar.vue';
 import LanguageSections from './LanguageSections.vue';
 import NameGrammarCard from './NameGrammarCard.vue';
+import PeopleNamesCard from './PeopleNamesCard.vue';
 import { TOPIC_ORDER, grammarSections, isPlainGrammar } from './languageTopics.js';
 
 // the language's own chapters, before its names and grammar
@@ -64,7 +66,7 @@ const FOLDED = { sounds: 'sounds', names: 'names' };
 // grammar topic, the unusual ones last.
 export default {
     name: 'LanguageBook',
-    components: { LanguageGrammar, LanguageSections, NameGrammarCard },
+    components: { LanguageGrammar, LanguageSections, NameGrammarCard, PeopleNamesCard },
     emits: ['fill-names', 'change-names'],
     props: {
         thing: { type: Object, required: true },

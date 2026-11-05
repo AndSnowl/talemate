@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
-import { composeName, partLabel, resultLine } from '../src/components/worlds/nameParts.js';
+import { composeName, forPersonLine, partLabel, resultLine, ruleChipLabel } from '../src/components/worlds/nameParts.js';
 import { callsFor, partSourceLine, plainAka, pronounOf, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
@@ -4406,6 +4406,19 @@ check('use this name on a person stores the parts with the rename', () => {
         { label: 'of', text: 'di', source: 'word' },
         { label: 'house', text: 'Drassone', source: 'inherited', from_id: 'eil', from_role: 'daughter of' },
     ]);
+});
+
+check('the Names chapter says what a people rule part takes', () => {
+    const gens = [{ id: 'houses', name: 'Houses' }, { id: 'given', name: 'Given names' }];
+    assert.equal(ruleChipLabel({ kind: 'connection', roles: ['father', 'mother'], take: 'house', label: 'house' }, gens), 'from father, then mother · house');
+    assert.equal(ruleChipLabel({ kind: 'connection', roles: ['lord'], take: '' }, gens), 'from lord · whole name');
+    assert.equal(ruleChipLabel({ kind: 'own', take: 'given' }, gens), 'own given');
+    assert.equal(ruleChipLabel({ kind: 'word', word: 'di', english: 'of' }, gens), 'di → “of”');
+    assert.equal(ruleChipLabel({ kind: 'word', word: 'Ul' }, gens), 'Ul');
+    assert.equal(ruleChipLabel({ kind: 'rule', rule: 'given', label: 'given' }, gens), 'given');
+    assert.equal(ruleChipLabel({ kind: 'rule', rule: 'given', label: 'given', person_forms: [{ when: { sex: 'woman' } }] }, gens), 'given · forms by sex');
+    assert.equal(forPersonLine({ for_person: { sex: 'woman', rank: 'noble' } }), 'for: woman · noble');
+    assert.equal(forPersonLine({}), '');
 });
 
 if (failures.length) {

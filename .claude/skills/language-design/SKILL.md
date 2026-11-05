@@ -158,6 +158,31 @@ from `talemate.languages.models.LanguageFile`). The shape:
   meaning (`meaning`, with `forms`, `of` and a `hint` for what it takes).
   Use them for customs the grammar describes, like an owl-name after the
   given name ("[Men's names] Ul [a meaning · plural]").
+- **People's names** (`people_names`, and people rules made of parts) say
+  how a person's name passes down, changes by sex and rank, and is said:
+  - `people_names.choices`: what a name depends on, `{"sex": ["man",
+    "woman"], "rank": ["common", "noble"]}`; each list's first value is the
+    default.
+  - A rule's `for_person` says who it's for (`{"sex": "woman", "rank":
+    "noble"}`). Rules that are only pieces of a name (given names, family
+    names) are used by the full-name rules as `rule` parts.
+  - A `connection` part takes from a parent or other connection: `roles`
+    in order of preference (`["father", "mother"]`), `take` the label of
+    their part to take (`"family"`; empty for the whole name), and `rule`
+    to roll from when there's none. An `own` part takes the person's own
+    part (`take`), for pet-name rules (`"use": "pet names"`), which must
+    change the name (an ending meaning small or dear), never return it.
+  - `person_forms` give a part's forms by who the person is: `[{"when":
+    {"sex": "woman"}, "changes": [{"kind": "ending", "text": "a"}]}]`
+    (Kesterovsk → Kesterovska), changes as in `name_grammar`.
+  - A fixed word that joins a name ("di", "of") gets `english`, its English
+    writing, unless your prose says the native word is used in English
+    text. Titles are English unless listed in `people_names.kept_titles`
+    (`{"word": "Tsar", "meaning": "emperor"}`).
+  - `people_names.address`: how each kind of relationship addresses
+    someone, `{"kind": "family", "roles": ["mother", "brother"], "uses":
+    ["pet name"]}`; `uses` names part labels, `"title"` or `"pet name"`;
+    one row is `"default": true`, for strangers.
 - `reference/rule-syntax.md` has the full pattern syntax. The weight
   marker is a number (`r*2`), never a literal `*n`; `|` only appears
   inside `[...]`.

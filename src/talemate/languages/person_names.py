@@ -37,6 +37,7 @@ __all__ = [
     "pick_rule",
     "role_matches",
     "roll_pet_name",
+    "people_rows",
     "stored_written",
     "written",
 ]
@@ -513,3 +514,50 @@ def kept_title(language: Language, english: str) -> KeptTitle | None:
     wanted = english.strip().lower()
     titles = language.people_names.kept_titles if language.people_names else []
     return next((t for t in titles if t.meaning.strip().lower() == wanted), None)
+
+
+def people_rows(language: Language) -> dict:
+    """A language's people's names for the Names chapter (languages 4b-2):
+    its choices, kept titles and address rows, each row with an example
+    built from a sample person (the first rule that's for someone, rolled
+    with its own choices); a use with nothing to show reads "[use]"."""
+
+    people = language.people_names
+    for_someone = next((g for g in _people_rules(language) if g.for_person), None)
+    built_as = dict(for_someone.for_person) if for_someone else choose(language, {})
+    rng = random.Random(0)
+    sample = (
+        build_person_name(
+            language,
+            PersonContext(built_as=built_as),
+            rule_id=for_someone.id if for_someone else None,
+            rng=rng,
+            offer_missing=False,
+        )
+        if _people_rules(language)
+        else None
+    )
+    parts = {p.label: p.text for p in sample.parts} if sample else {}
+    pet = roll_pet_name(language, parts, rng) if parts else None
+
+    def example(row: AddressRow) -> str:
+        words = []
+        for use in row.uses:
+            if use == "pet name":
+                words.append(pet[0] if pet else "[pet name]")
+            elif use in parts and parts[use]:
+                words.append(parts[use])
+            else:
+                words.append(f"[{use}]")
+        return " ".join(words)
+
+    return {
+        "has_people": people is not None,
+        "choices": dict(people.choices) if people else {},
+        "kept_titles": [t.model_dump() for t in people.kept_titles] if people else [],
+        "address": [
+            {**row.model_dump(), "example": example(row)}
+            for row in (people.address if people else [])
+        ],
+        "sample": sample.name if sample else "",
+    }

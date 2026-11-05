@@ -559,7 +559,7 @@ from talemate.worldplay.merge import (
     preview_merge,
     repoint_overrides,
 )
-from talemate.languages.person_names import choose, pick_rule
+from talemate.languages.person_names import choose, people_rows, pick_rule
 from talemate.worldplay.people import (
     add_title,
     calls_out,
@@ -6282,6 +6282,18 @@ class WorldsPlugin(Plugin):
                 "has_grammar": language.name_grammar is not None,
                 "rows": [r.model_dump() for r in grammar_rows(language)],
             },
+        )
+
+    async def handle_language_people_names(self, data: dict):
+        """A language's people's names for the Names chapter (languages
+        4b-2): `{thing_id, has_people, choices, kept_titles, address,
+        sample}`, each address row with an example built from a sample
+        person."""
+
+        state = self._language_entry(data.get("thing_id"))
+        self._reply(
+            "language_people_names",
+            {"thing_id": state.id, **people_rows(language_of(state))},
         )
 
     async def handle_name_it_rules(self, data: dict):

@@ -139,3 +139,51 @@ def test_a_composed_rule_shows_its_parts(app, page):
     expect(parts).to_have_text(
         ["Men's names", "Ul", "a meaning · plural"], timeout=TIMEOUT_MS
     )
+
+
+# --- people's names (languages 4b-2, Task 8) --------------------------------
+
+
+def test_people_names_card_shows_and_edits_address(app, page):
+    from _people_names_helpers import DRASSONAIS
+
+    thing = _names_chapter(app, page, "People names card", language=DRASSONAIS)
+    card = thing.get_by_test_id("people-names-card")
+    expect(card.get_by_test_id("people-names-choice")).to_have_count(
+        2, timeout=TIMEOUT_MS
+    )
+    expect(card.get_by_test_id("people-names-kept")).to_contain_text("Tsar")
+    family = card.get_by_test_id("people-names-address").filter(has_text="family")
+    expect(family.get_by_test_id("people-names-address-example")).to_contain_text(
+        "ette", timeout=TIMEOUT_MS
+    )
+    family.get_by_test_id("people-names-address-edit").click()
+    uses = card.get_by_test_id("people-names-address-uses").locator("input")
+    uses.fill("given")
+    card.get_by_test_id("people-names-address-save").click()
+    expect(
+        card.get_by_test_id("people-names-address")
+        .filter(has_text="family")
+        .get_by_test_id("people-names-address-example")
+    ).not_to_contain_text("ette", timeout=TIMEOUT_MS)
+
+
+def test_a_language_without_people_names_offers_fill(app, page):
+    thing = _names_chapter(app, page, "People names none")
+    card = thing.get_by_test_id("people-names-card")
+    expect(card.get_by_test_id("people-names-fill")).to_be_visible(timeout=TIMEOUT_MS)
+
+
+def test_rule_chips_show_connection_and_english(app, page):
+    from _people_names_helpers import DRASSONAIS
+
+    thing = _names_chapter(app, page, "People rule chips", language=DRASSONAIS)
+    rule = (
+        thing.get_by_test_id("language-generator").filter(has_text="noble-women").first
+    )
+    expect(rule.get_by_test_id("rule-for-person")).to_have_text(
+        "for: woman · noble", timeout=TIMEOUT_MS
+    )
+    chips = rule.get_by_test_id("rule-part")
+    expect(chips.nth(1)).to_have_text("di → “of”")
+    expect(chips.nth(2)).to_have_text("from father, then mother · house")

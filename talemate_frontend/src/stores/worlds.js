@@ -744,6 +744,10 @@ export const useWorldsStore = defineStore('worlds', {
         // a language's grammar for names in plain words, by its id (the
         // Names chapter, languages 4b-1): `{rows, has_grammar}`
         nameGrammar: {},
+        // a language's people's names for the Names chapter (languages
+        // 4b-2), by language id: `{has_people, choices, kept_titles,
+        // address: [{…, example}], sample}`
+        peopleNames: {},
         // From a meaning's new words, by part index: their rolls and pins,
         // shared by the name's forms (owner, Test3)
         nameItWordRolls: {},
@@ -1448,6 +1452,10 @@ export const useWorldsStore = defineStore('worlds', {
 
         loadNameGrammar(thingId) {
             if (thingId) this.request('language_name_grammar', { thing_id: thingId });
+        },
+
+        loadPeopleNames(thingId) {
+            if (thingId) this.request('language_people_names', { thing_id: thingId });
         },
 
         // the builder: a composed rule's parts rolled, its pins kept
@@ -3053,6 +3061,9 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'name_it_suggest_failed':
                     this.nameItBuilding = false;
+                    break;
+                case 'language_people_names':
+                    this.peopleNames = { ...this.peopleNames, [data.thing_id]: data };
                     break;
                 case 'language_name_grammar':
                     this.nameGrammar = { ...this.nameGrammar, [data.thing_id]: { rows: data.rows || [], has_grammar: !!data.has_grammar } };

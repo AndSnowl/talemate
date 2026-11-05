@@ -242,3 +242,18 @@ def test_a_names_brief_turns_naming_customs_into_rules_made_of_parts():
     )
     assert "naming customs" in brief and "`shapes`" in brief
     assert "take those patterns out" in brief
+
+
+def test_names_brief_asks_for_people_names():
+    """Languages 4b-2: Fill them in also writes people's names, with what
+    probe 4b-2's second run needed to load and build."""
+
+    brief = write_brief(
+        None, MakeRequest(kind="names", target_id="x", text=""), current=SAMPLE_FILE
+    )
+    assert "people_names" in brief
+    assert '"connection"' in brief and '"own"' in brief and "`for_person`" in brief
+    assert "`person_forms`" in brief and "`english`" in brief
+    assert "pet names" in brief and "never give it back as it is" in brief
+    # the valid uses, so a rule never says "given name"
+    assert "character" in brief and "demonym" in brief

@@ -18,7 +18,7 @@ export function partLabel(part, generators = []) {
 
 // a new part of `kind`, as the parts editor adds it
 export function newPart(kind = 'meaning') {
-    return { kind, rule: '', word: '', slot: 'noun', forms: [], of: false, joined: false, ending: '', hint: '', optional: false, label: '' };
+    return { kind, rule: '', word: '', slot: 'noun', forms: [], of: false, joined: false, ending: '', hint: '', optional: false, label: '', roles: [], take: '', english: '', person_forms: [] };
 }
 
 // Renaming part of an entry's name (owner, 2026-11-04): the words picked
@@ -58,4 +58,29 @@ export function resultLine(fullName, picked) {
     });
     if (kept.length) pieces.push(kept.join(' '));
     return pieces.join(' + ');
+}
+
+// A people rule's part as the Names chapter's chips say it (languages
+// 4b-2): where a connection part takes from, a person's own part, a fixed
+// word with its English writing, and forms by who the person is.
+export function ruleChipLabel(part, generators = []) {
+    let label;
+    if (part?.kind === 'connection') {
+        const roles = (part.roles || []).join(', then ') || 'a connection';
+        label = `from ${roles} · ${part.take || 'whole name'}`;
+    } else if (part?.kind === 'own') {
+        label = `own ${part.take || 'name'}`;
+    } else if (part?.kind === 'word') {
+        label = part.english ? `${part.word} → “${part.english}”` : part.word || '';
+    } else {
+        label = partLabel(part, generators);
+    }
+    const by = [...new Set((part?.person_forms || []).flatMap((f) => Object.keys(f.when || {})))];
+    return by.length ? `${label} · forms by ${by.join(', ')}` : label;
+}
+
+// who a people rule is for, as its row says it: "for: woman · noble"
+export function forPersonLine(generator) {
+    const values = Object.values(generator?.for_person || {});
+    return values.length ? `for: ${values.join(' · ')}` : '';
 }
