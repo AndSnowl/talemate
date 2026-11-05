@@ -301,3 +301,92 @@ async def test_a_person_with_only_a_parent_row_is_named_in_the_parents_language(
     cleaned = await clean_preview(test3, preview, None)
     assert cleaned.fields["name_parts"]["language"] == ids["lang"]
     assert cleaned.name.endswith(" of Drassone")
+
+
+# --- final review fixes ------------------------------------------------------
+
+
+async def test_a_stub_or_a_decided_name_is_never_rebuilt(test3):
+    """Final review C1: expanding a stub (or a name set in the fields)
+    keeps that name."""
+
+    ids = test3.ids
+    with test3.revision(Source.manual()) as rev:
+        stub = rev.create_thing(
+            "character", {"name": "Borodey", "stub": {"ignored": False}}
+        )
+    from_stub = _preview(
+        test3, "a blacksmith of the duchy", name="Borodey", person={"sex": "man"}
+    )
+    from_stub = from_stub.model_copy(update={"stub_id": stub})
+    assert (await clean_preview(test3, from_stub, None)).name == "Borodey"
+    decided = _preview(
+        test3, "a blacksmith of the duchy", name="Borodey", person={"sex": "man"}
+    )
+    decided = decided.model_copy(update={"fields": {"name": "Borodey"}})
+    cleaned = await clean_preview(test3, decided, None)
+    assert cleaned.name == "Borodey" and "name_parts" not in cleaned.fields
+    assert ids
+
+
+async def test_an_owners_rename_on_the_draft_survives_cleaning_again(test3):
+    """Final review C2: once built, a draft renamed by the owner keeps its
+    name when cleaned again (a Languages change); the parts go."""
+
+    ids = test3.ids
+    first = await clean_preview(
+        test3,
+        _preview(
+            test3,
+            "a daughter of Eilhaud",
+            filings=[(ids["eilhaud"], "daughter of"), (ids["duchy"], "lives in")],
+            person={"sex": "woman", "rank": "noble"},
+        ),
+        None,
+    )
+    renamed = first.model_copy(update={"name": "Joan"})
+    again = await clean_preview(test3, renamed, None)
+    assert again.name == "Joan"
+    assert "name_parts" not in again.fields
+
+
+async def test_the_owners_given_name_is_kept_when_the_model_adds_to_it(test3):
+    """Final review I1: "Ysolde, daughter of Eilhaud" drafted as "Ysolde of
+    Drassone" stays so."""
+
+    ids = test3.ids
+    cleaned = await clean_preview(
+        test3,
+        _preview(
+            test3,
+            "Ysolde, daughter of Eilhaud",
+            name="Ysolde of Drassone",
+            filings=[(ids["eilhaud"], "daughter of")],
+            person={"sex": "woman", "rank": "noble"},
+        ),
+        None,
+    )
+    assert cleaned.name == "Ysolde of Drassone"
+
+
+def test_rename_in_preview_takes_possessives_first_names_and_the_models_aka():
+    """Final review I2: "Elise's brother", "Elise grew up…" and the model's
+    everyday "Elise" all follow the rename."""
+
+    from talemate.worldplay.cleaning import rename_in_preview
+
+    preview = CreatePreview(
+        kind="character",
+        prompt="x",
+        name="Elise Vane",
+        facts=[
+            PreviewFact(category="relationship", text="Elise Vane's brother is Tom."),
+            PreviewFact(category="background", text="Elise grew up by the sea."),
+        ],
+        prose={},
+        aka=[{"name": "Elise", "tag": "common", "everyday": True}],
+    )
+    out = rename_in_preview(preview, "Elise Vane", "Maëlis of Drassone")
+    assert out.facts[0].text == "Maëlis of Drassone's brother is Tom."
+    assert out.facts[1].text == "Maëlis grew up by the sea."
+    assert out.aka == []

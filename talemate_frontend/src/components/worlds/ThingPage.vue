@@ -718,7 +718,7 @@ import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
 import PersonName from './PersonName.vue';
 import CallsLine from './CallsLine.vue';
-import { callsFor, plainAka, pronounOf } from './personName.js';
+import { callsFor, draftParentRows, plainAka, pronounOf } from './personName.js';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
 import ThingInherited from './ThingInherited.vue';
@@ -1533,7 +1533,7 @@ export default {
                 ? {
                     builtAs: stored?.built_as || this.edited.person || {},
                     draft: {
-                        filings: (this.edited.filings || []).filter((f) => f.ticked && f.target_id).map((f) => [f.target_id, f.role || '']),
+                        filings: draftParentRows(this.edited.filings),
                         facts: [],
                         built_as: stored?.built_as || this.edited.person || {},
                     },

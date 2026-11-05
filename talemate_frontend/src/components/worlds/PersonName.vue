@@ -47,14 +47,14 @@
                 ></v-text-field>
                 <div v-else class="text" :title="part.written !== part.text ? `${part.text} in ${view.language.name}` : undefined">{{ part.written }}</div>
                 <div class="source text-caption" :class="{ 'from-link': part.source === 'inherited' }">
-                    <a v-if="part.source === 'inherited' && part.from_id" href="#" class="thing-link" @click.prevent="worlds.openThing(part.from_id)">{{ sourceLine(part) }}</a>
+                    <a v-if="part.source === 'inherited' && view.sources[part.from_id]" href="#" class="thing-link" @click.prevent="worlds.openThing(part.from_id)">{{ sourceLine(part) }}</a>
                     <span v-else class="text-muted">{{ sourceLine(part) }}</span>
                 </div>
             </div>
         </div>
 
         <!-- what the name is built as: changing it doesn't rename -->
-        <div v-if="parts.length && choiceKeys.length" class="d-flex align-center flex-wrap ga-1 mt-2" data-testid="person-built-as">
+        <div v-if="choiceKeys.length && (parts.length || hasStored)" class="d-flex align-center flex-wrap ga-1 mt-2" data-testid="person-built-as">
             <span class="text-caption text-muted">built as:</span>
             <v-menu v-for="key in choiceKeys" :key="key" location="bottom start">
                 <template #activator="{ props: menu }">
@@ -171,7 +171,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { partSourceLine, pronounOf } from './personName.js';
+import { partSourceLine, pronounOf, titleShownChange } from './personName.js';
 
 // A person's Name section (languages 4b-2, mockup B): their name in
 // labelled parts, each editable (the name follows), inherited parts saying
@@ -195,6 +195,10 @@ export default {
         },
         parts() {
             return this.view?.parts || [];
+        },
+        // its name was in parts once: what it's built as is kept (I7)
+        hasStored() {
+            return !!this.thing.fields?.name_parts || !!this.view?.built_as && Object.keys(this.view.built_as).length > 0;
         },
         choiceKeys() {
             return Object.keys(this.view?.choices || {});
@@ -248,8 +252,7 @@ export default {
             this.addingTitle = false;
         },
         toggleShown(title) {
-            const next = { undefined: 'before', before: 'after', after: null }[title.shown];
-            this.worlds.personTitleAdd(this.thing.id, { ...title, shown: next });
+            this.worlds.personTitleAdd(this.thing.id, titleShownChange(title));
         },
         titleHint(title) {
             const parts = [];

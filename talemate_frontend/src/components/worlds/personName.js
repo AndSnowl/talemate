@@ -36,9 +36,11 @@ function possessive(pronoun) {
 // ("from her father Eilhaud of Drassone"; `sources`: id → {name, sex})
 export function partSourceLine(part, sources = {}, pronoun = 'them') {
     if (part?.source === 'inherited') {
-        const from = sources[part.from_id] || {};
-        const name = from.name || 'a connection';
+        const from = sources[part.from_id];
         const role = part.from_role || '';
+        // its source is gone (deleted or merged away): no name, no link
+        if (!from) return PARENT.test(role) ? `from ${possessive(pronoun)} parent, no longer in the world` : 'from a connection no longer in the world';
+        const name = from.name;
         if (!PARENT.test(role)) return `from ${name}`;
         const said = /\bmother\b/i.test(role) ? 'mother' : /\bfather\b/i.test(role) ? 'father' : null;
         const parent = said || { woman: 'mother', man: 'father' }[from.sex] || 'parent';
@@ -51,4 +53,25 @@ export function partSourceLine(part, sources = {}, pronoun = 'them') {
 // a person are shown by the Name section and the relationships
 export function plainAka(aka) {
     return (aka || []).filter((entry) => !entry.kind);
+}
+
+// the rows a drafted person's Name it is built from: the ticked ones,
+// and the model's parent rows, which arrive unticked (final review I8);
+// `[target_id, role]`
+export function draftParentRows(filings) {
+    return (filings || [])
+        .filter((f) => f.target_id && (f.ticked || PARENT.test(f.role || '')))
+        .map((f) => [f.target_id, f.role || '']);
+}
+
+// a title's next place with the name (none → before → after → none), as
+// `person_title_add` takes it, its language and meaning kept (I13)
+export function titleShownChange(title) {
+    const next = { before: 'after', after: null }[title.shown] ?? (title.shown ? null : 'before');
+    return {
+        name: title.name,
+        shown: next,
+        ...(title.language ? { language_id: title.language } : {}),
+        ...(title.meaning ? { meaning: title.meaning } : {}),
+    };
 }

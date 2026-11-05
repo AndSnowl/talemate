@@ -170,10 +170,21 @@ def rename_in_preview(preview: CreatePreview, old: str, new: str) -> CreatePrevi
 
     if not old or old == new:
         return preview
-    pattern = re.compile(rf"(?<![\w'’-]){re.escape(old)}(?![\w'’-])")
+    # whole words, a possessive's "'s" left on (final review I2); then the
+    # old first name alone, as the model writes it in passing
+    swaps = [(re.compile(rf"(?<![\w-]){re.escape(old)}(?![\w-])"), new)]
+    old_first, new_first = old.split()[0], new.split()[0]
+    if old_first != old and old_first != new_first:
+        swaps.append(
+            (re.compile(rf"(?<![\w-]){re.escape(old_first)}(?![\w-])"), new_first)
+        )
 
     def swap(text: str | None) -> str | None:
-        return pattern.sub(lambda _m: new, text) if text else text
+        if not text:
+            return text
+        for pattern, to in swaps:
+            text = pattern.sub(lambda _m, to=to: to, text)
+        return text
 
     return preview.model_copy(
         update={
@@ -187,6 +198,12 @@ def rename_in_preview(preview: CreatePreview, old: str, new: str) -> CreatePrevi
             ],
             "prose": {k: swap(v) or "" for k, v in preview.prose.items()},
             "marks": [m for m in preview.marks if m.name != old and m.part != old],
+            # the model's other names for the old name go with it
+            "aka": [
+                a
+                for a in preview.aka
+                if a.get("kind") or a.get("name") not in (old, old_first)
+            ],
         }
     )
 
@@ -202,14 +219,33 @@ def _draft_facts(view, preview: CreatePreview) -> list[tuple[str, list[str]]]:
     for fact in preview.facts:
         if fact.category != "relationship":
             continue
-        refs = [
-            thing_id
+        found = sorted(
+            (match.end(), thing_id)
             for name, thing_id in names.items()
-            if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", fact.text)
-        ]
-        if refs:
-            out.append((fact.text, refs))
+            for match in [re.search(rf"(?<!\w){re.escape(name)}(?!\w)", fact.text)]
+            if match
+        )
+        # each name with only the words since the name before it (final
+        # review I5)
+        start = 0
+        for end, thing_id in found:
+            out.append((fact.text[start:end], [thing_id]))
+            start = end
     return out
+
+
+def _owners_name(preview: CreatePreview) -> bool:
+    """The draft's name is the owner's: the whole of it, or its first word
+    (a given name the model added to: "Ysolde" → "Ysolde of Drassone",
+    final review I1), is written in the prompt with a capital."""
+
+    words = preview.name.split()
+    if not words:
+        return False
+    for wanted in (preview.name, words[0]):
+        if re.search(rf"(?<!\w){re.escape(wanted)}(?!\w)", preview.prompt):
+            return True
+    return False
 
 
 def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview:
@@ -243,12 +279,21 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
     language = language_of(state)
     if not _has_people_rules(language):
         return preview
-    stored = preview.fields.get("name_parts")
-    if stored is not None and stored_written(view, stored) == preview.name:
+    # a stub's name, or one the owner set: never rebuilt (final review C1)
+    if preview.stub_id or preview.fields.get("name"):
         return preview
-    if preview.name and re.search(
-        rf"(?<!\w){re.escape(preview.name)}(?!\w)", preview.prompt, re.I
-    ):
+    stored = preview.fields.get("name_parts")
+    if stored is not None:
+        if stored_written(view, stored) == preview.name:
+            return preview
+        # built once, then renamed by the owner: their name stands, the
+        # parts go (final review C2)
+        return preview.model_copy(
+            update={
+                "fields": {k: v for k, v in preview.fields.items() if k != "name_parts"}
+            }
+        )
+    if _owners_name(preview):
         # the owner's own name: never rebuilt
         return preview
     rng = random.Random()

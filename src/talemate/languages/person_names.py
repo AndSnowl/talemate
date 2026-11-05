@@ -31,6 +31,7 @@ __all__ = [
     "build_person_name",
     "choose",
     "connections_of",
+    "fact_role",
     "kept_title",
     "parent_for",
     "person_text",
@@ -50,14 +51,21 @@ ROLE_SEX: dict[str, str] = {
     "son": "man",
 }
 # the words that make a connection a parent's
+# (a filing's role is the person's in the parent's entry: "daughter")
 PARENT_WORDS: tuple[str, ...] = (
     "son of",
     "daughter of",
     "child of",
+    "son",
+    "daughter",
+    "child",
     "parent",
     "mother",
     "father",
 )
+# a part's labels that mean the given name (a parent with no parts gives
+# its first word for one)
+GIVEN_LABELS = frozenset({"given", "first", "forename", "personal"})
 # the uses a people rule has
 PEOPLE_USES = ("character", "people")
 
@@ -149,7 +157,9 @@ def connections_of(
 
     found: list[Connection] = []
     pairs = [(target, role or "") for target, role in filings]
-    pairs += [(ref, text) for text, refs in facts for ref in refs]
+    for text, refs in facts:
+        for ref in refs:
+            pairs.append((ref, fact_role(text, ref, refs)))
     for target, role in pairs:
         if not target or target == thing_id:
             continue
@@ -167,6 +177,22 @@ def connections_of(
             )
         )
     return found
+
+
+def fact_role(text: str, ref: str, refs: list[str]) -> str:
+    """A relationship fact's words for one entry it links: the whole text
+    when it links one; otherwise the words from the link before it to the
+    end of its own (final review I5: "rival of Varro, and the daughter of
+    Eilhaud" makes only Eilhaud a parent)."""
+
+    if len(set(refs)) <= 1:
+        return text
+    links = list(re.finditer(r"\[\[thing:([0-9a-f]{32})\|[^\]]*\]\]", text))
+    for i, link in enumerate(links):
+        if link.group(1) == ref:
+            start = links[i - 1].end() if i else 0
+            return text[start : link.end()]
+    return text
 
 
 def choose(language: Language, read: dict[str, str]) -> dict[str, str]:
@@ -212,22 +238,29 @@ def pick_rule(language: Language, built_as: dict[str, str]) -> GeneratorDef:
     from talemate.languages.naming import generator_for
 
     blocks = _building_blocks(language)
-    best: tuple[int, int, int, GeneratorDef] | None = None
+    best: tuple[int, int, int, int, GeneratorDef] | None = None
     for generator in _people_rules(language):
         wanted = generator.for_person
         if any(k in built_as and built_as[k] != v for k, v in wanted.items()):
             continue
         if any(k not in built_as for k in wanted):
             continue
+        passes_down = any(
+            part.kind == "connection"
+            for shape in generator.shapes
+            for part in shape.parts
+        )
         key = (
             0 if generator.id in blocks else 1,
             len(wanted),
+            # a rule that passes a name down wins a tie (final review I6)
+            1 if passes_down else 0,
             0 if not generator.shapes else -1,
         )
-        if best is None or key > best[:3]:
+        if best is None or key > best[:4]:
             best = (*key, generator)
     if best is not None:
-        return best[3]
+        return best[4]
     return generator_for(language, "character")
 
 
@@ -276,15 +309,18 @@ def person_text(
 
 
 def inherited_text(part: NamePart, parent: Connection) -> str:
-    """What a connection part takes from `parent`: its part by label, else
-    its last word for a labelled part, else its whole name."""
+    """What a connection part takes from `parent`: its part by label; for
+    a parent with no parts, the first word for a given name, else the last
+    (a family or house name); with no label, its whole name."""
 
     if not part.take:
         return parent.name
     if part.take in parent.parts:
         return parent.parts[part.take]
     words = parent.name.split()
-    return words[-1] if words else ""
+    if not words:
+        return ""
+    return words[0] if part.take.lower() in GIVEN_LABELS else words[-1]
 
 
 def written(language: Language, rule_id: str, shape: int, texts: list[str]) -> str:
@@ -419,7 +455,8 @@ def _missing(
         wanted = {**built_as, "sex": sex}
         stub_rule = pick_rule(language, choose(language, wanted))
         label = parts[index].label
-        at = _label_index(language, stub_rule, label)
+        # the parent's own part that the child's takes (final review I4)
+        at = _label_index(language, stub_rule, part.take or label)
         if at is None:
             stub = build_person_name(
                 language,
@@ -428,7 +465,14 @@ def _missing(
                 rng=rng,
                 offer_missing=False,
             )
-            name = f"{stub.name} {parts[index].text}".strip()
+            # no slot for it: a given name is the stub's name, anything
+            # else follows a rolled one
+            given = (part.take or label).lower() in GIVEN_LABELS
+            name = (
+                parts[index].text
+                if given
+                else f"{stub.name} {parts[index].text}".strip()
+            )
         else:
             stub = build_person_name(
                 language,
@@ -494,7 +538,11 @@ def roll_pet_name(
     shape, rolls = roll_parts(language, rule.id, rng=rng, person=PersonContext(own=own))
     texts = [r.rolls[0].text if r.rolls else "" for r in rolls]
     name = written(language, rule.id, shape, texts)
-    return (name, rule.id) if name else None
+    # a rule that gives the name back as it is makes no pet name
+    # (acceptance 4b-2)
+    if not name or name in own.values():
+        return None
+    return name, rule.id
 
 
 def address_row(language: Language, role: str) -> AddressRow | None:

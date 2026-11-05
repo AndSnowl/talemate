@@ -284,3 +284,75 @@ def test_a_form_with_an_unknown_condition_leaves_the_text_and_check_says_so():
     )
     assert named.parts[1].text == "Kesterovsk"
     assert any("ends in ey" in w for w in check_language(bad).warnings)
+
+
+def test_a_role_of_just_daughter_or_son_is_a_parents():
+    """Acceptance 4b-2: the model's In rows say "daughter" or "son" (the
+    person's role in the parent's entry)."""
+
+    eilhaud = Connection(role="daughter", thing_id=EILHAUD, name="Eilhaud of Drassone")
+    named = build_person_name(
+        DRASSONAIS, _ctx(connections=[eilhaud]), rng=random.Random(1)
+    )
+    assert named.parts[2].text == "Drassone" and named.parts[2].source == "inherited"
+
+
+def test_a_pet_name_rule_that_changes_nothing_gives_none():
+    """Acceptance 4b-2: a filled-in pet rule gave "Dilhie" back as it was."""
+
+    plain = DRASSONAIS.model_copy(deep=True)
+    plain.generators[-1].shapes[0].parts[0].person_forms = []
+    assert roll_pet_name(plain, {"given": "Dilhie"}, random.Random(1)) is None
+
+
+def test_a_parent_without_parts_gives_its_first_word_for_a_given_part():
+    """Final review I3: a common daughter of "Eilhaud of Drassone" (no
+    parts) is "… daughter of Eilhaud", not "… daughter of Drassone"."""
+
+    eilhaud = Connection(
+        role="daughter of", thing_id=EILHAUD, name="Eilhaud of Drassone"
+    )
+    named = build_person_name(
+        DRASSONAIS, _ctx(rank="common", connections=[eilhaud]), rng=random.Random(1)
+    )
+    assert named.rule_id == "common-women"
+    assert named.parts[2].text == "Eilhaud"
+
+
+def test_a_missing_father_stub_takes_the_part_by_what_it_takes():
+    """Final review I4: "Ysolde daughter of Gaspard" offers "Gaspard …",
+    the father's given name in his own given slot."""
+
+    named = build_person_name(DRASSONAIS, _ctx(rank="common"), rng=random.Random(4))
+    father = named.missing[0]
+    assert father.name.split()[0] == named.parts[2].text
+
+
+def test_a_people_rule_with_connections_wins_a_tie_over_a_plain_one():
+    """Final review I6: Varovni's plain "men" mustn't beat the composed
+    rule that passes the family name down."""
+
+    assert pick_rule(VAROVNI, {"sex": "woman"}).id == "people"
+
+
+def test_a_fact_linking_several_people_gives_each_only_its_own_words(world):
+    """Final review I5: a rival named in the same fact as the father isn't
+    taken for a parent."""
+
+    with world.revision(Source.manual()) as rev:
+        varro = rev.create_thing("character", {"name": "Varro of Morlaix"})
+        eilhaud = rev.create_thing("character", {"name": "Eilhaud of Drassone"})
+    text = (
+        f"Sworn rival of [[thing:{varro}|Varro of Morlaix]], "
+        f"and the daughter of [[thing:{eilhaud}|Eilhaud of Drassone]]."
+    )
+    conns = connections_of(world.view(), None, [], [(text, [varro, eilhaud])])
+    roles = {c.name: c.role for c in conns}
+    assert "daughter" not in roles["Varro of Morlaix"]
+    assert "daughter of" in roles["Eilhaud of Drassone"]
+    named = build_person_name(
+        DRASSONAIS,
+        PersonContext(built_as={"sex": "woman", "rank": "noble"}, connections=conns),
+        rng=random.Random(1),
+    )
+    assert named.parts[2].text == "Drassone"

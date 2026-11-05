@@ -292,7 +292,12 @@ def set_pet_name(
             entry = {"name": name, "tag": "proper", "everyday": False, "kind": "pet"}
     else:
         raise ValueError(f"unknown pet name mode: {mode!r}")
-    aka = [a for a in aka if a["name"].lower() != entry["name"].lower()]
+    # the same name used by someone else stays theirs (final review I12)
+    aka = [
+        a
+        for a in aka
+        if a["name"].lower() != entry["name"].lower() or a.get("by") != entry.get("by")
+    ]
     drop_other_names(rev, world, thing_id, [*aka, entry])
 
 

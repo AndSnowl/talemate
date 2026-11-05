@@ -169,7 +169,12 @@ async def test_a_hand_rename_clears_parts_and_name_it_starts_fresh(plugin):
     await _act(
         plugin, "set_field", thing_id=w.maelis, field="name", value="Maëlis the Red"
     )
-    assert "name_parts" not in _thing(plugin, w.maelis).fields
+    # the parts go; what she's built as stays (final review I7)
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert stored["parts"] == [] and stored["built_as"] == {
+        "sex": "woman",
+        "rank": "noble",
+    }
     await _act(
         plugin,
         "name_it_parts",
@@ -352,3 +357,57 @@ async def test_name_it_parts_writes_fixed_words_in_english_and_frees_an_inherite
     parts = _last(plugin, "name_it_parts")["data"]["parts"]
     assert parts[2]["pinned"] is False and parts[2]["source"] == "rolled"
     assert len(parts[2]["rolls"]) > 1
+
+
+async def test_built_as_can_be_set_after_a_hand_rename(plugin):
+    """Final review I7: with no parts left, "built as" still changes."""
+
+    w = await _world(plugin)
+    await _act(
+        plugin, "set_field", thing_id=w.maelis, field="name", value="Maëlis the Red"
+    )
+    await _act(
+        plugin,
+        "person_built_as",
+        thing_id=w.maelis,
+        built_as={"sex": "woman", "rank": "common"},
+    )
+    assert _thing(plugin, w.maelis).fields["name_parts"]["built_as"]["rank"] == "common"
+
+
+async def test_parts_that_dont_write_the_name_arent_stored(plugin):
+    """Final review I9: a partial rename's name isn't what the parts
+    write; the parts aren't stored."""
+
+    w = await _world(plugin)
+    parts = _parts(w.lang, house_from=w.eilhaud)["parts"]
+    await _act(
+        plugin,
+        "name_it_rename",
+        thing_id=w.maelis,
+        name="Lady Maëlis of Drassone",
+        language_id=w.lang,
+        rule_id="noble-women",
+        shape=0,
+        built_as={"sex": "woman", "rank": "noble"},
+        parts=parts,
+    )
+    assert _thing(plugin, w.maelis).fields["name_parts"]["parts"] == []
+
+
+async def test_what_one_person_calls_her_leaves_anothers_alone(plugin):
+    """Final review I12: her sister calling her "Maë" too keeps her
+    brother's line."""
+
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        sister = rev.create_thing("character", {"name": "Isaure"})
+    await _act(
+        plugin, "person_pet_name", thing_id=w.maelis, mode="set", name="Maë", by=sister
+    )
+    own = [
+        (a["name"], a["by"])
+        for a in _thing(plugin, w.maelis).fields["aka"]
+        if a.get("kind") == "own"
+    ]
+    assert sorted(own) == sorted([("Maë", w.tiboud), ("Maë", sister)])

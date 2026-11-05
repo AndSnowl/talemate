@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
 import { composeName, forPersonLine, partLabel, resultLine, ruleChipLabel } from '../src/components/worlds/nameParts.js';
-import { callsFor, partSourceLine, plainAka, pronounOf, writtenName } from '../src/components/worlds/personName.js';
+import { callsFor, draftParentRows, partSourceLine, plainAka, pronounOf, titleShownChange, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
     akaChanged,
@@ -4419,6 +4419,26 @@ check('the Names chapter says what a people rule part takes', () => {
     assert.equal(ruleChipLabel({ kind: 'rule', rule: 'given', label: 'given', person_forms: [{ when: { sex: 'woman' } }] }, gens), 'given · forms by sex');
     assert.equal(forPersonLine({ for_person: { sex: 'woman', rank: 'noble' } }), 'for: woman · noble');
     assert.equal(forPersonLine({}), '');
+});
+
+check('draft Name it sends ticked rows and the model\'s parent rows (final review I8)', () => {
+    const rows = [
+        { target_id: 'duchy', role: 'lives in', ticked: true },
+        { target_id: 'eil', role: 'daughter', ticked: false },
+        { target_id: 'rival', role: 'sworn rival', ticked: false },
+        { new_name: { name: 'X' }, role: 'daughter of', ticked: false },
+    ];
+    assert.deepEqual(draftParentRows(rows), [['duchy', 'lives in'], ['eil', 'daughter']]);
+});
+
+check('an inherited part from a gone entry is plain text (final review I11)', () => {
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'gone', from_role: 'daughter of' }, {}, 'her'), 'from her parent, no longer in the world');
+});
+
+check('showing a title keeps its language (final review I13)', () => {
+    const change = titleShownChange({ name: 'Chef', tag: 'proper', everyday: false, kind: 'title', language: 'L', meaning: 'chief' });
+    assert.deepEqual(change, { name: 'Chef', shown: 'before', language_id: 'L', meaning: 'chief' });
+    assert.equal(titleShownChange({ name: 'Lady', kind: 'title', shown: 'after' }).shown, null);
 });
 
 if (failures.length) {

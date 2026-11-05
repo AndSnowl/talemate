@@ -100,7 +100,7 @@ def test_a_rename_that_matches_keeps_parts_and_one_that_doesnt_clears_them(
     assert "name_parts" in world.view().thing(me).fields
     with world.revision(Source.manual()) as rev:
         rename_everywhere(rev, world, me, "Maëlis the Red")
-    assert "name_parts" not in world.view().thing(me).fields
+    assert world.view().thing(me).fields["name_parts"]["parts"] == []
 
 
 @pytest.fixture
@@ -112,3 +112,30 @@ def drassonais_id(world):
         return rev.create_thing(
             "language", {"name": "Drassonais", **fields_of(DRASSONAIS)}
         )
+
+
+def test_a_merge_keeps_what_others_call_her_and_carries_no_parts(world, drassonais_id):
+    """Final review I10: a stub folded into a person keeps its titles and
+    pet names as they were, and its name parts don't land on the target."""
+
+    from talemate.worldplay.repoint import repoint_stub
+
+    with world.revision(Source.manual()) as rev:
+        target = rev.create_thing("character", {"name": "Maëlis"})
+        stub = rev.create_thing(
+            "character",
+            {
+                "name": "Maëlis of Drassone",
+                "stub": {"ignored": False},
+                "name_parts": {**GOOD_PARTS, "language": drassonais_id},
+                "aka": [
+                    _aka("Lady of the Lake", kind="title", shown="before"),
+                    _aka("Lisette", kind="pet", rule="pets"),
+                ],
+            },
+        )
+    repoint_stub(world, stub, target)
+    state = world.view().thing(target)
+    kinds = {a["name"]: a.get("kind") for a in state.fields.get("aka") or []}
+    assert kinds["Lady of the Lake"] == "title" and kinds["Lisette"] == "pet"
+    assert "name_parts" not in state.fields

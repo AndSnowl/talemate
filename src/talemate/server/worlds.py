@@ -559,7 +559,12 @@ from talemate.worldplay.merge import (
     preview_merge,
     repoint_overrides,
 )
-from talemate.languages.person_names import choose, people_rows, pick_rule
+from talemate.languages.person_names import (
+    choose,
+    people_rows,
+    pick_rule,
+    stored_written,
+)
 from talemate.worldplay.people import (
     add_title,
     calls_out,
@@ -6353,19 +6358,19 @@ class WorldsPlugin(Plugin):
         with world.revision(Source.manual(note="renamed with Name it")) as rev:
             rename_everywhere(rev, world, thing_id, name)
             if isinstance(parts, list) and parts:
-                # a person's name in parts (languages 4b-2)
-                rev.set_field(
-                    thing_id,
-                    "name_parts",
-                    stored_parts(
-                        str(data.get("language_id") or ""),
-                        str(data.get("rule_id") or ""),
-                        int(data.get("shape") or 0),
-                        dict(data.get("built_as") or {}),
-                        parts,
-                    ),
-                    None,
+                # a person's name in parts (languages 4b-2); parts that
+                # don't write the name given (a partial rename) aren't
+                # kept, what they're built as is (final review I9)
+                stored = stored_parts(
+                    str(data.get("language_id") or ""),
+                    str(data.get("rule_id") or ""),
+                    int(data.get("shape") or 0),
+                    dict(data.get("built_as") or {}),
+                    parts,
                 )
+                if stored_written(world.view(), stored) != " ".join(name.split()):
+                    stored = {**stored, "rule": "", "shape": 0, "parts": []}
+                rev.set_field(thing_id, "name_parts", stored, None)
         self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
 
     # --- people's names (languages 4b-2) -------------------------------------
