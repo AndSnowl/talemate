@@ -390,3 +390,21 @@ def test_rename_in_preview_takes_possessives_first_names_and_the_models_aka():
     assert out.facts[0].text == "Maëlis of Drassone's brother is Tom."
     assert out.facts[1].text == "Maëlis grew up by the sea."
     assert out.aka == []
+
+
+async def test_a_person_only_placed_by_the_model_is_named_in_that_places_language(test3):
+    """Acceptance 4b-2 run 3: a hunter the model put in the duchy (an
+    unticked row, no parent) is still named in its language."""
+
+    ids = test3.ids
+    preview = CreatePreview(
+        kind="character",
+        prompt="a hunter who watches the stars",
+        name="Velesk",
+        facts=[PreviewFact(category="background", text="Velesk hunts by night.")],
+        prose={},
+        filings=[PreviewFiling(target_id=ids["duchy"], target_name="Duchy of Drassone", role="noble hunter", ticked=False)],
+        person={"sex": "man", "rank": "noble"},
+    )
+    cleaned = await clean_preview(test3, preview, None)
+    assert cleaned.fields["name_parts"]["language"] == ids["lang"]

@@ -126,7 +126,8 @@ async def clean_preview(
 
 
 def _parent_languages(view, preview: CreatePreview) -> list:
-    """The languages of the draft's parent rows, ticked or not."""
+    """The languages of the draft's parent rows, ticked or not; with none,
+    of any of its rows (the model's place for them, acceptance 4b-2)."""
 
     from talemate.languages.person_names import PARENT_WORDS, role_matches
 
@@ -134,6 +135,10 @@ def _parent_languages(view, preview: CreatePreview) -> list:
     for row in preview.filings:
         if row.target_id and role_matches(list(PARENT_WORDS), row.role or ""):
             rows += languages_for(view, row.target_id)
+    if not rows:
+        for row in preview.filings:
+            if row.target_id:
+                rows += languages_for(view, row.target_id)
     return rows
 
 
