@@ -26,6 +26,7 @@ __all__ = [
     "calls_out",
     "draft_context",
     "kept_title_offer",
+    "name_view",
     "person_context",
     "person_language",
     "remove_title",
@@ -321,4 +322,79 @@ def calls_out(view, state) -> list[dict]:
                 "meaning": entry.get("meaning") or "",
             }
         )
+    return out
+
+
+def name_view(view, state) -> dict | None:
+    """A person's name as their page's Name section shows it (languages
+    4b-2): the language and rule, what it's built as and the choices,
+    each part as written, the entries inherited parts came from (name and
+    sex), and who uses the pet name. A person whose name isn't in parts
+    still shows their language (the page says "not built from a rule");
+    one with neither has none."""
+
+    from talemate.languages.composed import _generator
+
+    if state.kind != "character":
+        return None
+    language_state = person_language(view, state.id)
+    stored = state.fields.get("name_parts")
+    if language_state is None:
+        return None
+    language = language_of(language_state)
+    people = language.people_names
+    out: dict = {
+        "language": {"id": language_state.id, "name": language.name},
+        "rule": None,
+        "rule_name": None,
+        "built_as": {},
+        "choices": dict(people.choices) if people else {},
+        "parts": [],
+        "sources": {},
+        "pet_used_by": [
+            row.kind
+            for row in (people.address if people else [])
+            if "pet name" in row.uses
+        ],
+    }
+    if not isinstance(stored, dict):
+        return out
+    generator = _generator(language, str(stored.get("rule") or ""))
+    shape = int(stored.get("shape") or 0)
+    rule_parts = (
+        generator.shapes[shape].parts
+        if generator is not None and 0 <= shape < len(generator.shapes)
+        else []
+    )
+    parts = []
+    for index, part in enumerate(stored.get("parts") or []):
+        rule_part = rule_parts[index] if index < len(rule_parts) else None
+        english = (
+            rule_part.english
+            if rule_part is not None and rule_part.kind == "word"
+            else ""
+        )
+        parts.append({**part, "written": english or part.get("text", "")})
+        source = part.get("from_id")
+        if source and source not in out["sources"]:
+            found = view.thing(source)
+            if found is not None:
+                built = found.fields.get("name_parts")
+                sex = (
+                    (built.get("built_as") or {}).get("sex", "")
+                    if isinstance(built, dict)
+                    else ""
+                )
+                out["sources"][source] = {
+                    "name": view.name_of(source) or "",
+                    "sex": sex,
+                }
+    out.update(
+        {
+            "rule": stored.get("rule"),
+            "rule_name": generator.name if generator is not None else None,
+            "built_as": dict(stored.get("built_as") or {}),
+            "parts": parts,
+        }
+    )
     return out

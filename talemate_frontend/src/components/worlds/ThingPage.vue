@@ -279,6 +279,8 @@
                         :busy="editorBusy"
                         @set="setNumber"
                     />
+                    <!-- a person's name in parts (languages 4b-2) -->
+                    <PersonName v-if="!draft && thing.name_view" :thing="thing" @name-it="nameItThing" />
                     <ThingAka
                         :key="'aka-' + editorKey"
                         :aka="akaList"
@@ -433,6 +435,14 @@
                             <template #notes>
                                 <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
                             </template>
+                            <!-- what someone calls them, only where it differs (4b-2) -->
+                            <CallsLine
+                                v-if="thing.name_view && fact.category === 'relationship'"
+                                :thing-id="thing.id"
+                                :calls="callsFor(thing.calls, fact)"
+                                :people="linkedPeople(fact)"
+                                :pronoun="pronounOf(thing.name_view.built_as)"
+                            />
                             <div v-if="form && form.factId === fact.fact_id" class="my-2">
                                 <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(fact)" />
                             </div>
@@ -706,6 +716,9 @@ import SuggestionBar from './SuggestionBar.vue';
 import SuggestionRow from './SuggestionRow.vue';
 import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
+import PersonName from './PersonName.vue';
+import CallsLine from './CallsLine.vue';
+import { callsFor, plainAka, pronounOf } from './personName.js';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
 import ThingInherited from './ThingInherited.vue';
@@ -721,6 +734,8 @@ const HIDDEN_FIELDS = [
     // languages 3a: who speaks what, and a language's own sections
     'languages', 'depth', 'flavour', 'sound', 'rules', 'words', 'phrases',
     'descends_from', 'similar',
+    // languages 4b-2: shown by PersonName
+    'name_parts',
 ];
 
 // a language page's tabs (languages 3a): About first, the default
@@ -865,6 +880,8 @@ export default {
         SelectionMenu,
         StubCard,
         ThingAka,
+        PersonName,
+        CallsLine,
         ThingDeleteDialog,
         ThingFactForm,
         ThingInherited,
@@ -1139,8 +1156,11 @@ export default {
         numberFields() {
             return (this.draft ? this.edited?.fields : this.thing?.fields) || NO_FIELDS;
         },
+        // the other names the Other names editor shows: a person's titles,
+        // pet name and the names others call them (languages 4b-2) are the
+        // Name section's and the relationships', kept through its saves
         akaList() {
-            return this.thing?.aka || NO_AKA;
+            return plainAka(this.thing?.aka || NO_AKA);
         },
         editorBusy() {
             return this.draft ? this.draftBusy : !!this.worlds.pending.set_field;
@@ -1314,10 +1334,12 @@ export default {
             }
         },
         saveAka(aka) {
+            const kinded = (this.draft ? this.edited?.aka : this.thing?.aka) || [];
+            const whole = [...aka, ...kinded.filter((entry) => entry.kind)];
             if (this.draft) {
-                this.edit(setDraftAka(this.edited, aka));
+                this.edit(setDraftAka(this.edited, whole));
             } else {
-                this.worlds.setAka(aka);
+                this.worlds.setAka(whole);
             }
         },
         setDraftKind(kind) {
@@ -1425,6 +1447,16 @@ export default {
         // the page's fact as FactRow shows it
         factView(fact) {
             return { ...fact, text: fact.rendered };
+        },
+        callsFor,
+        pronounOf,
+        // the entries a fact links, other than this one (`{id, name}`)
+        linkedPeople(fact) {
+            const seen = new Map();
+            for (const seg of fact.segments || []) {
+                if (seg.ref && seg.ref !== this.thing.id && !seen.has(seg.ref)) seen.set(seg.ref, { id: seg.ref, name: seg.text });
+            }
+            return [...seen.values()];
         },
         setExistence(value) {
             if (value && value !== this.existence) {

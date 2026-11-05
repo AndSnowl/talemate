@@ -315,6 +315,23 @@ try:
                     for row in thing["languages"]
                 ]
             # the entries it's filed in: earlier things, by name
+            # an other name used by someone (4b-2): "by" an earlier thing's name
+            if fields.get("aka"):
+                fields["aka"] = [
+                    {**entry, "by": ids[entry["by"]]} if entry.get("by") in ids else entry
+                    for entry in fields["aka"]
+                ]
+            if thing.get("name_parts"):
+                # a person's name in parts (languages 4b-2): its language
+                # and each part's "from" named, written as ids
+                parts = dict(thing["name_parts"])
+                parts["language"] = ids[parts["language"]]
+                parts["parts"] = [
+                    {k: v for k, v in part.items() if k != "from"}
+                    | ({"from_id": ids[part["from"]]} if part.get("from") else {})
+                    for part in parts["parts"]
+                ]
+                fields["name_parts"] = parts
             if thing.get("filings"):
                 fields["filings"] = [
                     {
@@ -386,7 +403,9 @@ def seed_fm_world(
     "filings": [{"target": name, "role", "since":
     year|None, "until": year|None, "within": name|None}]|None, "facts":
     [{"category", "text", "since": year|None, "until": year|None,
-    "origin": dict|None}]}``, written in one revision, in order. An
+    "origin": dict|None}], "name_parts": {"language": name, "rule",
+    "shape", "built_as", "parts": [{"label", "text", "source", "from":
+    name|None, "from_role"?}]}|None}``, written in one revision, in order. An
     origin's ``"tie"`` (an exception's) names the entry it's filed under,
     written as its id.
     A link names things listed before it (e.g. a race's ``{"species":

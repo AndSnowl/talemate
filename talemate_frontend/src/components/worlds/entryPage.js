@@ -19,9 +19,11 @@ export const OTHER_HEADING = 'Other';
 // other name but the everyday one, which reads "usually called …"
 // instead, each with its index into `aka` (read-only: both edit them
 // under Other names, `ThingAka`).
+// A person's titles, pet name and the names others call them (`kind`,
+// languages 4b-2) are their Name section's, not the header's.
 export function headerNames(aka) {
     return (aka || []).flatMap((entry, index) => (
-        entry && !entry.everyday && String(entry.name ?? '').trim()
+        entry && !entry.everyday && !entry.kind && String(entry.name ?? '').trim()
             ? [{ name: entry.name, index }]
             : []
     ));

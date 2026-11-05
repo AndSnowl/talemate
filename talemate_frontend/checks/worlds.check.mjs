@@ -11,6 +11,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
 import { composeName, partLabel, resultLine } from '../src/components/worlds/nameParts.js';
+import { callsFor, partSourceLine, plainAka, pronounOf, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
     akaChanged,
@@ -4295,6 +4296,53 @@ check('a rename keeps the words left out (owner, 2026-11-04)', () => {
     store.pickNameIt(null, 'Velmar');
     const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
     assert.equal(asked.name ?? asked.data?.name, 'King Velmar III');
+});
+
+// --- people's names (languages 4b-2) -----------------------------------------
+
+check('a person name is written with each fixed word in English', () => {
+    const parts = [{ text: 'Maëlis' }, { text: 'di' }, { text: 'Drassone' }];
+    assert.equal(writtenName(parts, { 1: 'of' }), 'Maëlis of Drassone');
+    assert.equal(writtenName(parts), 'Maëlis di Drassone');
+    assert.equal(writtenName([{ text: 'Maëlis' }, { text: '(missing rule)' }]), 'Maëlis');
+});
+
+check('calls her shows only names used by an entry the fact links', () => {
+    const calls = [
+        { name: 'Maë', kind: 'own', by: 'tib' },
+        { name: 'Lisette', kind: 'pet', by: '' },
+        { name: 'the Drassone girl', kind: 'own', by: 'wardens' },
+    ];
+    assert.deepEqual(callsFor(calls, { refs: ['tib'] }).map((c) => c.name), ['Maë']);
+    assert.deepEqual(callsFor(calls, { refs: ['aur'] }), []);
+    assert.deepEqual(callsFor(calls, {}), []);
+});
+
+check('an inherited part says where it came from', () => {
+    const sources = { eil: { name: 'Eilhaud of Drassone', sex: 'man' }, aur: { name: 'Aurande', sex: '' }, duchy: { name: 'Drassone', sex: '' } };
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'eil', from_role: 'daughter of' }, sources, 'her'), 'from her father Eilhaud of Drassone');
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'aur', from_role: 'Daughter of Aurande, her mother' }, sources, 'her'), 'from her mother Aurande');
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'aur', from_role: 'child of' }, sources, 'her'), 'from her parent Aurande');
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'duchy', from_role: 'lives in' }, sources, 'her'), 'from Drassone');
+    assert.equal(partSourceLine({ source: 'rolled' }, sources, 'her'), 'rolled');
+    assert.equal(partSourceLine({ source: 'meaning' }, sources, 'her'), 'from a meaning');
+    assert.equal(partSourceLine({ source: 'word' }, sources, 'her'), 'fixed word');
+});
+
+check('the pronoun follows what the name is built as', () => {
+    assert.equal(pronounOf({ sex: 'woman' }), 'her');
+    assert.equal(pronounOf({ sex: 'man' }), 'him');
+    assert.equal(pronounOf({}), 'them');
+});
+
+check('a person name kinds stay out of Other names and the header', () => {
+    const aka = [
+        { name: 'Old Name', tag: 'common', everyday: false },
+        { name: 'Maë', tag: 'proper', everyday: false, kind: 'own', by: 'tib' },
+        { name: 'Lady', tag: 'proper', everyday: false, kind: 'title' },
+    ];
+    assert.deepEqual(plainAka(aka).map((a) => a.name), ['Old Name']);
+    assert.deepEqual(headerNames(aka).map((a) => a.name), ['Old Name']);
 });
 
 if (failures.length) {

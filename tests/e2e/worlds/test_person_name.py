@@ -1,0 +1,202 @@
+"""A person's page (languages 4b-2, Task 6; mockup frame B): the Name
+section's labelled parts and where they came from, editing a part, what
+others call them on the relationship it belongs to (only what differs),
+and a title made from a meaning."""
+
+from __future__ import annotations
+
+import pytest
+from playwright.sync_api import expect
+
+from _people_names_helpers import DRASSONAIS
+from talemate.languages.entry import fields_of
+from talemate.languages.models import DictionaryEntry
+
+from e2e.seed import seed_fm_world
+from e2e.worlds.test_new_scene import SEND_SPY_JS
+from e2e.worlds.test_world_tab import (
+    TIMEOUT_MS,
+    _open_thing,
+    _open_world,
+    _world_name,
+    _world_tab,
+)
+
+pytestmark = pytest.mark.e2e
+
+LANGUAGE = DRASSONAIS.model_copy(
+    update={
+        "dictionary": [DictionaryEntry(word="chef", meanings=["chief"], part="noun")]
+    }
+)
+
+
+def _parts(*texts, house_from=None):
+    labels = ["given", "of", "house"]
+    sources = ["rolled", "word", "inherited" if house_from else "typed"]
+    parts = [
+        {"label": label, "text": text, "source": source}
+        for label, text, source in zip(labels, texts, sources)
+    ]
+    if house_from:
+        parts[2] |= {"from": house_from, "from_role": "daughter of"}
+    return parts
+
+
+def world(app, page, stem):
+    name = _world_name(stem)
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Drassonais",
+                "fields": {"name": "Drassonais", **fields_of(LANGUAGE)},
+            },
+            {
+                "kind": "place",
+                "name": "Duchy of Drassone",
+                "languages": [{"language": "Drassonais", "role": "official"}],
+            },
+            {
+                "kind": "character",
+                "name": "Eilhaud of Drassone",
+                "filings": [{"target": "Duchy of Drassone", "role": "duke"}],
+                "name_parts": {
+                    "language": "Drassonais",
+                    "rule": "noble-men",
+                    "shape": 0,
+                    "built_as": {"sex": "man", "rank": "noble"},
+                    "parts": _parts("Eilhaud", "di", "Drassone"),
+                },
+            },
+            {"kind": "character", "name": "Tiboud"},
+            {"kind": "character", "name": "Aurande"},
+            {
+                "kind": "character",
+                "name": "Maëlis of Drassone",
+                "filings": [{"target": "Eilhaud of Drassone", "role": "daughter of"}],
+                "fields": {
+                    "aka": [
+                        {
+                            "name": "Maë",
+                            "tag": "proper",
+                            "everyday": False,
+                            "kind": "own",
+                            "by": "Tiboud",
+                        },
+                        {
+                            "name": "Maëlisette",
+                            "tag": "proper",
+                            "everyday": False,
+                            "kind": "pet",
+                            "rule": "pets",
+                        },
+                    ]
+                },
+                "name_parts": {
+                    "language": "Drassonais",
+                    "rule": "noble-women",
+                    "shape": 0,
+                    "built_as": {"sex": "woman", "rank": "noble"},
+                    "parts": _parts(
+                        "Maëlis", "di", "Drassone", house_from="Eilhaud of Drassone"
+                    ),
+                },
+                "facts": [
+                    {
+                        "category": "relationship",
+                        "text": "Sister of [[@Tiboud|Tiboud]].",
+                    },
+                    {
+                        "category": "relationship",
+                        "text": "Daughter of [[@Aurande|Aurande]].",
+                    },
+                ],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    return _open_thing(page, "Maëlis of Drassone")
+
+
+def _section(page):
+    section = page.get_by_test_id("person-name")
+    expect(section).to_be_visible(timeout=TIMEOUT_MS)
+    return section
+
+
+def _fact(page, text):
+    return page.locator(".fact-host").filter(has_text=text).first
+
+
+def test_name_section_shows_parts_and_their_source(app, page):
+    world(app, page, "Person parts")
+    section = _section(page)
+    parts = section.get_by_test_id("person-name-part")
+    expect(parts).to_have_count(3)
+    expect(parts.nth(0)).to_contain_text("Maëlis")
+    expect(parts.nth(1)).to_contain_text("of")
+    expect(parts.nth(2)).to_contain_text("Drassone")
+    expect(parts.nth(2)).to_contain_text("from her father Eilhaud of Drassone")
+    expect(section.get_by_test_id("person-name-rule")).to_contain_text(
+        "Drassonais · noble-women"
+    )
+    expect(section.get_by_test_id("person-pet")).to_have_text("Maëlisette")
+    expect(section.get_by_test_id("person-pet-name")).to_contain_text("used by family")
+
+
+def test_editing_a_part_renames_the_page(app, page):
+    world(app, page, "Person edit")
+    section = _section(page)
+    section.get_by_test_id("person-name-part-edit").first.click()
+    field = section.get_by_test_id("person-name-part-input").locator("input")
+    field.fill("Ysolde")
+    field.press("Enter")
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        "Ysolde of Drassone", timeout=TIMEOUT_MS
+    )
+    expect(section.get_by_test_id("person-name-part").nth(0)).to_contain_text("typed")
+
+
+def test_calls_her_shows_only_what_differs(app, page):
+    world(app, page, "Person calls")
+    _section(page)
+    sister = _fact(page, "Sister of Tiboud")
+    expect(sister.get_by_test_id("calls-line-fold")).to_contain_text("calls her: Maë")
+    daughter = _fact(page, "Daughter of Aurande")
+    expect(daughter.get_by_test_id("calls-line-fold")).to_have_count(0)
+
+
+def test_a_built_as_change_keeps_the_name(app, page):
+    world(app, page, "Person built as")
+    section = _section(page)
+    section.get_by_test_id("person-built-as-rank").click()
+    page.get_by_role("option", name="common").or_(
+        page.locator(".v-list-item").filter(has_text="common")
+    ).first.click()
+    expect(section.get_by_test_id("person-built-as-rank")).to_have_text(
+        "common", timeout=TIMEOUT_MS
+    )
+    expect(page.get_by_test_id("thing-name")).to_have_text("Maëlis of Drassone")
+
+
+def test_title_from_a_meaning_opens_name_it_and_saves_a_title(app, page):
+    world(app, page, "Person title")
+    section = _section(page)
+    section.get_by_test_id("person-title-add").click()
+    section.get_by_test_id("person-title-meaning").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel).to_be_visible(timeout=TIMEOUT_MS)
+    panel.get_by_test_id("name-it-meaning").locator("input").fill("chief")
+    panel.get_by_test_id("name-it-find").click()
+    candidate = panel.get_by_test_id("name-it-candidate").first
+    expect(candidate).to_contain_text("Chef", timeout=TIMEOUT_MS)
+    candidate.locator(".name").click()
+    expect(
+        section.get_by_test_id("person-title").filter(has_text="Chef")
+    ).to_have_count(1, timeout=TIMEOUT_MS)
+    expect(page.get_by_test_id("thing-name")).to_have_text("Maëlis of Drassone")

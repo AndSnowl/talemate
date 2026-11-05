@@ -714,6 +714,9 @@ export const useWorldsStore = defineStore('worlds', {
         // the words a rename's pick adds to its language, once the rename
         // is written (a refused one adds none: final review 3)
         nameItRenameWords: null,
+        // the language's own word for an English title being added
+        // (languages 4b-2): `{english, word, language_id}`, offered
+        keptTitleOffer: null,
         // names pinned in the Name it… batch: kept through a reroll (owner,
         // Test3)
         nameItPinned: [],
@@ -1365,6 +1368,29 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
+        // a person's name (languages 4b-2): one part typed, what it's built
+        // as, titles, the kept-title offer and pet names; each answers with
+        // the page
+        personNamePart(thingId, index, text) {
+            this.request('person_name_part', { thing_id: thingId, index, text });
+        },
+        personBuiltAs(thingId, builtAs) {
+            this.request('person_built_as', { thing_id: thingId, built_as: builtAs });
+        },
+        personTitleAdd(thingId, title) {
+            this.request('person_title_add', { thing_id: thingId, ...title });
+        },
+        personTitleRemove(thingId, name) {
+            this.request('person_title_remove', { thing_id: thingId, name });
+        },
+        personKeptTitle(thingId, english) {
+            this.keptTitleOffer = null;
+            if (english.trim()) this.request('person_kept_title', { thing_id: thingId, english: english.trim() });
+        },
+        personPetName(thingId, mode, name = null, by = null) {
+            this.request('person_pet_name', { thing_id: thingId, mode, ...(name ? { name } : {}), ...(by ? { by } : {}) });
+        },
+
         // open the Name it… panel for `request` (`{words, languageId, kind,
         // target: {draftKey}|{smallKey}|{thingId}|{input}, markId?}`)
         openNameIt(request) {
@@ -1579,6 +1605,10 @@ export const useWorldsStore = defineStore('worlds', {
                 this.editDraft(pickName(this.draft.edited, request.words, name, options));
             } else if (target.smallKey && this.smallDrafts[target.smallKey]?.edited) {
                 this.editSmall(target.smallKey, pickName(this.smallDrafts[target.smallKey].edited, request.words, name, options));
+            }
+            if (target.titleOf) {
+                // a title from a meaning (languages 4b-2): held, not a rename
+                this.personTitleAdd(target.titleOf, { name, language_id: languageId, meaning: request.meaning || meaning || '' });
             }
             // an entry (its page, or linked words on a draft: then both)
             if (target.thingId) {
@@ -3024,6 +3054,19 @@ export const useWorldsStore = defineStore('worlds', {
                         this.refreshThing();
                     }
                     if (data.kind) this.listThings(data.kind);
+                    break;
+                case 'person_name_part':
+                case 'person_built_as':
+                case 'person_title_add':
+                case 'person_title_remove':
+                case 'person_pet_name':
+                    if (data.id === this.selectedThingId) {
+                        this.thing = data;
+                    }
+                    if (data.kind) this.listThings(data.kind);
+                    break;
+                case 'person_kept_title':
+                    this.keptTitleOffer = data;
                     break;
                 case 'get_name_lists':
                 case 'name_list_edit':

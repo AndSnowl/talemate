@@ -306,3 +306,22 @@ async def test_calls_drop_a_deleted_caller(plugin):
         rev.remove_thing(w.tiboud)
     await _act(plugin, "get_thing", id=w.maelis)
     assert _last(plugin, "get_thing")["data"]["calls"] == []
+
+
+async def test_page_carries_a_name_view(plugin):
+    w = await _world(plugin)
+    await _act(plugin, "get_thing", id=w.maelis)
+    view = _last(plugin, "get_thing")["data"]["name_view"]
+    assert view["language"] == {"id": w.lang, "name": "Drassonais"}
+    assert view["rule"] == "noble-women"
+    assert view["built_as"] == {"sex": "woman", "rank": "noble"}
+    assert view["choices"] == {"sex": ["man", "woman"], "rank": ["common", "noble"]}
+    assert [p["written"] for p in view["parts"]] == ["Maëlis", "of", "Drassone"]
+    assert view["sources"] == {w.eilhaud: {"name": "Eilhaud of Drassone", "sex": "man"}}
+    assert view["pet_used_by"] == ["family"]
+
+
+async def test_a_person_without_parts_has_no_name_view_but_its_language(plugin):
+    w = await _world(plugin)
+    await _act(plugin, "get_thing", id=w.tiboud)
+    assert _last(plugin, "get_thing")["data"]["name_view"] is None

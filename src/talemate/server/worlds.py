@@ -565,6 +565,7 @@ from talemate.worldplay.people import (
     calls_out,
     draft_context,
     kept_title_offer,
+    name_view,
     person_context,
     remove_title,
     set_built_as,
@@ -2516,6 +2517,7 @@ class WorldsPlugin(Plugin):
             # (languages 4b-2)
             "name_parts": state.fields.get("name_parts"),
             "calls": calls_out(view, state),
+            "name_view": name_view(view, state),
             "stub": _stub_out(state),
             "facts": facts,
             "inherited": inherited,
