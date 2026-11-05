@@ -37,6 +37,7 @@ __all__ = [
     "pick_rule",
     "role_matches",
     "roll_pet_name",
+    "stored_written",
     "written",
 ]
 
@@ -431,6 +432,26 @@ def _label_index(
             if part.kind != "word" and _label(language, part) == label:
                 return s, i
     return None
+
+
+def stored_written(view, stored: object) -> str | None:
+    """The name a person's stored `name_parts` write, by their language;
+    None when they can't be read (no such language)."""
+
+    from talemate.languages.entry import language_of
+
+    if not isinstance(stored, dict):
+        return None
+    state = view.thing(str(stored.get("language") or ""))
+    if state is None or state.kind != "language":
+        return None
+    texts = [str(p.get("text") or "") for p in stored.get("parts") or []]
+    return written(
+        language_of(state),
+        str(stored.get("rule") or ""),
+        int(stored.get("shape") or 0),
+        texts,
+    )
 
 
 def roll_pet_name(

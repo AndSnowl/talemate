@@ -559,7 +559,21 @@ from talemate.worldplay.merge import (
     preview_merge,
     repoint_overrides,
 )
+from talemate.languages.person_names import choose, pick_rule
+from talemate.worldplay.people import (
+    add_title,
+    calls_out,
+    draft_context,
+    kept_title_offer,
+    person_context,
+    remove_title,
+    set_built_as,
+    set_part,
+    set_pet_name,
+    stored_parts,
+)
 from talemate.worldplay.repoint import (
+    clear_stale_parts,
     copy_facts,
     learn_names,
     move_fact,
@@ -2401,6 +2415,8 @@ class WorldsPlugin(Plugin):
                 "overrides": list(fact.overrides),
                 "held_by": _held_out(view, fact, state),
                 "summary": summary is not None and fact.fact_id == summary.fact_id,
+                # the entries it links (a relationship's "calls her" line)
+                "refs": list(fact.refs),
             }
             for fact in state.facts
         ]
@@ -2490,6 +2506,10 @@ class WorldsPlugin(Plugin):
                 if field not in ("aka", "stub")
             },
             "aka": state.fields.get("aka") or [],
+            # a person's name in parts, and what others call them
+            # (languages 4b-2)
+            "name_parts": state.fields.get("name_parts"),
+            "calls": calls_out(view, state),
             "stub": _stub_out(state),
             "facts": facts,
             "inherited": inherited,
@@ -5762,6 +5782,12 @@ class WorldsPlugin(Plugin):
                     payload.value,
                     _date_in(payload.valid_from),
                 )
+                if payload.field == "name" and isinstance(payload.value, str):
+                    # a hand rename the parts don't write clears them
+                    # (languages 4b-2)
+                    clear_stale_parts(
+                        rev, world.view(), payload.thing_id, payload.value
+                    )
         self._edited(
             "set_field",
             payload.thing_id,
@@ -6303,9 +6329,122 @@ class WorldsPlugin(Plugin):
         name = str(data.get("name") or "").strip()
         if not name:
             raise ValueError("a name can't be blank")
+        parts = data.get("parts")
         with world.revision(Source.manual(note="renamed with Name it")) as rev:
             rename_everywhere(rev, world, thing_id, name)
+            if isinstance(parts, list) and parts:
+                # a person's name in parts (languages 4b-2)
+                rev.set_field(
+                    thing_id,
+                    "name_parts",
+                    stored_parts(
+                        str(data.get("language_id") or ""),
+                        str(data.get("rule_id") or ""),
+                        int(data.get("shape") or 0),
+                        dict(data.get("built_as") or {}),
+                        parts,
+                    ),
+                    None,
+                )
         self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
+
+    # --- people's names (languages 4b-2) -------------------------------------
+
+    def _person_edit(self, action: str, thing_id: str, edit) -> None:
+        world = self._require_world()
+        with world.revision(Source.manual(note="a person's name")) as rev:
+            edit(rev, world)
+        self._reply(action, self._thing_payload(world, thing_id, None))
+
+    async def handle_person_name_part(self, data: dict):
+        """One part of a person's name typed by the owner: the name is
+        written again from its parts and renamed everywhere."""
+
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_name_part",
+            thing_id,
+            lambda rev, world: set_part(
+                rev,
+                world,
+                thing_id,
+                int(data.get("index", -1)),
+                str(data.get("text") or ""),
+            ),
+        )
+
+    async def handle_person_built_as(self, data: dict):
+        """What a person's name is built as (sex, rank…), through their
+        language's choices; the name stays as it is."""
+
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_built_as",
+            thing_id,
+            lambda rev, world: set_built_as(
+                rev, world, thing_id, dict(data.get("built_as") or {})
+            ),
+        )
+
+    async def handle_person_title_add(self, data: dict):
+        """A title the person holds (`name`, optional `language_id`,
+        `meaning`, `by`, `shown`: "before" or "after" the name)."""
+
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_title_add",
+            thing_id,
+            lambda rev, world: add_title(
+                rev,
+                world,
+                thing_id,
+                str(data.get("name") or ""),
+                language_id=data.get("language_id") or None,
+                meaning=data.get("meaning") or None,
+                by=data.get("by") or None,
+                shown=data.get("shown") or None,
+            ),
+        )
+
+    async def handle_person_title_remove(self, data: dict):
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_title_remove",
+            thing_id,
+            lambda rev, world: remove_title(
+                rev, world, thing_id, str(data.get("name") or "")
+            ),
+        )
+
+    async def handle_person_kept_title(self, data: dict):
+        """The person's language's own word for an English title, offered,
+        never applied: `{english, word, language_id}`."""
+
+        view = self._require_world().view()
+        self._reply(
+            "person_kept_title",
+            kept_title_offer(
+                view, str(data.get("thing_id") or ""), str(data.get("english") or "")
+            ),
+        )
+
+    async def handle_person_pet_name(self, data: dict):
+        """A pet name: `mode` "roll" (from the language's rule) or "set"
+        (`name`, as what `by` calls them; no `by`: their pet name)."""
+
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_pet_name",
+            thing_id,
+            lambda rev, world: set_pet_name(
+                rev,
+                world,
+                thing_id,
+                str(data.get("mode") or ""),
+                data.get("name"),
+                data.get("by") or None,
+            ),
+        )
 
     @staticmethod
     def _pins(data: dict) -> dict[int, str]:
@@ -6330,15 +6469,30 @@ class WorldsPlugin(Plugin):
         state = self._language_entry(data.get("language_id"))
         rule_id = str(data.get("rule_id") or "")
         view = self._require_world().view()
+        language = language_of(state)
+        # a person's (languages 4b-2): their connections and who they're
+        # built as; with no rule asked, the rule for them
+        person = None
+        if data.get("thing_id"):
+            person = person_context(view, str(data["thing_id"]))
+        elif isinstance(data.get("draft"), dict):
+            person = draft_context(view, data["draft"])
+        if person is not None:
+            person = person.model_copy(
+                update={"built_as": choose(language, person.built_as)}
+            )
+            if not rule_id:
+                rule_id = pick_rule(language, person.built_as).id
         taken = frozenset(
             str(t.fields.get("name") or "").lower() for t in view.things(facts=False)
         )
         shape, parts = roll_parts(
-            language_of(state),
+            language,
             rule_id,
             pinned=self._pins(data),
             shape=self._shape(data),
             exclude=taken,
+            person=person,
         )
         self._reply(
             "name_it_parts",

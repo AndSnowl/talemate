@@ -1641,6 +1641,22 @@ def rename_everywhere(rev: Revision, world: World, thing_id: str, name: str) -> 
                 fact.fact_id,
                 text=fact.text.replace(shown, f"[[thing:{thing_id}|{name}]]"),
             )
+    clear_stale_parts(rev, view, thing_id, name)
+
+
+def clear_stale_parts(rev: Revision, view, thing_id: str, name: str) -> None:
+    """A person renamed to a name their parts don't write (languages 4b-2):
+    the parts go, and the page says it's not built from a rule. The text
+    wins."""
+
+    from talemate.languages.person_names import stored_written
+
+    state = view.thing(thing_id)
+    stored = state.fields.get("name_parts") if state is not None else None
+    if stored is None:
+        return
+    if stored_written(view, stored) != " ".join(name.split()):
+        rev.remove_field_value(thing_id, "name_parts", None)
 
 
 def drop_other_names(rev: Revision, world: World, thing_id: str, aka: object) -> None:
