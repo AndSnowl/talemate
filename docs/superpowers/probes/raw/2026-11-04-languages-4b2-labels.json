@@ -1,0 +1,20 @@
+{
+ "note": "Labels for the 4b-2 probe, written before any call. sex: the expected value, or 'any'. ranks: the plausible ranks.",
+ "person": [
+  {"world": "Test3", "prompt": "a daughter of Eilhaud of Drassone, raised at court", "sex": "woman", "ranks": ["noble"]},
+  {"world": "Test3", "prompt": "Eilhaud's heir, a quiet young man who prefers books to swords", "sex": "man", "ranks": ["noble"]},
+  {"world": "Test3", "prompt": "a fisherman's girl from the Drassone coast", "sex": "woman", "ranks": ["common"]},
+  {"world": "Test3", "prompt": "the old smith who shoes the duke's horses", "sex": "man", "ranks": ["common"]},
+  {"world": "Test3", "prompt": "a Tsevrani river-priestess who reads omens in the current", "sex": "woman", "ranks": ["clergy"]},
+  {"world": "Test3", "prompt": "the duke's heir", "sex": "any", "ranks": ["noble", "royal"]},
+  {"world": "Moscavia", "prompt": "Lady Nyekha Vostrik's youngest son, sent to the monastery as a boy", "sex": "man", "ranks": ["noble", "clergy"]},
+  {"world": "Moscavia", "prompt": "a serf woman on the Vostrik estates", "sex": "woman", "ranks": ["common", "serf"]},
+  {"world": "Moscavia", "prompt": "the Tsar's cousin, a cavalry commander", "sex": "man", "ranks": ["royal", "noble"]},
+  {"world": "Moscavia", "prompt": "a travelling tinker who mends pots for bread", "sex": "man", "ranks": ["common"]},
+  {"world": "Moscavia", "prompt": "the miller's widow", "sex": "woman", "ranks": ["common"]},
+  {"world": "Test2", "prompt": "an owl-folk hunter who watches the stars", "sex": "man", "ranks": ["common"]},
+  {"world": "Test2", "prompt": "Zakan's daughter, a healer of the eyrie", "sex": "woman", "ranks": ["common", "noble"]},
+  {"world": "Test2", "prompt": "the Patriarch of Otsyenya's scribe", "sex": "any", "ranks": ["clergy", "common"]},
+  {"world": "Test2", "prompt": "a young owl-folk weaver girl", "sex": "woman", "ranks": ["common"]}
+ ]
+}
