@@ -216,6 +216,59 @@ def _name_grammar_problems(language: Language) -> list[str]:
     return problems
 
 
+def _people_names_problems(language: Language) -> list[str]:
+    """What's off in people's names (languages 4b-2), as warnings: a
+    connection part with no role words, an own part taking nothing, a
+    choice the language doesn't list, an address row using a part no
+    people rule has."""
+
+    problems: list[str] = []
+    choices = language.people_names.choices if language.people_names else {}
+    labels: set[str] = set()
+
+    def unknown(where: str, wanted: dict[str, str]) -> None:
+        if not choices:
+            return
+        for key, value in wanted.items():
+            if key not in choices:
+                problems.append(
+                    f"{where} is for a choice the language doesn't list: {key!r}"
+                )
+            elif value not in choices[key]:
+                problems.append(
+                    f"{where} is for {key} {value!r}, which isn't one of {choices[key]}"
+                )
+
+    for generator in language.generators:
+        unknown(f"The name rule {generator.id!r}", generator.for_person)
+        for shape in generator.shapes:
+            for part in shape.parts:
+                if part.label:
+                    labels.add(part.label)
+                if part.kind == "connection" and not part.roles:
+                    problems.append(
+                        f"The name rule {generator.id!r} takes from a connection "
+                        "but names no roles"
+                    )
+                if part.kind == "own" and not part.take:
+                    problems.append(
+                        f"The name rule {generator.id!r} has an own part that "
+                        "doesn't say which part to take"
+                    )
+                for form in part.person_forms:
+                    unknown(f"A form in the name rule {generator.id!r}", form.when)
+    if language.people_names is not None:
+        known = labels | {"title", "pet name"}
+        for row in language.people_names.address:
+            for use in row.uses:
+                if use not in known:
+                    problems.append(
+                        f"The address row {row.kind!r} uses {use!r}, which no "
+                        "people rule has"
+                    )
+    return problems
+
+
 def check_language(
     language: Language, *, samples: int = 20, seed: int = 0
 ) -> CheckReport:
@@ -241,6 +294,7 @@ def check_language(
                 f"The name rule {generator.id!r} can't make names: {exc}"
             )
     report.blocking.extend(grammar_problems)
+    report.warnings.extend(_people_names_problems(language))
     if report.blocking:
         return report
     _check_fit(language, report)

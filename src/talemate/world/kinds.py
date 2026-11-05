@@ -546,6 +546,7 @@ RULES_KEYS: tuple[str, ...] = (
     "grammar",
     "writable",
     "name_grammar",
+    "people_names",
 )
 
 

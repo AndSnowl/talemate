@@ -121,6 +121,7 @@ def merge_change(base: Language, change: Language, current: Language) -> MergeRe
         ("flavour", "sounds like"),
         ("writable", "written"),
         ("name_grammar", "grammar for names"),
+        ("people_names", "people's names"),
     ):
         value, kept_edit = _pick(
             getattr(base, field), getattr(change, field), getattr(current, field)
