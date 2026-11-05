@@ -1,0 +1,230 @@
+{
+ "fill_drassonais": {
+  "seconds": 118,
+  "review": "The change\nThe made file is filled in. Show the file\nDrassonais\nfull language\nsounds french\n257 words · 27 phrases\nSoft, rounded and flowing, full of ou, au and ai sounds, with words that close on a quiet -c, -l or -n and a stress that lands at the end. It sounds like an old southern tongue spoken slowly over wine.\nWords: Olvélnhoie, Estée, Aunzau, Elhae, Amnie, Trénsoue, Ougnu, Irex, Cloigloi, Egloi, Quudrae, Ejee\nMen's names: Chailttarnou, Blaucac, Quarlac, Oibaud, Mogrert, Vrausstert, Oncrert, Dagrou, Gorraflaud, Attin, Feurpou, Iecert\nWomen's names: Ergine, Soulline, Julelle, Ceupline, Housstégaine, Vastelle, Chollaine, Ugrine, Jiplénpette, Ouflette, Tienreimflaine, Ouguine\nPlaces: Crousseil, Praubrenc, Doiproissonne, Crezac, Dramquonne, Quounfroireil, Pravonne, Raclareil, Rousenc, Cirbac, Coirlliessonne, Maunac\nNamed things: Lo Guércrette, Lo Trisaurs, Lo Florjux, Lo Clamgno, Lo Laurplaind, Lo Glaunfe, Lo Gloideur, Lo Hagnette, Lo Paustount, Lo Sossaul, Lo Caulplel, Lo Vraumprette\nOrders and guilds: Lou Jounauds, Lou Doisins, Lou Loungrils, Lou Bretins, Lou Blafins, Lou Sielzauds, Lou Deimzauds, Lou Voimnens, Lou Morouls, Lou Crouspars, Lou Dairclaurs, Lou Rarvrouls\nPeople of a place: Pasvristtais, Guilclacais, Tantrencais, Cumneilais, Maudreilais, Recleilais, Valoullais, Blamlieplais, Frouveusbrais, Bitauquais, Guoleilais, Drielreilais\nNames by home: Lobrou Di Dossic, Nainbac Di Pairé, Crinpraucraud Di Pelhe, Aurrin Di Solenc, Grepraud Di Salic, Soubrumprou Di Ouvel, Greifaud Di Jenoul, Crirrert Di Peirecauve, Seussaud Di Ouvel, Bounmaud Di Dauné, Pleurin Di Chaumet, Chonjascraud Di Boudaille\nPlaces named of something: Sertrassonne Di Homel, Pauseil Di Ounglic, Gléponne Di Plouge, Sarressonne Di Auvre, Vamttac Di Fumic, Traurrrenc Di Oculh, Folvonne Di Manc, Pébenc Di Ventric, Ploundronne Di Plumil, Melgnareil Di Mardel, Sorvaureil Di Sablou, Lousseil Di Peissoc\nOrders named for a sign: Lou Cauvettes, Lou Pezouls, Lou Flourdes, Lou Escourcs, Lou Mairés, Lou Lacous, Lou Ossels, Lou Ounglics, Lou Nevies, Lou Pairés, Lou Sablous, Lou Auvrefougres\nFamily names: di Dopeil, di Foudrac, Di Mountel, di Tousvanac, di Samtteil, Di Alarde, di Chelheil, Di Corve, Di Pelhe, Di Brumic, di Camlhenc, Di Jornel\nA man's full name: Glindrert Di Ounglic, Chimcrainplaud Di Herbouc, Prisvromstou Di Cournel, Maurplin di Ceirbrac, Perbatraud Di Lenguel, Greunnert Di Auvre, Craulblou di Chabrenc, Cramsert Di Homel, Sounlhanguaud Di Herbouc, Abin di Jenzireil, Ufin di Darrrac, Guordrou di Taimbreil\nA woman's full name: Zougnine Di Lunec, Pranbrepe Di Charnol, Cloulboittelle Di Herbouc, Viepette Di Poulsic, Fremnelle di Pauselenc, Honlhette Di Rasic, Prarastelle di Teulchenc, Saimttaine Di Mesté, Ausnine Di Pezoul, Rourflounte Di Pédou, Mévrette di Rourvonne, Ounflette Di Chinou\nPet names:\nThe name rules change: compare the sample names above.\nGrammar for names\nDescribing words\nafter the noun\nchinou tud\n\"of\"\nthe word “di”, before its noun\ndi chinou\nJoined words\nmain word first\n\"the\"\n“lou” in front for more than one; “l'” in front before a vowel; “lo” in front\nchinou → lo chinou\nMore than one\n-s\nchinou → chinous\n-el\nlittle, dear\nchinou → chinouel\n-aud\none who does\nchinou → chinouaud\n-auve\nplace of\nchinou → chinouauve\n-ais\nperson from\nchinou → chinouais\nWorth fixing:\n9 of 257 words don't follow the language's own word rules: -el, -aud, -auve, -ais, -s, peirecauve, Cuvronne Di Pieproi, Blanchic Aunfoimtte, Blasac Di Poubreu\n96% of the words follow the language's own word rules. Real words not checked: no list of real words for this flavour.\nCOPY NOTE\nto paste back to the assistant that made it\nACCEPT THE CHANGE\nDROP IT",
+  "card": "PEOPLE'S NAMESe.g. Revélnhaud di Tensienac\nCHANGE IT…\nsex\nman · woman\ndefault man\nrank\ncommon · noble\ndefault common\nkept titles\nmesté\n “sir”\ndauné\n “madam”\nKEPT TITLE\nHow people are addressed (used in scenes):\nfamily\npet name · mother, father, brother, sister, son, daughter, wife, husband\nRevélnhaud\nfriends\ngiven · friend\nRevélnhaud\ncourt\ngiven + title · lord, courtier, servant\nRevélnhaud [title]\nstrangers (anyone else)\ntitle\n[title]\nADDRESS",
+  "chips": [
+   "Men's names",
+   "a meaning · of",
+   "Places",
+   "a meaning · of",
+   "a meaning · plural · the",
+   "home",
+   "given",
+   "from father, then mother · family",
+   "given",
+   "from father, then mother · family",
+   "own given"
+  ],
+  "for_person": [
+   "for: man",
+   "for: woman"
+  ]
+ },
+ "daughter": {
+  "prompt": "a daughter of Eilhaud of Drassone, raised at court",
+  "seconds": 47,
+  "draft": {
+   "name": "Dilhie Di Mesté",
+   "person": {
+    "sex": "woman",
+    "rank": "noble",
+    "name_meaning": "of the high place",
+    "title": "Lady"
+   },
+   "name_parts": {
+    "language": "4c63d241f6bb4590a41add29921a1d34",
+    "rule": "person-woman",
+    "shape": 0,
+    "built_as": {
+     "sex": "woman",
+     "rank": "noble"
+    },
+    "parts": [
+     {
+      "label": "given",
+      "text": "Dilhie",
+      "source": "rolled"
+     },
+     {
+      "label": "family",
+      "text": "Di Mesté",
+      "source": "rolled"
+     }
+    ]
+   },
+   "aka": [
+    {
+     "name": "Ysolde",
+     "tag": "common",
+     "everyday": true
+    },
+    {
+     "name": "Lady",
+     "tag": "proper",
+     "everyday": false,
+     "kind": "title",
+     "shown": "before"
+    },
+    {
+     "name": "Dilhie",
+     "tag": "proper",
+     "everyday": false,
+     "kind": "pet",
+     "rule": "pet-names"
+    }
+   ],
+   "facts": [
+    "She stands at five feet and six inches, with a slender frame that she maintains through daily riding and fencing practice in the castle yards.",
+    "Her eyes are large and amber-gold, with vertically slit pupils inherited from her Tsevranyan grandmother, though her skin is the warm olive tone of her Drassonais father's line.",
+    "Her hair is a deep chestnut brown, thick and slightly wavy, worn loosely braided or pinned up in court, though she favors simplicity over the elaborate arrangements fashionable among Drassonais ladies of her age.",
+    "Born in the autumn of 978, Ysolde is the only daughter and sole surviving child of Prince Eilhaud of Drassone and his first wife, the late Lady Thessaly of Vennemont.",
+    "She was raised at the Drassonais court from infancy, educated alongside noble children of the realm in languages, history, music, and deportment, with additional private instruction in Tsevrani by the same tutor her father once studied under.",
+    "Her mother, Lady Thessaly, died of a fever when Ysolde was seven years old, leaving her in the care of her father and the court household, a loss she has spoken of rarely but which shaped her into a quiet, self-reliant young woman.",
+    "She possesses her father's measured temperament but carries it with a warmth that puts even strangers at ease, a quality that has made her popular among the household staff and visiting dignitaries alike.",
+    "She has a sharp mind for politics, though she disguises her interest as idle curiosity rather than ambition, having learned early that overt intelligence in a woman at court invites unwanted attention.",
+    "She speaks Drassonais fluently with a refined accent and reads Tsevrani competently, though she speaks it with a halting, self-conscious cadence that betrays her as more comfortable in the written word than the spoken.",
+    "She is an accomplished rider and a passable fencer, trained in the Drassonais style by the castle master-at-arms, who privately admits she has more discipline than half the squires he teaches.",
+    "She is deeply devoted to her father, Eilhaud, and serves as a quiet confidante to him in matters of court life, offering observations about the mood of the nobility that his advisors sometimes miss.",
+    "She has no known suitors as of the year 1000, though rumors of matches with minor Drassonais lords and a Tsevranyan envoy's son have circulated in court gossip without confirmation."
+   ],
+   "marks": [
+    [
+     "Ysolde",
+     "doesn't sound like Drassonais"
+    ],
+    [
+     "Thessaly",
+     "Thessaly is a historical region of Greece (ancient Thessalia)."
+    ],
+    [
+     "Dilhie Di Mesté",
+     "built from Drassonais's rules"
+    ]
+   ],
+   "filings": [
+    [
+     "Drassone",
+     "heir to the throne",
+     false,
+     false
+    ],
+    [
+     "Eilhaud of Drassone",
+     "daughter",
+     false,
+     false
+    ],
+    [
+     "Caclin Di Mesté",
+     "daughter of",
+     false,
+     true
+    ]
+   ]
+  },
+  "page_name": "Dilhie Di Mesté",
+  "name_section": "NAME\nDrassonais · A woman's full name\nNAME IT…\ngiven\nDilhie\nrolled\nfamily\nDi Mesté\nrolled\nbuilt as:\nwoman\nnoble\npet name:\nDilhie\n· used by family · from the language’s rule\ntitles:\nLady\n· before\nTITLE"
+ },
+ "daughter_name_it": {
+  "parts": [
+   "given\nrolled · pin one, or type your own\nDilhie",
+   "family\nrolled · pin one, or type your own\nDi Mesté"
+  ],
+  "built": [
+   "Dilhie Di Mesté",
+   "Bléguaine Di Mesté",
+   "Isttelle Di Mesté",
+   "Hoblole Di Mesté",
+   "Pincine Di Mesté"
+  ]
+ },
+ "daughter_title": {
+  "seconds": 14,
+  "candidates": [
+   "Aunlenaue Di Rivache\naunlenaue “keeper” (new word, saved if you pick it) + di “of” + rivache “river”"
+  ],
+  "titles": [
+   "Lady\n· before",
+   "Aunlenaue Di Rivache"
+  ]
+ },
+ "fill_varovni": {
+  "seconds": 189,
+  "review": "The change\nThe made file is filled in. Show the file\nVarovni\nfull language\nsounds russian\n304 words · 36 phrases\nDark, heavy words with soft y-sounds slipped after consonants and thick clusters like zh, kh, sk and st. It sounds like talk around a stove in deep winter: slow, firm, with a soft edge.\nWords: Oshelnust, Etsu, Yuzhryozd, Orozvyo, Azhrezd, Ive, Kva, Yav, Yore, Epre, Ogror, Eru\nPlaces: Tsarovsk, Uzhna Rogna Rekhta, Ptyonovsk, Plyeskanya, Rovnovnya, Nochrovina, Vuskovsk, Zyuzdovsk, Tsvivlovsk, Givovnya, Sirkovsk, Nekra Gosvarnya Rekhta\nThings: Rekveka, Shyakhrovna, Khizdovna, Madiets, Spyoduets, Dlilveka, Machovna, Batsvovna, Magrovna, Skrarovna, Spokhriets, Lorovna\nGroups: Shisovy Brezhi, Vyupovsk Ulkhari, Bemyutsy, Gitvovy Brezhi, Nemkovsk Ulkhari, Kraskovy Brezhi, Gnazovy Brezhi, Ptenzyatsy, Kvabatsy, Lamitsy, Vlebrovy Brezhi, Zdyurtsovy Brezhi\nDemonym: Krerets, Vserzets, Lakhtovets, Sobrets, Zheleskets, Ptelkets, Kostvets, Barvits, Plesvets, Tsvibrovets, Gnyetsvits, Kobryots\nPeople (male): Spyurdan Dvakhvovsk, Nazhvok Kvernovsk Ul Vosht, Snavkin Grivrovsk, Zhmyoshkok Rarovsk, Glyonon Shyozovsk, Chavil Sasrovsk, Zhuren Givovsk, Vorzik Zozhvovsk, Vyayol Vlukovsk Ul Molya, Grevnik Dloshkovsk, Kalnol Povnovsk, Nikol Vlazdovsk\nPeople (female): Lyazhena Kvaskovska, Spaltena Khvyultovska Ul Rukva, Tyepa Svyernovska, Syatsena Zhetsovska Ul Rogna, Khordena Kurovska Ul Kolva, Skradrena Kirovska, Brilma Dlastovska Ul Breskovina, Ryatrena Dryatvovska, Skralena Glazhdovska, Pezra Vemrovska Ul Nozra, Vryarzhena Dalnovska, Myopena Zhmoshkovska\nCountry: Vorzhvovnya, Plikvovnya, Untsonya, Kyuzhryonya, Bretvovnya, Kvastrovnya, Amonya, Melnovnya, Rubrovnya, Lanzovnya, Ishenya, Spogvovnya\nTowns, squares and lakes: Roshtovsk, Snezhovsk, Zdobrovsk, Slyekhvovsk, Kashkovsk, Zhochovsk, Zdoskovsk, Chulovsk, Zhidnovsk, Gnezdovsk, Zvogvovsk, Blatovsk\nMen's given names: Khvanok, Sluntson, Zhazral, Zdyatik, Khvenryon, Svestvon, Kreskok, Kvastal, Ledil, Badvik, Bloshkel, Brezhron\nWomen's given names: Vatsa, Lavkena, Keva, Smama, Khatsva, Tanchva, Zvinra, Sosena, Zholka, Zebla, Skryelva, Vsyechena\nFamily names (men): Kemovsk, Ganrovsk, Vsetrovsk, Ravrovsk, Pyerzhovsk, Laprovsk, Gyekhvovsk, Tsoshtovsk, Struyovsk, Skrochvovsk, Zhmyustvovsk, Tasvovsk\nFamily names (women): Khepovska, Gasovska, Vreblovska, Deskovska, Sherovska, Chilkovska, Skakhrovska, Takovska, Tsveshovska, Kazhrovska, Kvyasovska, Vyekrovska\nPeoples: Tsolmotsy, Zholnutsy, Kvekhotsy, Zagnetsy, Bonkyutsy, Zvekhtetsy, Nirotsy, Syurvletsy, Daskatsy, Padotsy, Kezhnatsy, Rakhvyetsy\nOne from a place: Gnazhets, Vivovets, Zmoznats, Sormets, Zhmetovets, Khichvats, Kvyadvots, Garnovets, Tvyurzovets, Khinovets, Sleznovets, Kryobrovets\nOrders (brezh names): Skyenrovy, Ryeslovy, Gavovy, Kimrovy, Skaprovy, Vozhvovy, Snuzhovy, Vyenkovy, Zetsovy, Sonkovy, Gnotovy, Grekovy\nPeople (tsar): Zvekhrek Ptarovsk Ul Verka, Zhmozvuk Smyesrovsk Ul Rogna, Strodnun Lyetsvovsk Ul Glezn, Kisrek Degvovsk Ul Torvel, Zoshtan Myelmovsk Ul Solkh, Gdizek Dvastovsk Ul Medra, Zhakik Sogvovsk Ul Vsyarslevar, Stazhok Glyomovsk Ul Tyomborva, Sozek Ryenzovsk Ul Listr, Vremak Gdivovsk Ul Rogna, Tsavren Styokhvovsk Ul Nogva, Moskol Zmerzhovsk Ul Tyomra\nOwl-names: Ul Tyomra, Ul Lyesk, Ul Zmeyar, Ul Palvesk, Ul Kostva, Ul Ilvulkhar, Ul Pepsk, Ul Pechra, Ul Smorna, Ul Ulkha, Ul Batsk, Ul Listr\nPet names: Dovrin\nThe name rules change: compare the sample names above.\nWorth fixing:\n13 of 304 words don't follow the language's own word rules: -ek, Breskovina, -ets, -nya, -in, -ush, Court of Kinchvovy Brezhi, Osvarsk Batsk, Pravsk Dyevra, tyomborva, rubskar, Zakan Zopsovsk Ul Yechra …\n1 words or sample names are real: Doma Tuskovska Ul Brezh\n96% of the words follow the language's own word rules.\nCOPY NOTE\nto paste back to the assistant that made it\nACCEPT THE CHANGE\nDROP IT",
+  "card": "PEOPLE'S NAMESe.g. Gankok Syazovsk Ul Rukva\nCHANGE IT…\nsex\nman · woman\ndefault man\nrank\ncommon · tsar\ndefault common\nkept titles\nnone: every title is written in English\nKEPT TITLE\nHow people are addressed (used in scenes):\nfamily\npet name · mother, father, brother, sister, son, daughter, child, husband, wife, grandmother, grandfather\ndear Gankok\nfriends\ngiven · friend\nGankok\nsubjects and flock\ntitle · subject, courtier, servant, parishioner\n[title]\nstrangers, elders, officials (anyone else)\ngiven + family · stranger, elder, official\nGankok Syazovsk\nADDRESS",
+  "chips": [
+   "Towns, squares and lakes",
+   "Peoples",
+   "One from a place",
+   "given",
+   "from father, then mother · family · forms by sex",
+   "given",
+   "from father, then mother · family · forms by sex",
+   "from father · given",
+   "from father, then mother · family · forms by sex",
+   "owl-name",
+   "Ul → “Owl-of”",
+   "owl-name",
+   "Dovrin → “dear”",
+   "own given"
+  ],
+  "for_person": [
+   "for: man",
+   "for: woman",
+   "for: man · tsar"
+  ]
+ },
+ "owl_son": {
+  "prompt": "an owl-folk hunter who watches the stars, a son of Zakan",
+  "seconds": 35,
+  "draft": {
+   "name": "Rostov Zakharyev Ul Yechra",
+   "person": {
+    "sex": "man",
+    "rank": "noble",
+    "name_meaning": "from the east, son of Zakhary, of the Yechra clan",
+    "title": "Huntsman"
+   },
+   "name_parts": null,
+   "aka": [
+    {
+     "name": "Rostov of Otsyenya",
+     "tag": "common",
+     "everyday": true
+    }
+   ],
+   "facts": [
+    "Rostov stands slightly shorter than his father, with a lean, wiry build honed by decades of stalking prey through boreal forests and across frozen lake ice.",
+    "His plumage is a deep, rich white with sharp black barring across his wings and back — pristine and undiminished, unlike his father's aging coat.",
+    "His eyes are the characteristic pale yellow of Snowy Owl-folk, but brighter and sharper than Zakan's weathered gaze, with clean dark markings that frame them like a mask of ink on snow.",
+    "A faint scar traces the left side of his beak where it meets his face, a memento from a childhood tumble through a frozen creek bed that he tells differently depending on who's asking.",
+    "Born in 966 to Tsar Zakan III and a minor noblewoman of the Yechra clan named Yelena Ul Vostrikova, Rostov was the third of four sons, making him neither heir nor spare but something less certain.",
+    "He was raised in the hunting lodges of the northern provinces during his father's governorship, where he learned to track, trap, and read the behavior of every creature from lynx to lake trout before he could fly long distances.",
+    "Rostov possesses an unnatural patience while watching — he can remain motionless for hours on a tree branch or rocky outcrop, tracking the movement of stars as readily as the movement of prey below.",
+    "He is considered one of the finest long-range marksmen in Otsyenya, capable of bringing down a moose at three hundred paces with a bone-tipped arrow.",
+    "Unlike his methodical father, Rostov is quiet but restless, prone to long solitary walks along the shore of Vryushovsk that can last from dusk until dawn.",
+    "He speaks Varovni with a slower, softer cadence than Zakan, often trailing off into silence mid-sentence as though the words themselves have wandered off to watch the stars.",
+    "Zakan views his son with a mixture of quiet pride and gentle exasperation — he admires Rostov's skills but finds his tendency toward solitude difficult to reconcile with the duties of court life.",
+    "Rostov's three older brothers all died young — two of illness and one of a hunting accident in the taiga — leaving him, the youngest and least expected, as the sole surviving son of the Tsar."
+   ],
+   "marks": [],
+   "filings": [
+    [
+     "Tsardom of Otsyenya",
+     "surviving prince",
+     false,
+     false
+    ],
+    [
+     "Zakan Zhuskovsk Ul Yechra",
+     "son",
+     false,
+     false
+    ]
+   ]
+  },
+  "page_name": "Rostov Zakharyev Ul Yechra",
+  "name_section": null
+ }
+}
