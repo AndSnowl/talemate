@@ -63,7 +63,7 @@
                 <div v-if="draft && nameFlag" class="w-100 d-flex align-center flex-wrap ga-2 text-body-2 name-flag-row" data-testid="draft-name-flag">
                     <span class="name-flagged">{{ nameFlag.name }}</span>
                     <span class="text-muted">flagged: {{ nameFlag.why }}</span>
-                    <v-btn size="x-small" variant="outlined" color="accent" prepend-icon="mdi-rename" data-testid="draft-name-flag-name-it" @click="nameItOwnName">Name it…</v-btn>
+                    <v-btn size="x-small" variant="outlined" color="accent" prepend-icon="mdi-rename" data-testid="draft-name-flag-name-it" @click="nameItOwnName()">Name it…</v-btn>
                     <v-btn size="x-small" variant="text" data-testid="draft-name-flag-keep" @click="worlds.markAction(nameFlag.id, 'keep')">Keep it</v-btn>
                 </div>
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
