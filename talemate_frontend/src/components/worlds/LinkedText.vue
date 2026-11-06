@@ -98,7 +98,6 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { canExpand } from './worldKinds.js';
 import FlagCard from './FlagCard.vue';
 import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
@@ -109,8 +108,8 @@ import StubRepointButton from './StubRepointButton.vue';
 // stub}` runs; a preview's are made by `previewSegments`). A run linking an
 // entry is a solid link that opens its page; one linking a stub is dashed,
 // in the stub colour, with the stub's card on hover (not made yet, its
-// kind, its mentions, Expand and Ignore), and clicking it expands it (a
-// race or mix stub, which can't be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
+// kind, its mentions, Expand and Ignore), and clicking it opens its page
+// (owner, 2026-11-05: Name it and Fill are both there). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
 // only made on accept. A `self` run is the page's own name (ruling H7):
 // in the link colour, titled "this page", not clickable, since it links
 // nothing. A `flag`ged run is a name cleaning doubts (languages 4a): a
@@ -183,13 +182,10 @@ export default {
         targetName(segment) {
             return this.worlds.referenceTargets.find((target) => target.id === segment.ref)?.name || segment.text;
         },
+        // a stub opens its page, as an entry does (owner, 2026-11-05: Name
+        // it and Fill are both there)
         follow(segment) {
-            const stub = this.stubOf(segment);
-            if (stub.kind && canExpand(stub.kind)) {
-                this.worlds.expandStub(stub);
-            } else {
-                this.worlds.openThing(segment.ref);
-            }
+            this.worlds.openThing(segment.ref);
         },
         setCard(index, open) {
             if (open) {

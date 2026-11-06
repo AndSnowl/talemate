@@ -306,3 +306,61 @@ def test_draft_shows_the_built_name_marked(app, page, fixed_preview, fixed_clean
     expect(draft.locator(".fact-host").filter(has_text="grew up at")).to_contain_text(
         name
     )
+
+
+def test_a_drafted_person_has_the_name_section_and_keeps_its_titles(
+    app, page, fixed_preview, fixed_clean
+):
+    """Owner, 2026-11-05: titles (and the rest of the Name section) on a
+    draft as on the page."""
+
+    from e2e.worlds.test_drafts import _draft
+
+    world(app, page, "Person draft titles")
+    fixed_preview(
+        {
+            "name": "Elise",
+            "person": {
+                "sex": "woman",
+                "rank": "noble",
+                "name_meaning": "",
+                "title": "Lady",
+            },
+            "facts": [
+                {
+                    "category": "background",
+                    "text": "Elise grew up at the Drassonais court.",
+                }
+            ],
+            "prose": {},
+        }
+    )
+    fixed_clean(
+        {
+            "language-roles": {
+                "languages": [{"language": "Drassonais", "role": "official"}]
+            },
+            "name-flags": {"names": []},
+        }
+    )
+    draft = _draft(page, "character", "a Drassonais noblewoman of the court")
+    section = draft.get_by_test_id("person-name")
+    expect(section.get_by_test_id("person-name-part")).to_have_count(
+        3, timeout=TIMEOUT_MS
+    )
+    expect(
+        section.get_by_test_id("person-title").filter(has_text="Lady")
+    ).to_have_count(1)
+    section.get_by_test_id("person-title-add").click()
+    field = section.get_by_test_id("person-title-input").locator("input")
+    field.fill("Warden")
+    field.press("Enter")
+    expect(
+        section.get_by_test_id("person-title").filter(has_text="Warden")
+    ).to_have_count(1, timeout=TIMEOUT_MS)
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    expect(page.get_by_test_id("draft-page")).to_have_count(0, timeout=TIMEOUT_MS)
+    accepted = _section(page)
+    expect(
+        accepted.get_by_test_id("person-title").filter(has_text="Warden")
+    ).to_have_count(1, timeout=TIMEOUT_MS)

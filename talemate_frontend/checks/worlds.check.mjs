@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
 import { composeName, forPersonLine, partLabel, resultLine, ruleChipLabel } from '../src/components/worlds/nameParts.js';
-import { callsFor, draftParentRows, partSourceLine, plainAka, pronounOf, titleShownChange, writtenName } from '../src/components/worlds/personName.js';
+import { callsFor, draftNameEdit, draftParentRows, partSourceLine, plainAka, pronounOf, titleShownChange, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
     akaChanged,
@@ -4439,6 +4439,26 @@ check('showing a title keeps its language (final review I13)', () => {
     const change = titleShownChange({ name: 'Chef', tag: 'proper', everyday: false, kind: 'title', language: 'L', meaning: 'chief' });
     assert.deepEqual(change, { name: 'Chef', shown: 'before', language_id: 'L', meaning: 'chief' });
     assert.equal(titleShownChange({ name: 'Lady', kind: 'title', shown: 'after' }).shown, null);
+});
+
+check('a drafted person name section edits the draft (owner, 2026-11-05)', () => {
+    const edited = {
+        name: 'Maëlis of Drassone',
+        aka: [{ name: 'Lady', tag: 'proper', everyday: false, kind: 'title', shown: 'before' }],
+        facts: [{ category: 'background', text: 'Maëlis of Drassone grew up at court.' }],
+        fields: { name_parts: { language: 'L', rule: 'noble-women', shape: 0, built_as: { sex: 'woman' }, parts: [
+            { label: 'given', text: 'Maëlis', source: 'rolled' }, { label: 'of', text: 'di', source: 'word' }, { label: 'house', text: 'Drassone', source: 'inherited', from_id: 'e' }] } },
+    };
+    const english = { 1: 'of' };
+    const part = draftNameEdit(edited, { part: [0, 'Ysolde'] }, english);
+    assert.equal(part.name, 'Ysolde of Drassone');
+    assert.equal(part.facts[0].text, 'Ysolde of Drassone grew up at court.');
+    assert.deepEqual(part.fields.name_parts.parts[0], { label: 'given', text: 'Ysolde', source: 'typed' });
+    const title = draftNameEdit(edited, { title: { name: 'Warden', shown: 'after', language_id: 'L', meaning: 'keeper' } }, english);
+    assert.deepEqual(title.aka.map((a) => [a.name, a.shown ?? null, a.language ?? null]), [['Lady', null, null], ['Warden', 'after', 'L']]);
+    assert.deepEqual(draftNameEdit(edited, { removeTitle: 'Lady' }, english).aka, []);
+    assert.deepEqual(draftNameEdit(edited, { builtAs: { sex: 'woman', rank: 'noble' } }, english).fields.name_parts.built_as, { sex: 'woman', rank: 'noble' });
+    assert.deepEqual(draftNameEdit(edited, { pet: 'Lili' }, english).aka.find((a) => a.kind === 'pet'), { name: 'Lili', tag: 'proper', everyday: false, kind: 'pet' });
 });
 
 if (failures.length) {

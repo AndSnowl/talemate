@@ -186,6 +186,7 @@ import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import { markEdit, pickName, swapName } from '../components/worlds/nameMarks.js';
+import { draftNameEdit } from '../components/worlds/personName.js';
 import { composeName } from '../components/worlds/nameParts.js';
 import {
     factsKey,
@@ -1667,6 +1668,10 @@ export const useWorldsStore = defineStore('worlds', {
             if (target.titleOf) {
                 // a title from a meaning (languages 4b-2): held, not a rename
                 this.personTitleAdd(target.titleOf, { name, language_id: languageId, meaning: request.meaning || meaning || '' });
+            } else if (target.titleOfDraft && this.draft?.key === target.titleOfDraft) {
+                // on a draft, the draft holds it (owner, 2026-11-05)
+                const changes = draftNameEdit(this.draft.edited, { title: { name, language_id: languageId, meaning: request.meaning || meaning || '' } });
+                if (changes) this.editDraft(changes);
             }
             // an entry (its page, or linked words on a draft: then both)
             if (target.thingId) {

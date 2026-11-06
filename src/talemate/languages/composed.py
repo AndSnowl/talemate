@@ -157,15 +157,16 @@ def _roll_part(
             {"word": part.word.lower(), "meaning": meaning, "new": False, "steps": []}
         ]
         return [Built(text=part.word, parts=said if meaning else [])]
-    if part.kind == "rule":
-        names = _roll_rule(language, part.rule, count, rng, exclude, depth)
-        return [Built(text=name) for name in names]
-    if part.kind == "connection":
-        # with no connection to take from: its fallback rule's rolls
-        names = _roll_rule(
-            language, _fallback(language, part), count, rng, exclude, depth
-        )
-        return [Built(text=name) for name in names]
+    if part.kind in ("rule", "connection"):
+        from talemate.languages.person_names import with_ending
+
+        # a connection with nothing to take from: its fallback rule's rolls
+        rule = part.rule if part.kind == "rule" else _fallback(language, part)
+        names = _roll_rule(language, rule, count, rng, exclude, depth)
+        return [
+            Built(text=with_ending(language, part, n) if n != MISSING_RULE else n)
+            for n in names
+        ]
     if part.kind == "own":
         return []
     built: dict[str, Built] = {}
@@ -207,20 +208,31 @@ def _person_roll(
     part (pinned, marked inherited), or the person's own part; None when
     there's nothing to take."""
 
-    from talemate.languages.person_names import inherited_text, parent_for, person_text
+    from talemate.languages.person_names import (
+        inherited_text,
+        parent_for,
+        person_text,
+        with_ending,
+    )
 
     if part.kind == "own":
         text = person.own.get(part.take, "")
         if not text:
             return None
-        text = person_text(language, part, text, person.built_as)
+        text = with_ending(
+            language, part, person_text(language, part, text, person.built_as)
+        )
         return PartRoll(
             index=index, kind=part.kind, label=label, rolls=[Built(text=text)]
         )
     parent = parent_for(part, person)
     if parent is None:
         return None
-    text = person_text(language, part, inherited_text(part, parent), person.built_as)
+    text = with_ending(
+        language,
+        part,
+        person_text(language, part, inherited_text(part, parent), person.built_as),
+    )
     if not text or (pinned_text and pinned_text != text):
         return None
     return PartRoll(

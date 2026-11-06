@@ -66,7 +66,7 @@
                         :key="value"
                         :title="value"
                         :active="value === view.built_as[key]"
-                        @click="worlds.personBuiltAs(thing.id, { ...view.built_as, [key]: value })"
+                        @click="act('builtAs', { ...view.built_as, [key]: value })"
                     ></v-list-item>
                 </v-list>
             </v-menu>
@@ -97,7 +97,7 @@
             </template>
             <span v-else class="text-caption text-muted">none</span>
             <v-btn
-                v-if="!editingPet"
+                v-if="!editingPet && !draft"
                 icon="mdi-dice-5-outline"
                 variant="text"
                 size="x-small"
@@ -134,7 +134,7 @@
                     :title="titleHint(title)"
                     data-testid="person-title"
                     @click="toggleShown(title)"
-                    @click:close="worlds.personTitleRemove(thing.id, title.name)"
+                    @click:close="act('removeTitle', title.name)"
                 >{{ title.name }}<span v-if="title.shown" class="ml-1 text-caption">· {{ title.shown }}</span></v-chip>
                 <v-btn v-if="!addingTitle" variant="text" size="x-small" color="accent" prepend-icon="mdi-plus" data-testid="person-title-add" @click="startTitle">Title</v-btn>
             </div>
@@ -171,7 +171,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { partSourceLine, pronounOf, titleShownChange } from './personName.js';
+import { draftNameEdit, partSourceLine, pronounOf, titleShownChange } from './personName.js';
 
 // A person's Name section (languages 4b-2, mockup B): their name in
 // labelled parts, each editable (the name follows), inherited parts saying
@@ -181,8 +181,11 @@ export default {
     name: 'PersonName',
     props: {
         thing: { type: Object, required: true },
+        // a draft (owner, 2026-11-05): the same section, editing the draft
+        draft: { type: Boolean, default: false },
+        edited: { type: Object, default: null },
     },
-    emits: ['name-it'],
+    emits: ['name-it', 'edit'],
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -193,8 +196,19 @@ export default {
         view() {
             return this.thing.name_view;
         },
+        // a draft's parts are the draft's own (edited), written as the
+        // page writes them
         parts() {
-            return this.view?.parts || [];
+            const shown = this.view?.parts || [];
+            const own = this.draft ? this.edited?.fields?.name_parts?.parts : null;
+            if (!own) return shown;
+            return own.map((p, i) => ({ ...shown[i], ...p, written: shown[i]?.source === 'word' ? shown[i].written : p.text }));
+        },
+        english() {
+            return Object.fromEntries((this.view?.parts || []).map((p, i) => [i, p.source === 'word' && p.written !== p.text ? p.written : '']).filter(([, w]) => w));
+        },
+        ownAka() {
+            return (this.draft ? this.edited?.aka : this.thing.aka) || [];
         },
         // its name was in parts once: what it's built as is kept (I7)
         hasStored() {
@@ -207,10 +221,10 @@ export default {
             return pronounOf(this.view?.built_as);
         },
         titles() {
-            return (this.thing.aka || []).filter((a) => a.kind === 'title');
+            return this.ownAka.filter((a) => a.kind === 'title');
         },
         pet() {
-            return (this.thing.aka || []).find((a) => a.kind === 'pet' && !a.by) || null;
+            return this.ownAka.find((a) => a.kind === 'pet' && !a.by) || null;
         },
         kept() {
             const offer = this.worlds.keptTitleOffer;
@@ -227,7 +241,7 @@ export default {
         },
         saveEdit(index) {
             const text = this.typed.trim();
-            if (text && text !== this.parts[index].text) this.worlds.personNamePart(this.thing.id, index, text);
+            if (text && text !== this.parts[index].text) this.act('part', [index, text]);
             this.editing = null;
         },
         startPet() {
@@ -235,7 +249,7 @@ export default {
             this.editingPet = true;
         },
         savePet() {
-            if (this.petTyped.trim()) this.worlds.personPetName(this.thing.id, 'set', this.petTyped.trim());
+            if (this.petTyped.trim()) this.act('pet', this.petTyped.trim());
             this.editingPet = false;
         },
         startTitle() {
@@ -248,11 +262,11 @@ export default {
         },
         saveTitle(name, languageId = null) {
             if (!name.trim()) return;
-            this.worlds.personTitleAdd(this.thing.id, { name: name.trim(), ...(languageId ? { language_id: languageId } : {}) });
+            this.act('title', { name: name.trim(), ...(languageId ? { language_id: languageId } : {}) });
             this.addingTitle = false;
         },
         toggleShown(title) {
-            this.worlds.personTitleAdd(this.thing.id, titleShownChange(title));
+            this.act('title', titleShownChange(title));
         },
         titleHint(title) {
             const parts = [];
@@ -260,13 +274,27 @@ export default {
             parts.push(title.shown ? `shown ${title.shown} the name; click to change` : 'click to show it with the name');
             return parts.join(' · ');
         },
+        // a change: the page's request, or the draft's own edit
+        act(kind, value) {
+            if (this.draft) {
+                const changes = draftNameEdit(this.edited, { [kind]: value }, this.english);
+                if (changes) this.$emit('edit', changes);
+                return;
+            }
+            const id = this.thing.id;
+            if (kind === 'part') this.worlds.personNamePart(id, value[0], value[1]);
+            else if (kind === 'builtAs') this.worlds.personBuiltAs(id, value);
+            else if (kind === 'removeTitle') this.worlds.personTitleRemove(id, value);
+            else if (kind === 'pet') this.worlds.personPetName(id, 'set', value);
+            else if (kind === 'title') this.worlds.personTitleAdd(id, value);
+        },
         titleFromMeaning() {
             this.addingTitle = false;
             this.worlds.openNameIt({
                 words: '',
                 languageId: this.view.language.id,
                 kind: 'character',
-                target: { titleOf: this.thing.id },
+                target: this.draft ? { titleOfDraft: this.worlds.draft?.key } : { titleOf: this.thing.id },
                 title: true,
             });
         },

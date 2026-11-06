@@ -569,6 +569,7 @@ from talemate.worldplay.people import (
     add_title,
     calls_out,
     draft_context,
+    draft_name_view,
     kept_title_offer,
     name_view,
     person_context,
@@ -3709,6 +3710,9 @@ class WorldsPlugin(Plugin):
                 {"index": index, "text": row.text, "segments": elsewhere_linked(row)}
                 for index, row in enumerate(preview.elsewhere)
             ],
+            # a drafted person's Name section, as on the page (4b-2)
+            "name_view": draft_name_view(view, preview),
+            "calls": [],
         }
         # its own current names read as "this page" (ruling H7), as an
         # accepted entry's do; its "For other pages" rows are others'

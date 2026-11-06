@@ -318,6 +318,21 @@ def person_text(
     return text
 
 
+def with_ending(language: Language, part: NamePart, text: str) -> str:
+    """`text` with the part's ending ("small, dear"), when the language's
+    grammar for names has it (owner, 2026-11-05: Zhelvan's pet names)."""
+
+    from talemate.languages.name_grammar import apply_ending, vowels_of
+
+    grammar = language.name_grammar
+    if not text or not part.ending or grammar is None:
+        return text
+    try:
+        return apply_ending(grammar, vowels_of(language), text, part.ending)
+    except (KeyError, ValueError):
+        return text
+
+
 def inherited_text(part: NamePart, parent: Connection) -> str:
     """What a connection part takes from `parent`: its part by label; for
     a parent with no parts, the first word for a given name, else the last

@@ -1,3 +1,5 @@
+import { pickName } from './nameMarks.js';
+
 // A person's name in parts (languages 4b-2), as their page shows it: the
 // name written from its parts, where each part came from, and the names
 // others call them (frame B: on the relationship they belong to).
@@ -74,4 +76,37 @@ export function titleShownChange(title) {
         ...(title.language ? { language_id: title.language } : {}),
         ...(title.meaning ? { meaning: title.meaning } : {}),
     };
+}
+
+// A drafted person's Name section edits the draft itself, as the page's
+// edits write the entry (owner, 2026-11-05): `change` is one of `{part:
+// [index, text]}`, `{title}`, `{removeTitle}`, `{builtAs}` or `{pet}`;
+// `english`: part index → its English writing. The draft's changes
+// (`editDraft`'s), or null.
+export function draftNameEdit(edited, change, english = {}) {
+    const stored = edited?.fields?.name_parts;
+    const aka = (edited?.aka || []).map((a) => ({ ...a }));
+    if (change.part && stored) {
+        const [index, text] = change.part;
+        const parts = stored.parts.map((p, i) => (i === index ? { label: p.label, text, source: 'typed' } : { ...p }));
+        const name = writtenName(parts, english);
+        return { ...pickName(edited, edited.name, name), name, fields: { ...edited.fields, name_parts: { ...stored, parts } } };
+    }
+    if (change.title) {
+        const { name, shown, language_id: language, meaning } = change.title;
+        const kept = aka.filter((a) => a.name.toLowerCase() !== name.toLowerCase());
+        const others = shown ? kept.map(({ shown: _shown, ...rest }) => rest) : kept;
+        const entry = { name, tag: 'proper', everyday: false, kind: 'title', ...(language ? { language } : {}), ...(meaning ? { meaning } : {}), ...(shown ? { shown } : {}) };
+        return { aka: [...others, entry] };
+    }
+    if (change.removeTitle) {
+        return { aka: aka.filter((a) => !(a.kind === 'title' && a.name === change.removeTitle)) };
+    }
+    if (change.builtAs && stored) {
+        return { fields: { ...edited.fields, name_parts: { ...stored, built_as: { ...change.builtAs } } } };
+    }
+    if (change.pet) {
+        return { aka: [...aka.filter((a) => !(a.kind === 'pet' && !a.by)), { name: change.pet, tag: 'proper', everyday: false, kind: 'pet' }] };
+    }
+    return null;
 }

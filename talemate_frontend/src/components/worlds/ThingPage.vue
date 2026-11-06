@@ -280,7 +280,14 @@
                         @set="setNumber"
                     />
                     <!-- a person's name in parts (languages 4b-2) -->
-                    <PersonName v-if="!draft && thing.name_view" :thing="thing" @name-it="nameItThing" />
+                    <PersonName
+                        v-if="thing.name_view"
+                        :thing="thing"
+                        :draft="!!draft"
+                        :edited="draft ? edited : null"
+                        @name-it="draft ? nameItDraftPerson() : nameItThing()"
+                        @edit="edit($event)"
+                    />
                     <ThingAka
                         :key="'aka-' + editorKey"
                         :aka="akaList"
@@ -1524,8 +1531,12 @@ export default {
             const at = date ? { instant: date.instant, precision: date.precision } : null;
             this.worlds.viewThingAt(at);
         },
-        nameItOwnName() {
-            const mark = this.nameFlag;
+        // Name it on a drafted person, from its Name section (4b-2)
+        nameItDraftPerson() {
+            this.nameItOwnName({ part: this.edited.name, name: this.edited.name, id: null, language_id: this.edited.fields?.name_parts?.language });
+        },
+        nameItOwnName(flag = null) {
+            const mark = flag || this.nameFlag;
             const stored = this.edited.fields?.name_parts;
             // a drafted person (languages 4b-2): built from the parents
             // they're filed under, what's inherited pinned

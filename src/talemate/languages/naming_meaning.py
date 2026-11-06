@@ -287,17 +287,23 @@ def _phrase_rolls(
     new: set[str],
     options: dict[str, list[str]],
 ) -> list[Built]:
-    """The phrase built, then built again with each other option of its
-    first coined word (the rolls a meaning part shows)."""
+    """The phrase built, then built again with the next option of every
+    coined word together (the rolls a meaning part shows; owner,
+    2026-11-05: each new word rerolls, not only the first)."""
 
     first = build_phrase(language, phrase, words, frozenset(new))
     first.parts = _with_options(first, options)
     rolls = [first]
-    coined = next((m for m, w in words.items() if w in options), None)
-    if coined is not None:
-        for other in options[words[coined]][1:]:
+    coined = [m for m, w in words.items() if w in options]
+    if coined:
+        lists = {m: options[words[m]] for m in coined}
+        for i in range(1, max(len(v) for v in lists.values())):
+            swapped = {m: lists[m][i % len(lists[m])] for m in coined}
             alt = build_phrase(
-                language, phrase, {**words, coined: other}, frozenset({*new, other})
+                language,
+                phrase,
+                {**words, **swapped},
+                frozenset({*new, *swapped.values()}),
             )
             if alt.text not in {r.text for r in rolls}:
                 rolls.append(alt)
@@ -658,7 +664,18 @@ async def part_meaning(
     if not 0 <= index < len(parts) or parts[index].kind != "meaning":
         raise ValueError("that part doesn't take a meaning")
     text, after_of = _drop_fixed(language, rule_id, shape, text)
+    ending = parts[index].ending
+    if ending:
+        # the part's own ending says that much ("town of"): only the rest
+        # is translated, and the ending is kept (owner, 2026-11-05)
+        said = {w for w in _words(ending.lower()) if w not in _FUNCTION}
+        kept = [w for w in _words(text) if w.lower() not in said]
+        while kept and kept[0].lower() in _FUNCTION:
+            kept.pop(0)
+        text = " ".join(kept) or text
     (phrase,) = await split_meaning(client, language, text, [parts[index]], reply=reply)
+    if ending:
+        phrase = phrase.model_copy(update={"ending": ending, "of": False})
     if after_of:
         grammar = language.name_grammar
         the = grammar.of.the if grammar is not None and grammar.of else False

@@ -25,6 +25,7 @@ __all__ = [
     "add_title",
     "calls_out",
     "draft_context",
+    "draft_name_view",
     "kept_title_offer",
     "name_view",
     "person_context",
@@ -350,12 +351,30 @@ def name_view(view, state) -> dict | None:
     still shows their language (the page says "not built from a rule");
     one with neither has none."""
 
-    from talemate.languages.composed import _generator
-
     if state.kind != "character":
         return None
-    language_state = person_language(view, state.id)
-    stored = state.fields.get("name_parts")
+    return _name_view(
+        view, person_language(view, state.id), state.fields.get("name_parts")
+    )
+
+
+def draft_name_view(view, preview) -> dict | None:
+    """A drafted person's Name section (owner, 2026-11-05: the draft and
+    the page alike): from the name parts the draft was built with; none
+    when it wasn't built from a rule."""
+
+    stored = preview.fields.get("name_parts")
+    if preview.kind != "character" or not isinstance(stored, dict):
+        return None
+    state = view.thing(str(stored.get("language") or ""))
+    if state is None or state.kind != "language":
+        return None
+    return _name_view(view, state, stored)
+
+
+def _name_view(view, language_state, stored) -> dict | None:
+    from talemate.languages.composed import _generator
+
     if language_state is None:
         return None
     language = language_of(language_state)

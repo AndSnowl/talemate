@@ -429,3 +429,35 @@ async def test_name_it_keeps_a_stored_inherited_part_without_a_filing(plugin):
     )
     house = _last(plugin, "name_it_parts")["data"]["parts"][2]
     assert house["pinned"] is True and house["from_id"] == w.eilhaud
+
+
+def test_a_drafted_persons_name_view_is_the_pages():
+    """Owner, 2026-11-05: the Name section (titles, parts) on a draft as
+    on the page."""
+
+    from types import SimpleNamespace as NS
+
+    from talemate.worldplay.people import draft_name_view
+
+    class View:
+        def __init__(self, things):
+            self.things_ = things
+
+        def thing(self, thing_id):
+            return self.things_.get(thing_id)
+
+        def name_of(self, thing_id):
+            found = self.things_.get(thing_id)
+            return found.fields.get("name") if found else None
+
+    lang = NS(
+        id="L" * 32,
+        kind="language",
+        fields={"name": "Drassonais", **fields_of(DRASSONAIS)},
+    )
+    view = View({lang.id: lang})
+    preview = NS(kind="character", fields={"name_parts": _parts(lang.id)})
+    shown = draft_name_view(view, preview)
+    assert shown["language"]["name"] == "Drassonais"
+    assert [p["written"] for p in shown["parts"]] == ["Maëlis", "of", "Drassone"]
+    assert draft_name_view(view, NS(kind="character", fields={})) is None
