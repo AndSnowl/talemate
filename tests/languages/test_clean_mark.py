@@ -110,3 +110,26 @@ async def test_a_framed_name_is_marked_whole(world, moscavia):
         lists=NameLists(real=["White Sea"]),
     )
     assert [m.name for m in marks] == ["White Sea"]
+
+
+# --- whole names (languages 4c, Task 6) --------------------------------------
+
+
+def test_proper_part_leaves_narrator_words_and_epithets():
+    from talemate.languages.cleaning.find import proper_part
+
+    assert proper_part("Tsar Aleksi Romanov III") == "Aleksi Romanov"
+    assert proper_part("Zochar the White") == "Zochar"
+    assert proper_part("Maëlis of Sauvaire") == "Maëlis"
+    assert proper_part("Aleksi") == "Aleksi"
+
+
+async def test_a_persons_mark_covers_the_whole_proper_part(world, moscavia):
+    marks = await _mark(
+        world,
+        moscavia,
+        ["Tsar Aleksi Romanov III rules from the north."],
+        listed=[("Tsar Aleksi Romanov III", "character")],
+        lists=NameLists(real=["Aleksi", "Romanov"]),
+    )
+    assert [(m.name, m.part) for m in marks] == [("Aleksi Romanov", "Aleksi Romanov")]

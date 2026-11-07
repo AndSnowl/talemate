@@ -93,6 +93,20 @@
 
             <!-- a composed rule: the builder, part by part (languages 4b-1) -->
             <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
+            <!-- a ruler's number, the narrator's (languages 4c) -->
+            <div v-if="request.person && composed" class="d-flex align-center ga-2 mt-2" data-testid="name-it-regnal">
+                <span class="text-caption text-muted">number after the name</span>
+                <v-text-field
+                    v-model="worlds.nameItRegnal"
+                    placeholder="none"
+                    density="compact"
+                    variant="outlined"
+                    hide-details="auto"
+                    class="regnal"
+                    :error-messages="regnalError(worlds.nameItRegnal)"
+                ></v-text-field>
+                <span class="text-caption text-muted">Roman numerals, as the narrator writes them</span>
+            </div>
             <NameRolls v-else-if="!titleMode" class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
             <div v-if="meaningShown && !composed && !titleMode" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
@@ -146,7 +160,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import NameBuilder from './NameBuilder.vue';
-import { resultLine, ruleMenuItems } from './nameParts.js';
+import { regnalError, resultLine, ruleMenuItems } from './nameParts.js';
 import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
@@ -349,6 +363,7 @@ export default {
             const coined = (candidate.built_from || []).filter((part) => part.new);
             this.worlds.pickNameIt(this.worlds.nameItMeaning.languageId || this.languageId, candidate.name, this.meaningOf(candidate), coined);
         },
+        regnalError,
         pick(name, meaning) {
             this.worlds.pickNameIt(this.languageId, name, meaning || '');
         },
@@ -373,6 +388,9 @@ export default {
 }
 .meaning {
     flex: 0 1 260px;
+}
+.regnal {
+    flex: 0 0 110px;
 }
 .name,
 .foreign {

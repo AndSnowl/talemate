@@ -41,6 +41,10 @@ __all__ = [
     "roll_pet_name",
     "people_rows",
     "stored_written",
+    "builds_of",
+    "rewritten_name",
+    "rule_title_words",
+    "writes_name",
     "written",
 ]
 
@@ -558,11 +562,84 @@ def stored_written(view, stored: object) -> str | None:
     if state is None or state.kind != "language":
         return None
     texts = [str(p.get("text") or "") for p in stored.get("parts") or []]
-    return written(
+    name = written(
         language_of(state),
         str(stored.get("rule") or ""),
         int(stored.get("shape") or 0),
         texts,
+    )
+    # a ruler's number after the name, the narrator's (languages 4c)
+    regnal = str(stored.get("regnal") or "")
+    return f"{name} {regnal}" if name and regnal else name
+
+
+def writes_name(written_name: str | None, name: str) -> bool:
+    """Whether a name is the one its parts write, with narrator words
+    around it or not ("Lady Maëlis of Drassone the Fair" is written by
+    parts writing "Maëlis of Drassone", languages 4c)."""
+
+    if not written_name:
+        return False
+    return bool(
+        re.search(rf"(?<!\w){re.escape(written_name)}(?!\w)", " ".join(name.split()))
+    )
+
+
+def rewritten_name(name: str, old: str | None, new: str) -> str:
+    """`name` with the span its parts wrote (`old`) written `new`, the
+    narrator words around it kept; `new` alone when `old` isn't in it."""
+
+    name = " ".join(name.split())
+    if old and writes_name(old, name):
+        return re.sub(rf"(?<!\w){re.escape(old)}(?!\w)", lambda _m: new, name, count=1)
+    return new
+
+
+def rule_title_words(language: Language, rule_id: str, shape: int) -> list[str]:
+    """The English titles a rule's own title word stands for (languages
+    4c): a fixed word labelled "title", or one the language keeps as a
+    title, read through the kept title's meaning or the part's English
+    writing ("Gosmar" → "tsar")."""
+
+    from talemate.languages.composed import _generator
+
+    generator = _generator(language, rule_id)
+    if generator is None or not 0 <= shape < len(generator.shapes):
+        return []
+    kept = {
+        t.word.lower(): t.meaning.lower()
+        for t in (language.people_names.kept_titles if language.people_names else [])
+    }
+    out: list[str] = []
+    for part in generator.shapes[shape].parts:
+        if part.kind != "word":
+            continue
+        word = part.word.lower()
+        if part.label.lower() != "title" and word not in kept:
+            continue
+        english = kept.get(word) or part.english.lower()
+        if english and english not in out:
+            out.append(english)
+    return out
+
+
+def builds_of(language: Language, rule_id: str, shape: int) -> bool:
+    """Whether a rule's form builds its own "of <house>" (a fixed word
+    written "of" before a connection part), so a name's "of <place>" goes
+    with the rest when it's renamed (languages 4c)."""
+
+    from talemate.languages.composed import _generator
+
+    generator = _generator(language, rule_id)
+    if generator is None or not 0 <= shape < len(generator.shapes):
+        return False
+    parts = generator.shapes[shape].parts
+    return any(
+        part.kind == "word"
+        and (part.english or part.word).lower() == "of"
+        and i + 1 < len(parts)
+        and parts[i + 1].kind == "connection"
+        for i, part in enumerate(parts)
     )
 
 

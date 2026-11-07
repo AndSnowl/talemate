@@ -215,7 +215,7 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
     language without people rules leaves it as it is."""
 
     from talemate.languages.entry import language_of
-    from talemate.languages.person_names import choose, stored_written
+    from talemate.languages.person_names import choose, stored_written, writes_name
 
     state = view.thing(language_id)
     if state is None or state.kind != "language":
@@ -229,7 +229,9 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
     stored = preview.fields.get("name_parts")
     if stored is not None:
         # marked already (no parts yet), or built and still so: as it is
-        if not stored.get("parts") or stored_written(view, stored) == preview.name:
+        if not stored.get("parts") or writes_name(
+            stored_written(view, stored), preview.name
+        ):
             return preview
         # built once, then renamed by the owner: their name stands, the
         # parts go (final review C2)

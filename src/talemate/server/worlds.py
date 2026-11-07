@@ -560,10 +560,13 @@ from talemate.worldplay.merge import (
     repoint_overrides,
 )
 from talemate.languages.person_names import (
+    builds_of,
+    rule_title_words,
     choose,
     people_rows,
     pick_rule,
     stored_written,
+    writes_name,
 )
 from talemate.worldplay.people import (
     add_title,
@@ -576,6 +579,7 @@ from talemate.worldplay.people import (
     remove_title,
     set_built_as,
     set_part,
+    set_regnal,
     set_pet_name,
     stored_parts,
 )
@@ -6371,8 +6375,9 @@ class WorldsPlugin(Plugin):
                     int(data.get("shape") or 0),
                     dict(data.get("built_as") or {}),
                     parts,
+                    str(data.get("regnal") or "").strip(),
                 )
-                if stored_written(world.view(), stored) != " ".join(name.split()):
+                if not writes_name(stored_written(world.view(), stored), name):
                     stored = {**stored, "rule": "", "shape": 0, "parts": []}
                 rev.set_field(thing_id, "name_parts", stored, None)
         self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
@@ -6399,6 +6404,19 @@ class WorldsPlugin(Plugin):
                 thing_id,
                 int(data.get("index", -1)),
                 str(data.get("text") or ""),
+            ),
+        )
+
+    async def handle_person_regnal(self, data: dict):
+        """A ruler's number (languages 4c): a Roman numeral, or "" for none;
+        the name follows, everywhere."""
+
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_regnal",
+            thing_id,
+            lambda rev, world: set_regnal(
+                rev, world, thing_id, str(data.get("regnal") or "")
             ),
         )
 
@@ -6531,6 +6549,9 @@ class WorldsPlugin(Plugin):
                 "rule_id": rule_id,
                 "shape": shape,
                 "parts": [p.model_dump() for p in parts],
+                # what a whole-name rename drops and replaces (4c)
+                "title_words": rule_title_words(language, rule_id, shape),
+                "builds_of": builds_of(language, rule_id, shape),
             },
         )
 

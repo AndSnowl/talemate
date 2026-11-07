@@ -15,7 +15,6 @@ from talemate.languages.person_names import (
     connections_of,
     kept_title,
     roll_pet_name,
-    written,
 )
 from talemate.world.filing import filings_of
 from talemate.world.store import Revision, World
@@ -33,6 +32,7 @@ __all__ = [
     "remove_title",
     "set_built_as",
     "set_part",
+    "set_regnal",
     "set_pet_name",
     "stored_parts",
 ]
@@ -130,9 +130,10 @@ def stored_parts(
     shape: int,
     built_as: dict[str, str],
     parts: list[dict],
+    regnal: str = "",
 ) -> dict:
     """`name_parts` as the store keeps them: each part's known keys, empty
-    `from_` keys left out."""
+    `from_` keys left out; a regnal number when there is one."""
 
     kept = []
     for part in parts:
@@ -146,6 +147,7 @@ def stored_parts(
         "shape": int(shape),
         "built_as": {str(k): str(v) for k, v in built_as.items()},
         "parts": kept,
+        **({"regnal": regnal} if regnal else {}),
     }
 
 
@@ -170,12 +172,33 @@ def set_part(rev: Revision, world: World, thing_id: str, index: int, text: str) 
     if not 0 <= index < len(parts):
         raise ValueError("there's no such name part")
     parts[index] = {"label": parts[index]["label"], "text": text, "source": "typed"}
-    language = language_of(view.thing(stored["language"]))
-    name = written(
-        language, stored["rule"], stored["shape"], [p["text"] for p in parts]
-    )
+    _rewrite(rev, world, thing_id, stored, {**stored, "parts": parts})
+
+
+def set_regnal(rev: Revision, world: World, thing_id: str, regnal: str) -> None:
+    """A ruler's number, the narrator's (languages 4c): a Roman numeral, or
+    "" for none; the name is written again and renamed everywhere."""
+
+    view = world.view()
+    stored = _stored(view, thing_id)
+    regnal = regnal.strip()
+    _rewrite(rev, world, thing_id, stored, {**stored, "regnal": regnal})
+
+
+def _rewrite(
+    rev: Revision, world: World, thing_id: str, stored: dict, new: dict
+) -> None:
+    """The person renamed from `stored` to `new` name parts, the narrator
+    words around the written name kept (languages 4c)."""
+
+    from talemate.languages.person_names import rewritten_name, stored_written
+
+    view = world.view()
+    old_name = view.name_of(thing_id) or ""
+    new_written = stored_written(view, new) or ""
+    name = rewritten_name(old_name, stored_written(view, stored), new_written)
     rename_everywhere(rev, world, thing_id, name)
-    rev.set_field(thing_id, "name_parts", {**stored, "parts": parts}, None)
+    rev.set_field(thing_id, "name_parts", new, None)
 
 
 def set_built_as(rev: Revision, world: World, thing_id: str, built_as: dict) -> None:

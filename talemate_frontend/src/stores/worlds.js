@@ -187,6 +187,7 @@ import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import { markEdit, pickName, swapName } from '../components/worlds/nameMarks.js';
 import { draftNameEdit } from '../components/worlds/personName.js';
+import { personRename } from '../components/worlds/nameParts.js';
 import { composeName } from '../components/worlds/nameParts.js';
 import {
     factsKey,
@@ -730,6 +731,9 @@ export const useWorldsStore = defineStore('worlds', {
         // a person's inherited parts the owner unpinned: they roll like any
         // part (languages 4b-2)
         nameItPartFree: [],
+        // a ruler's number for the name being built (languages 4c): the
+        // name's own, or what the owner typed; '' for none
+        nameItRegnal: '',
         nameItBuilding: false,
         // the language and rule the builder last asked for: a reply for
         // another is dropped (final review I5)
@@ -1399,6 +1403,9 @@ export const useWorldsStore = defineStore('worlds', {
         personNamePart(thingId, index, text) {
             this.request('person_name_part', { thing_id: thingId, index, text });
         },
+        personRegnal(thingId, regnal) {
+            this.request('person_regnal', { thing_id: thingId, regnal });
+        },
         personBuiltAs(thingId, builtAs) {
             this.request('person_built_as', { thing_id: thingId, built_as: builtAs });
         },
@@ -1420,6 +1427,10 @@ export const useWorldsStore = defineStore('worlds', {
         // target: {draftKey}|{smallKey}|{thingId}|{input}, markId?}`)
         openNameIt(request) {
             this.nameIt = { ...request };
+            // a ruler's number in the name, kept unless the owner changes
+            // it (languages 4c)
+            const full = request.target?.fullName || request.words || '';
+            this.nameItRegnal = full.split(/\s+/).find((w) => /^[IVXLCDM]+$/.test(w)) || '';
         },
 
         // a new word (part `index`) becomes `word`, in every form of the
@@ -1578,7 +1589,7 @@ export const useWorldsStore = defineStore('worlds', {
                 this.nameItPartMeanings = {};
                 this.nameItPartError = {};
             }
-            this.nameItParts = { rule_id: data.rule_id, shape: data.shape, parts };
+            this.nameItParts = { rule_id: data.rule_id, shape: data.shape, parts, title_words: data.title_words || [], builds_of: !!data.builds_of };
             const chosen = {};
             for (const part of this.nameItParts.parts) {
                 const kept = sameForm && this.nameItPartMeanings[part.index] ? this.nameItPartChosen[part.index] : null;
@@ -1656,10 +1667,20 @@ export const useWorldsStore = defineStore('worlds', {
                     shape: this.nameItParts.shape,
                     built_as: request.person.builtAs || {},
                     parts: this.nameItPartsOut,
+                    regnal: this.nameItRegnal || '',
                 }
                 : null;
+            // a person's whole name: the marked words become the built
+            // name, narrator words kept but the title the rule says (4c)
+            const renamed = (full) => personRename(full, request.words, name, {
+                titleWords: this.nameItParts?.title_words || [],
+                buildsOf: !!this.nameItParts?.builds_of,
+                regnal: this.nameItRegnal || null,
+            });
             if (target.draftKey && this.draft?.key === target.draftKey) {
-                const changes = pickName(this.draft.edited, request.words, name, options);
+                const changes = person
+                    ? pickName(this.draft.edited, this.draft.edited.name, renamed(this.draft.edited.name), options)
+                    : pickName(this.draft.edited, request.words, name, options);
                 if (person) changes.fields = { ...(this.draft.edited.fields || {}), name_parts: person };
                 this.editDraft(changes);
             } else if (target.smallKey && this.smallDrafts[target.smallKey]?.edited) {
@@ -1680,7 +1701,9 @@ export const useWorldsStore = defineStore('worlds', {
                 // part of an entry's name: the words left out stay where
                 // they are (owner, 2026-11-04)
                 const full = target.fullName
-                    ? request.picked
+                    ? person
+                        ? renamed(target.fullName)
+                        : request.picked
                         ? composeName(target.fullName, request.picked, name)
                         : swapName(target.fullName, request.words, name)
                     : name;
@@ -1689,7 +1712,7 @@ export const useWorldsStore = defineStore('worlds', {
                 this.request('name_it_rename', {
                     thing_id: target.thingId,
                     name: full,
-                    ...(person ? { parts: person.parts, rule_id: person.rule, shape: person.shape, language_id: languageId, built_as: person.built_as } : {}),
+                    ...(person ? { parts: person.parts, rule_id: person.rule, shape: person.shape, language_id: languageId, built_as: person.built_as, regnal: person.regnal } : {}),
                 });
             } else if (!target.draftKey && !target.smallKey && typeof target.onPick === 'function') {
                 target.onPick(name);
@@ -3127,6 +3150,7 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'person_name_part':
                 case 'person_built_as':
+                case 'person_regnal':
                 case 'person_title_add':
                 case 'person_title_remove':
                 case 'person_pet_name':

@@ -12,6 +12,7 @@ from talemate.languages.cleaning.find import (
     PERSON_KINDS,
     Spot,
     judge,
+    proper_part,
     protected_names,
     spots,
 )
@@ -110,14 +111,24 @@ async def mark_texts(
         return []
     verdicts = await judge(client, found, lists, main, texts)
     marks = []
+    seen: set[str] = set()
     for v in verdicts:
         lid = _language_for(view, v.spot, texts, langs, main_id)
-        whole = v.spot.name if v.spot.kind in PERSON_KINDS else _whole(v.spot)
+        # a person's mark covers the whole proper part of the name, its
+        # narrator words left out (languages 4c); one mark per name
+        whole = (
+            proper_part(v.spot.full) or v.spot.name
+            if v.spot.kind in PERSON_KINDS
+            else _whole(v.spot)
+        )
+        if whole.lower() in seen:
+            continue
+        seen.add(whole.lower())
         marks.append(
             Mark(
                 id=_new_id(),
                 name=whole,
-                part=v.spot.name,
+                part=whole if v.spot.kind in PERSON_KINDS else v.spot.name,
                 why=v.why,
                 language_id=lid if lid in langs else None,
                 entry_kind=v.spot.kind,

@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
-import { composeName, forPersonLine, partLabel, isMainRule, resultLine, ruleChipLabel, ruleMenuItems } from '../src/components/worlds/nameParts.js';
+import { composeName, forPersonLine, partLabel, isMainRule, personRename, regnalError, resultLine, ruleChipLabel, ruleMenuItems } from '../src/components/worlds/nameParts.js';
 import { callsFor, draftNameEdit, draftParentRows, partSourceLine, plainAka, pronounOf, titleShownChange, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
@@ -4486,6 +4486,63 @@ check('isMainRule matches the server: a part, words or pet names is a piece unle
     ];
     assert.deepEqual(gens.map((g) => isMainRule(g, gens)), [false, true, false, false, true]);
     assert.equal(isMainRule({ ...gens[0], main: true }, gens), true);
+});
+
+check('personRename keeps every narrator word but the one the rule says (4c)', () => {
+    const out = personRename('Grand Prince Tsar Aleksi III the Bold', 'Aleksi', 'Gosmar Zochar Vekhal', { titleWords: ['tsar'], buildsOf: false, regnal: '' });
+    assert.equal(out, 'Grand Prince Gosmar Zochar Vekhal III the Bold');
+});
+
+check('personRename replaces an of-place the rule builds, and sets the number', () => {
+    assert.equal(personRename('Maëlis of Sauvaire', 'Maëlis', 'Ysolde of Drassone', { titleWords: [], buildsOf: true, regnal: '' }), 'Ysolde of Drassone');
+    assert.equal(personRename('Maëlis of Sauvaire', 'Maëlis', 'Ysolde', { titleWords: [], buildsOf: false, regnal: '' }), 'Ysolde of Sauvaire');
+    assert.equal(personRename('Tsar Aleksi III', 'Aleksi', 'Gosmar Zochar', { titleWords: ['tsar'], buildsOf: false, regnal: 'IV' }), 'Gosmar Zochar IV');
+    assert.equal(personRename('Tsar Aleksi III', 'Aleksi', 'Gosmar Zochar', { titleWords: ['tsar'], buildsOf: false, regnal: null }), 'Gosmar Zochar');
+});
+
+check('a regnal number is a Roman numeral or nothing', () => {
+    assert.equal(regnalError('IV'), '');
+    assert.equal(regnalError(''), '');
+    assert.match(regnalError('the Third'), /Roman numeral/);
+});
+
+check('a draft person name keeps its narrator words, and takes a number (4c)', () => {
+    const edited = {
+        name: 'Lady Maëlis of Drassone the Fair',
+        aka: [],
+        facts: [{ category: 'background', text: 'Lady Maëlis of Drassone the Fair grew up at court.' }],
+        fields: { name_parts: { language: 'L', rule: 'noble-women', shape: 0, built_as: {}, parts: [
+            { label: 'given', text: 'Maëlis', source: 'rolled' }, { label: 'of', text: 'di', source: 'word' }, { label: 'house', text: 'Drassone', source: 'typed' }] } },
+    };
+    const english = { 1: 'of' };
+    assert.equal(draftNameEdit(edited, { part: [0, 'Ysolde'] }, english).name, 'Lady Ysolde of Drassone the Fair');
+    const numbered = draftNameEdit(edited, { regnal: 'II' }, english);
+    assert.equal(numbered.name, 'Lady Maëlis of Drassone II the Fair');
+    assert.equal(numbered.fields.name_parts.regnal, 'II');
+});
+
+check('Use this name on a person renames the whole name, its title dropped (4c)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({
+        words: 'Aleksi',
+        languageId: 'L',
+        kind: 'character',
+        target: { thingId: 't1', fullName: 'Tsar Aleksi III' },
+        person: { thingId: 't1', builtAs: { sex: 'man' } },
+    });
+    store.nameItAsked = { languageId: 'L', ruleId: 'sovereign' };
+    store.nameItTakeParts({
+        language_id: 'L', rule_id: 'sovereign', shape: 0, title_words: ['tsar'], builds_of: false,
+        parts: [
+            { index: 0, kind: 'word', label: 'title', rolls: [{ text: 'Gosmar', parts: [] }], source: 'word' },
+            { index: 1, kind: 'rule', label: 'given', rolls: [{ text: 'Zochar', parts: [] }], source: 'rolled' },
+        ],
+    });
+    assert.equal(store.nameItRegnal, 'III');
+    store.pickNameIt('L', store.nameItBuilt);
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name, 'Gosmar Zochar III');
+    assert.equal(asked.regnal, 'III');
 });
 
 if (failures.length) {

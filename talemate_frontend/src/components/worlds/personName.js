@@ -16,6 +16,10 @@ export function writtenName(parts, english = {}) {
         .join(' ');
 }
 
+function numbered(name, regnal) {
+    return regnal ? `${name} ${regnal}` : name;
+}
+
 // the names used by an entry this fact links (a relationship's "calls
 // her" line); a name everyone uses (no `by`) isn't one
 export function callsFor(calls, fact) {
@@ -86,11 +90,18 @@ export function titleShownChange(title) {
 export function draftNameEdit(edited, change, english = {}) {
     const stored = edited?.fields?.name_parts;
     const aka = (edited?.aka || []).map((a) => ({ ...a }));
-    if (change.part && stored) {
-        const [index, text] = change.part;
-        const parts = stored.parts.map((p, i) => (i === index ? { label: p.label, text, source: 'typed' } : { ...p }));
-        const name = writtenName(parts, english);
-        return { ...pickName(edited, edited.name, name), name, fields: { ...edited.fields, name_parts: { ...stored, parts } } };
+    if ((change.part || change.regnal !== undefined) && stored) {
+        const parts = change.part
+            ? stored.parts.map((p, i) => (i === change.part[0] ? { label: p.label, text: change.part[1], source: 'typed' } : { ...p }))
+            : stored.parts.map((p) => ({ ...p }));
+        const regnal = change.regnal !== undefined ? change.regnal.trim() : stored.regnal || '';
+        const before = numbered(writtenName(stored.parts, english), stored.regnal || '');
+        const after = numbered(writtenName(parts, english), regnal);
+        // the narrator words around the written name stay (4c)
+        const name = edited.name.includes(before) ? edited.name.replace(before, after) : after;
+        const next = { ...stored, parts, ...(regnal ? { regnal } : {}) };
+        if (!regnal) delete next.regnal;
+        return { ...pickName(edited, edited.name, name), name, fields: { ...edited.fields, name_parts: next } };
     }
     if (change.title) {
         const { name, shown, language_id: language, meaning } = change.title;

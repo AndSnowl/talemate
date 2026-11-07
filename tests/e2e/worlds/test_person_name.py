@@ -384,3 +384,73 @@ def test_name_it_lists_main_rules_before_pieces(app, page):
     items = menu.locator(".v-list-item, .v-list-subheader").all_inner_texts()
     at = next(i for i, t in enumerate(items) if "Pieces" in t)
     assert "noble-women" in items[:at] and "women-given" in items[at:]
+
+
+def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
+    """Languages 4c: the sovereign rule says "Gosmar" (tsar), so "Tsar
+    Aleksi III" becomes "Gosmar <name> III": the English title goes, the
+    number stays."""
+
+    import re
+
+    from talemate.languages.models import GeneratorDef, NamePart, NameShape
+
+    lang = LANGUAGE.model_copy(deep=True)
+    lang.people_names.kept_titles.append({"word": "Gosmar", "meaning": "tsar"})
+    lang.generators.append(
+        GeneratorDef(
+            id="sovereign",
+            name="The sovereign",
+            use="character",
+            description="the tsar and his heirs",
+            shapes=[
+                NameShape(
+                    parts=[
+                        NamePart(kind="word", word="Gosmar", label="title"),
+                        NamePart(kind="rule", rule="men-given", label="given"),
+                    ]
+                )
+            ],
+        )
+    )
+    lang = lang.model_validate(lang.model_dump())
+    name = _world_name("Person tsar")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Drassonais",
+                "fields": {"name": "Drassonais", **fields_of(lang)},
+            },
+            {
+                "kind": "place",
+                "name": "Duchy of Drassone",
+                "languages": [{"language": "Drassonais", "role": "official"}],
+            },
+            {
+                "kind": "character",
+                "name": "Tsar Aleksi III",
+                "filings": [{"target": "Duchy of Drassone", "role": "sovereign"}],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    _open_thing(page, "Tsar Aleksi III")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    page.locator(".v-overlay--active .v-list-item").filter(
+        has_text="The sovereign"
+    ).first.click()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Gosmar", timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-regnal").locator("input")).to_have_value("III")
+    panel.get_by_test_id("name-it-use").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        re.compile(r"^Gosmar \w+ III$"), timeout=TIMEOUT_MS
+    )

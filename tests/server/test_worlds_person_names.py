@@ -385,7 +385,7 @@ async def test_parts_that_dont_write_the_name_arent_stored(plugin):
         plugin,
         "name_it_rename",
         thing_id=w.maelis,
-        name="Lady Maëlis of Drassone",
+        name="Ysolde of Sauvaire",
         language_id=w.lang,
         rule_id="noble-women",
         shape=0,
@@ -461,3 +461,90 @@ def test_a_drafted_persons_name_view_is_the_pages():
     assert shown["language"]["name"] == "Drassonais"
     assert [p["written"] for p in shown["parts"]] == ["Maëlis", "of", "Drassone"]
     assert draft_name_view(view, NS(kind="character", fields={})) is None
+
+
+async def test_name_it_parts_says_the_rules_title_words(plugin):
+    """Languages 4c: a rule whose own title word stands for an English one
+    ("Gosmar" for tsar) says so, and whether it builds "of <house>"."""
+
+    from talemate.languages.models import GeneratorDef, NamePart, NameShape
+
+    w = await _world(plugin)
+    lang = DRASSONAIS.model_copy(deep=True)
+    lang.people_names.kept_titles.append({"word": "Gosmar", "meaning": "tsar"})
+    lang.generators.append(
+        GeneratorDef(
+            id="sovereign",
+            name="The sovereign",
+            use="character",
+            for_person={"sex": "man", "rank": "noble"},
+            shapes=[
+                NameShape(
+                    parts=[
+                        NamePart(kind="word", word="Gosmar", label="title"),
+                        NamePart(kind="rule", rule="men-given", label="given"),
+                    ]
+                )
+            ],
+        )
+    )
+    lang = lang.model_validate(lang.model_dump())
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.set_field(w.lang, "rules", fields_of(lang)["rules"], None)
+    await _act(plugin, "name_it_parts", language_id=w.lang, rule_id="sovereign")
+    data = _last(plugin, "name_it_parts")["data"]
+    assert data["title_words"] == ["tsar"] and data["builds_of"] is False
+    await _act(plugin, "name_it_parts", language_id=w.lang, rule_id="noble-women")
+    data = _last(plugin, "name_it_parts")["data"]
+    assert data["title_words"] == [] and data["builds_of"] is True
+
+
+async def test_use_this_name_stores_the_regnal_number(plugin):
+    w = await _world(plugin)
+    parts = _parts(w.lang, house_from=w.eilhaud)["parts"]
+    await _act(
+        plugin,
+        "name_it_rename",
+        thing_id=w.maelis,
+        name="Maëlis of Drassone II",
+        language_id=w.lang,
+        rule_id="noble-women",
+        shape=0,
+        built_as={"sex": "woman", "rank": "noble"},
+        parts=parts,
+        regnal="II",
+    )
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert stored["regnal"] == "II" and len(stored["parts"]) == 3
+
+
+async def test_the_name_sections_number_renames_everywhere(plugin):
+    w = await _world(plugin)
+    await _act(plugin, "person_regnal", thing_id=w.maelis, regnal="III")
+    state = _thing(plugin, w.maelis)
+    assert state.fields["name"] == "Maëlis of Drassone III"
+    assert state.fields["name_parts"]["regnal"] == "III"
+    await _act(plugin, "person_regnal", thing_id=w.maelis, regnal="")
+    assert _thing(plugin, w.maelis).fields["name"] == "Maëlis of Drassone"
+
+
+async def test_narrator_words_around_the_parts_keep_them(plugin):
+    """Languages 4c: "Lady Maëlis of Drassone the Fair" is still written by
+    its parts, and editing a part keeps "Lady" and "the Fair"."""
+
+    w = await _world(plugin)
+    parts = _parts(w.lang, house_from=w.eilhaud)["parts"]
+    await _act(
+        plugin,
+        "name_it_rename",
+        thing_id=w.maelis,
+        name="Lady Maëlis of Drassone the Fair",
+        language_id=w.lang,
+        rule_id="noble-women",
+        shape=0,
+        built_as={"sex": "woman", "rank": "noble"},
+        parts=parts,
+    )
+    assert len(_thing(plugin, w.maelis).fields["name_parts"]["parts"]) == 3
+    await _act(plugin, "person_name_part", thing_id=w.maelis, index=0, text="Ysolde")
+    assert _thing(plugin, w.maelis).fields["name"] == "Lady Ysolde of Drassone the Fair"
