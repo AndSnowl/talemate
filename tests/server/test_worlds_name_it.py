@@ -82,7 +82,7 @@ async def test_name_it_actions_answer(plugin):
     lid = await _world(plugin)
     await _act(plugin, "name_it_rules", language_id=lid)
     rules = _last(plugin, "name_it_rules")["data"]["rules"]
-    assert [r["id"] for r in rules] == ["words", "places"]
+    assert [r["id"] for r in rules] == ["places", "words"]  # main rules first (4c)
     await _act(plugin, "name_it_batch", language_id=lid, rule_id="places", pattern=1)
     names = [n["name"] for n in _last(plugin, "name_it_batch")["data"]["names"]]
     # the pattern's two names, less the entry the world has
