@@ -28,7 +28,6 @@ __all__ = [
     "inherited_rows",
     "name_person",
     "owner_kept",
-    "rename_in_preview",
 ]
 
 
@@ -169,76 +168,6 @@ def _has_people_rules(language) -> bool:
     )
 
 
-def rename_in_preview(preview: CreatePreview, old: str, new: str) -> CreatePreview:
-    """`preview` with `old` (whole words) written `new` in its name, facts,
-    summary, elsewhere rows and prose; marks on `old` dropped."""
-
-    if not old or old == new:
-        return preview
-    # whole words, a possessive's "'s" left on (final review I2); then the
-    # old first name alone, as the model writes it in passing
-    swaps = [(re.compile(rf"(?<![\w-]){re.escape(old)}(?![\w-])"), new)]
-    old_first, new_first = old.split()[0], new.split()[0]
-    if old_first != old and old_first != new_first:
-        swaps.append(
-            (re.compile(rf"(?<![\w-]){re.escape(old_first)}(?![\w-])"), new_first)
-        )
-
-    def swap(text: str | None) -> str | None:
-        if not text:
-            return text
-        for pattern, to in swaps:
-            text = pattern.sub(lambda _m, to=to: to, text)
-        return text
-
-    return preview.model_copy(
-        update={
-            "name": new,
-            "facts": [
-                f.model_copy(update={"text": swap(f.text)}) for f in preview.facts
-            ],
-            "summary": swap(preview.summary),
-            "elsewhere": [
-                e.model_copy(update={"text": swap(e.text)}) for e in preview.elsewhere
-            ],
-            "prose": {k: swap(v) or "" for k, v in preview.prose.items()},
-            "marks": [m for m in preview.marks if m.name != old and m.part != old],
-            # the model's other names for the old name go with it
-            "aka": [
-                a
-                for a in preview.aka
-                if a.get("kind") or a.get("name") not in (old, old_first)
-            ],
-        }
-    )
-
-
-def _draft_facts(view, preview: CreatePreview) -> list[tuple[str, list[str]]]:
-    """The draft's relationship facts, each with the people it names (by
-    their names as the world writes them)."""
-
-    from talemate.worldplay.create import entry_names
-
-    names = entry_names(view)
-    out = []
-    for fact in preview.facts:
-        if fact.category != "relationship":
-            continue
-        found = sorted(
-            (match.end(), thing_id)
-            for name, thing_id in names.items()
-            for match in [re.search(rf"(?<!\w){re.escape(name)}(?!\w)", fact.text)]
-            if match
-        )
-        # each name with only the words since the name before it (final
-        # review I5)
-        start = 0
-        for end, thing_id in found:
-            out.append((fact.text[start:end], [thing_id]))
-            start = end
-    return out
-
-
 def _owners_name(preview: CreatePreview) -> bool:
     """The draft's name is the owner's: the whole of it, or its first word
     (a given name the model added to: "Ysolde" → "Ysolde of Drassone",
@@ -254,29 +183,15 @@ def _owners_name(preview: CreatePreview) -> bool:
 
 
 def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview:
-    """A drafted person's name built from their language's people rules
-    (languages 4b-2): the owner's own name is kept; otherwise the name is
-    built from who the draft says they are and the parents it's filed
-    under, the draft renamed to it and marked, a title and a pet name
-    offered as other names, and a parent the name implies but the world
-    doesn't have offered as an unticked In row. A language without people
-    rules, or a name already built, is left as it is."""
-
-    import random
+    """A drafted person's name, marked for Name it (languages 4b-2; owner,
+    2026-11-06: drafts only mark): the owner's own name, a stub's or a set
+    name is left alone; otherwise the draft keeps who the person is built
+    as (for Name it, which builds the name from the rules with what's
+    inherited pinned) and the model's title, and its name is marked. A
+    language without people rules leaves it as it is."""
 
     from talemate.languages.entry import language_of
-    from talemate.languages.person_names import (
-        PARENT_WORDS,
-        PersonContext,
-        build_person_name,
-        choose,
-        connections_of,
-        role_matches,
-        roll_pet_name,
-        stored_written,
-    )
-    from talemate.worldplay.create import NewName, PreviewFiling
-    from talemate.worldplay.people import stored_parts
+    from talemate.languages.person_names import choose, stored_written
 
     state = view.thing(language_id)
     if state is None or state.kind != "language":
@@ -289,7 +204,8 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
         return preview
     stored = preview.fields.get("name_parts")
     if stored is not None:
-        if stored_written(view, stored) == preview.name:
+        # marked already (no parts yet), or built and still so: as it is
+        if not stored.get("parts") or stored_written(view, stored) == preview.name:
             return preview
         # built once, then renamed by the owner: their name stands, the
         # parts go (final review C2)
@@ -301,32 +217,16 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
     if _owners_name(preview):
         # the owner's own name: never rebuilt
         return preview
-    rng = random.Random()
-    # ticked rows, and the model's parent rows (they arrive unticked,
-    # ruling F7, but the prompt said whose child this is)
-    filings = [
-        (f.target_id, f.role)
-        for f in preview.filings
-        if f.target_id and (f.ticked or role_matches(list(PARENT_WORDS), f.role or ""))
-    ]
-    ctx = PersonContext(
-        built_as=choose(language, preview.person),
-        connections=connections_of(view, None, filings, _draft_facts(view, preview)),
-    )
-    named = build_person_name(
-        language, ctx, meaning=preview.person.get("name_meaning", ""), rng=rng
-    )
-    if not named.name:
-        return preview
-    out = rename_in_preview(preview, preview.name, named.name)
-    parts = stored_parts(
-        language_id,
-        named.rule_id,
-        named.shape,
-        named.built_as,
-        [p.model_dump() for p in named.parts],
-    )
-    aka = [dict(a) for a in out.aka if a.get("kind") not in ("title", "pet")]
+    # drafts only mark (owner, 2026-11-06): the name the rules would build
+    # waits in Name it, which reads who the person is built as from here
+    stored = {
+        "language": language_id,
+        "rule": "",
+        "shape": 0,
+        "built_as": choose(language, preview.person),
+        "parts": [],
+    }
+    aka = [dict(a) for a in preview.aka if a.get("kind") != "title"]
     title = preview.person.get("title", "")
     if title:
         aka.append(
@@ -338,43 +238,22 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
                 "shown": "before",
             }
         )
-    pet = roll_pet_name(language, {p.label: p.text for p in named.parts}, rng)
-    if pet is not None:
-        aka.append(
-            {
-                "name": pet[0],
-                "tag": "proper",
-                "everyday": False,
-                "kind": "pet",
-                "rule": pet[1],
-            }
+    marks = [m for m in preview.marks if m.name != preview.name]
+    marks.append(
+        Mark(
+            id=uuid.uuid4().hex[:12],
+            name=preview.name,
+            part=preview.name,
+            why=f"Name it can build it from {language.name}'s rules for people",
+            language_id=language_id,
+            entry_kind="character",
         )
-    relation = {"woman": "daughter of", "man": "son of"}.get(
-        named.built_as.get("sex", ""), "child of"
     )
-    offered = [
-        PreviewFiling(
-            new_name=NewName(name=missing.name, kind="character", ticked=False),
-            target_name=missing.name,
-            role=relation,
-            ticked=False,
-        )
-        for missing in named.missing
-    ]
-    mark = Mark(
-        id=uuid.uuid4().hex[:12],
-        name=named.name,
-        part=named.name,
-        why=f"built from {language.name}'s rules",
-        language_id=language_id,
-        entry_kind="character",
-    )
-    return out.model_copy(
+    return preview.model_copy(
         update={
-            "fields": {**out.fields, "name_parts": parts},
+            "fields": {**preview.fields, "name_parts": stored},
             "aka": aka,
-            "filings": [*out.filings, *offered],
-            "marks": [*out.marks, mark],
+            "marks": marks,
         }
     )
 

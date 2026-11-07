@@ -267,7 +267,7 @@ def test_use_this_name_stores_parts(app, page):
     )
 
 
-def test_draft_shows_the_built_name_marked(app, page, fixed_preview, fixed_clean):
+def test_draft_marks_the_name_and_name_it_builds_it(app, page, fixed_preview, fixed_clean):
     from e2e.worlds.test_drafts import _draft
 
     world(app, page, "Person draft")
@@ -299,12 +299,18 @@ def test_draft_shows_the_built_name_marked(app, page, fixed_preview, fixed_clean
         }
     )
     draft = _draft(page, "character", "a Drassonais noblewoman of the court")
+    # drafts only mark (owner, 2026-11-06): the model's name stays, and
+    # Name it builds one from the rules
     flag = draft.get_by_test_id("draft-name-flag")
-    expect(flag).to_contain_text("built from Drassonais's rules", timeout=TIMEOUT_MS)
-    name = flag.locator(".name-flagged").inner_text().strip()
-    assert name != "Elise" and " of " in name
-    expect(draft.locator(".fact-host").filter(has_text="grew up at")).to_contain_text(
-        name
+    expect(flag).to_contain_text("Name it can build it", timeout=TIMEOUT_MS)
+    assert flag.locator(".name-flagged").inner_text().strip() == "Elise"
+    flag.get_by_test_id("draft-name-flag-name-it").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel.get_by_test_id("name-builder-part")).to_have_count(
+        3, timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        " of ", timeout=TIMEOUT_MS
     )
 
 
@@ -345,8 +351,8 @@ def test_a_drafted_person_has_the_name_section_and_keeps_its_titles(
     )
     draft = _draft(page, "character", "a Drassonais noblewoman of the court")
     section = draft.get_by_test_id("person-name")
-    expect(section.get_by_test_id("person-name-part")).to_have_count(
-        3, timeout=TIMEOUT_MS
+    expect(section.get_by_test_id("person-name-none")).to_be_visible(
+        timeout=TIMEOUT_MS
     )
     expect(
         section.get_by_test_id("person-title").filter(has_text="Lady")

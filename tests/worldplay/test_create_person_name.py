@@ -111,7 +111,11 @@ def test_person_block_parses_and_tolerates_absence():
     assert parse_person_block('{"name": "X", "person": "a woman", "facts": []}') == {}
 
 
-async def test_daughter_of_eilhaud_gets_the_house_and_a_built_given_name(test3):
+async def test_a_drafted_person_keeps_the_models_name_marked_for_name_it(test3):
+    """Owner, 2026-11-06: drafts only mark; the name a person's rules would
+    build waits in Name it. The draft keeps who it's built as and the
+    model's title."""
+
     ids = test3.ids
     preview = await clean_preview(
         test3,
@@ -123,19 +127,19 @@ async def test_daughter_of_eilhaud_gets_the_house_and_a_built_given_name(test3):
         ),
         None,
     )
-    assert preview.name.endswith(" of Drassone") and preview.name != "Elise"
-    assert all("Elise" not in f.text for f in preview.facts)
-    assert preview.facts[0].text.startswith(preview.name)
+    assert preview.name == "Elise"
+    assert preview.facts[0].text.startswith("Elise")
     stored = preview.fields["name_parts"]
-    assert stored["rule"] == "noble-women" and stored["language"] == ids["lang"]
-    assert stored["parts"][-1] == {
-        "label": "house",
-        "text": "Drassone",
-        "source": "inherited",
-        "from_id": ids["eilhaud"],
-        "from_role": "daughter of",
+    assert stored == {
+        "language": ids["lang"],
+        "rule": "",
+        "shape": 0,
+        "built_as": {"sex": "woman", "rank": "noble"},
+        "parts": [],
     }
-    assert any(m.name == preview.name and "rules" in m.why for m in preview.marks)
+    mark = next(m for m in preview.marks if m.name == "Elise")
+    assert "Name it" in mark.why and mark.language_id == ids["lang"]
+    assert mark.entry_kind == "character"
     titles = [a for a in preview.aka if a.get("kind") == "title"]
     assert titles == [
         {
@@ -146,8 +150,8 @@ async def test_daughter_of_eilhaud_gets_the_house_and_a_built_given_name(test3):
             "shown": "before",
         }
     ]
-    pets = [a for a in preview.aka if a.get("kind") == "pet"]
-    assert pets and pets[0]["name"].endswith("ette") and pets[0]["rule"] == "pets"
+    assert not any(a.get("kind") == "pet" for a in preview.aka)
+    assert not any(f.new_name for f in preview.filings)
 
 
 async def test_a_name_from_the_prompt_is_never_rebuilt(test3):
@@ -180,21 +184,6 @@ async def test_a_missing_or_unknown_person_block_uses_defaults(test3):
     assert bare.fields["name_parts"]["built_as"] == {"sex": "man", "rank": "common"}
 
 
-async def test_a_missing_father_is_offered_unticked(test3):
-    preview = await clean_preview(
-        test3,
-        _preview(test3, "a noble daughter", person={"sex": "woman", "rank": "noble"}),
-        None,
-    )
-    offered = [f for f in preview.filings if f.new_name is not None]
-    assert len(offered) == 1
-    row = offered[0]
-    assert row.ticked is False and row.role == "daughter of"
-    assert row.new_name.kind == "character"
-    house = preview.fields["name_parts"]["parts"][-1]["text"]
-    assert row.new_name.name.endswith(f"of {house}")
-
-
 async def test_a_world_without_people_rules_is_left_alone(world):
     from _people_names_helpers import VAROVNI
 
@@ -222,7 +211,7 @@ async def test_a_world_without_people_rules_is_left_alone(world):
     assert cleaned.name == "Dorvak" and "name_parts" not in cleaned.fields
 
 
-async def test_accept_keeps_parts_only_while_the_name_matches(test3):
+async def test_accept_keeps_who_a_drafted_person_is_built_as(test3):
     ids = test3.ids
     preview = await clean_preview(
         test3,
@@ -235,10 +224,11 @@ async def test_accept_keeps_parts_only_while_the_name_matches(test3):
         None,
     )
     made = accept_preview(test3, preview)
-    assert test3.view().thing(made).fields["name_parts"]["rule"] == "noble-women"
-    renamed = preview.model_copy(update={"name": "Someone Else"})
-    other = accept_preview(test3, renamed)
-    assert "name_parts" not in test3.view().thing(other).fields
+    stored = test3.view().thing(made).fields["name_parts"]
+    assert stored["parts"] == [] and stored["built_as"] == {
+        "sex": "woman",
+        "rank": "noble",
+    }
 
 
 def test_person_block_parses_without_the_opening_brace():
@@ -252,32 +242,6 @@ def test_person_block_parses_without_the_opening_brace():
         "name_meaning": "of the stars",
         "title": "Lady",
     }
-
-
-async def test_an_unticked_parent_row_from_the_model_still_passes_the_name_down(test3):
-    """The model's "In" rows arrive unticked (ruling F7); a parent's still
-    gives the inherited part (4b-2 acceptance)."""
-
-    ids = test3.ids
-    preview = _preview(
-        test3, "a daughter of Eilhaud", person={"sex": "woman", "rank": "noble"}
-    )
-    preview = preview.model_copy(
-        update={
-            "filings": [
-                *preview.filings,
-                PreviewFiling(
-                    target_id=ids["eilhaud"],
-                    target_name="Eilhaud of Drassone",
-                    role="daughter of",
-                    ticked=False,
-                ),
-            ]
-        }
-    )
-    cleaned = await clean_preview(test3, preview, None)
-    assert cleaned.fields["name_parts"]["parts"][-1]["from_id"] == ids["eilhaud"]
-    assert not any(f.new_name for f in cleaned.filings)
 
 
 async def test_a_person_with_only_a_parent_row_is_named_in_the_parents_language(test3):
@@ -300,7 +264,7 @@ async def test_a_person_with_only_a_parent_row_is_named_in_the_parents_language(
     )
     cleaned = await clean_preview(test3, preview, None)
     assert cleaned.fields["name_parts"]["language"] == ids["lang"]
-    assert cleaned.name.endswith(" of Drassone")
+    assert cleaned.name == "Elise"
 
 
 # --- final review fixes ------------------------------------------------------
@@ -347,7 +311,7 @@ async def test_an_owners_rename_on_the_draft_survives_cleaning_again(test3):
     renamed = first.model_copy(update={"name": "Joan"})
     again = await clean_preview(test3, renamed, None)
     assert again.name == "Joan"
-    assert "name_parts" not in again.fields
+    assert again.fields["name_parts"]["built_as"] == {"sex": "woman", "rank": "noble"}
 
 
 async def test_the_owners_given_name_is_kept_when_the_model_adds_to_it(test3):
@@ -367,29 +331,6 @@ async def test_the_owners_given_name_is_kept_when_the_model_adds_to_it(test3):
         None,
     )
     assert cleaned.name == "Ysolde of Drassone"
-
-
-def test_rename_in_preview_takes_possessives_first_names_and_the_models_aka():
-    """Final review I2: "Elise's brother", "Elise grew up…" and the model's
-    everyday "Elise" all follow the rename."""
-
-    from talemate.worldplay.cleaning import rename_in_preview
-
-    preview = CreatePreview(
-        kind="character",
-        prompt="x",
-        name="Elise Vane",
-        facts=[
-            PreviewFact(category="relationship", text="Elise Vane's brother is Tom."),
-            PreviewFact(category="background", text="Elise grew up by the sea."),
-        ],
-        prose={},
-        aka=[{"name": "Elise", "tag": "common", "everyday": True}],
-    )
-    out = rename_in_preview(preview, "Elise Vane", "Maëlis of Drassone")
-    assert out.facts[0].text == "Maëlis of Drassone's brother is Tom."
-    assert out.facts[1].text == "Maëlis grew up by the sea."
-    assert out.aka == []
 
 
 async def test_a_person_only_placed_by_the_model_is_named_in_that_places_language(

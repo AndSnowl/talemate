@@ -4047,7 +4047,11 @@ def _live_parts(
     from talemate.languages.person_names import stored_written
 
     stored = fields.get("name_parts")
-    if stored is None or stored_written(view, stored) == preview.name:
+    if (
+        stored is None
+        or not stored.get("parts")
+        or stored_written(view, stored) == preview.name
+    ):
         return fields
     return {k: v for k, v in fields.items() if k != "name_parts"}
 
