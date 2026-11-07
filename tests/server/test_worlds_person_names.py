@@ -548,3 +548,56 @@ async def test_narrator_words_around_the_parts_keep_them(plugin):
     assert len(_thing(plugin, w.maelis).fields["name_parts"]["parts"]) == 3
     await _act(plugin, "person_name_part", thing_id=w.maelis, index=0, text="Ysolde")
     assert _thing(plugin, w.maelis).fields["name"] == "Lady Ysolde of Drassone the Fair"
+
+
+# --- the rule picked when Name it opens (languages 4c, Task 4) ---------------
+
+
+async def test_a_page_pick_is_stored_once(plugin, monkeypatch):
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.remove_field_value(w.maelis, "name_parts", None)
+    replies = iter(
+        [
+            '{"rule": "noble-women", "sex": "woman", "rank": "noble"}',
+            '{"rule": "common-women", "sex": "woman", "rank": "common"}',
+        ]
+    )
+    monkeypatch.setattr(
+        WorldsPlugin, "_language_reply", lambda self: (None, next(replies))
+    )
+    await _act(plugin, "name_it_pick", language_id=w.lang, thing_id=w.maelis)
+    data = _last(plugin, "name_it_pick")["data"]
+    assert (data["rule_id"], data["fallback"], data["thing_id"]) == (
+        "noble-women",
+        False,
+        w.maelis,
+    )
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert stored["rule"] == "noble-women" and stored["built_as"]["rank"] == "noble"
+    assert stored["parts"] == []
+    await _act(plugin, "name_it_pick", language_id=w.lang, thing_id=w.maelis)
+    assert _last(plugin, "name_it_pick")["data"]["rule_id"] == "noble-women"
+    assert _thing(plugin, w.maelis).fields["name_parts"]["rule"] == "noble-women"
+
+
+async def test_a_draft_pick_is_answered_not_stored(plugin, monkeypatch):
+    w = await _world(plugin)
+    monkeypatch.setattr(
+        WorldsPlugin,
+        "_language_reply",
+        lambda self: (None, '{"rule": "noble-men", "sex": "man", "rank": "noble"}'),
+    )
+    await _act(
+        plugin,
+        "name_it_pick",
+        language_id=w.lang,
+        draft={"prompt": "a young lord", "facts": ["He hunts."]},
+        draft_key="d1",
+    )
+    data = _last(plugin, "name_it_pick")["data"]
+    assert (data["rule_id"], data["draft_key"], data["built_as"]["sex"]) == (
+        "noble-men",
+        "d1",
+        "man",
+    )

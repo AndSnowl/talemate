@@ -734,6 +734,10 @@ export const useWorldsStore = defineStore('worlds', {
         // a ruler's number for the name being built (languages 4c): the
         // name's own, or what the owner typed; '' for none
         nameItRegnal: '',
+        // the model's pick of a person's rule, when Name it opens on them
+        // (languages 4c): `{rule_id, why, built_as, fallback}` once it's in
+        nameItPicking: false,
+        nameItPicked: null,
         nameItBuilding: false,
         // the language and rule the builder last asked for: a reply for
         // another is dropped (final review I5)
@@ -1493,6 +1497,24 @@ export const useWorldsStore = defineStore('worlds', {
             });
         },
 
+        // ask the model which rule fits the person Name it is open on (4c):
+        // a page by its id, a draft by its prompt and facts
+        nameItPick(languageId) {
+            const request = this.nameIt;
+            const person = request?.person;
+            if (!person || !languageId) return;
+            this.nameItPicking = true;
+            this.nameItPicked = null;
+            const draftKey = request.target?.draftKey;
+            const edited = draftKey && this.draft?.key === draftKey ? this.draft.edited : null;
+            this.request('name_it_pick', {
+                language_id: languageId,
+                ...(person.thingId
+                    ? { thing_id: person.thingId }
+                    : { draft: { prompt: edited?.prompt || '', facts: (edited?.facts || []).map((f) => f.text) }, draft_key: draftKey }),
+            });
+        },
+
         // an inherited part unpinned (it rolls like any part), or pinned
         // to its source again
         nameItFreePart(index) {
@@ -1611,6 +1633,8 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameItPartChosen = {};
             this.nameItPartPinned = {};
             this.nameItPartFree = [];
+            this.nameItPicking = false;
+            this.nameItPicked = null;
             this.nameItBuilding = false;
             this.nameItAsked = null;
             this.nameItShapeChoice = null;
@@ -3063,6 +3087,29 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'name_it_parts':
                     if (this.nameIt) this.nameItTakeParts(data);
+                    break;
+                case 'name_it_pick': {
+                    // only for the person Name it is still open on
+                    const person = this.nameIt?.person;
+                    if (!person) break;
+                    const ours = data.thing_id ? data.thing_id === person.thingId : !!data.draft_key && data.draft_key === this.nameIt.target?.draftKey;
+                    if (!ours) break;
+                    this.nameItPicking = false;
+                    this.nameItPicked = { rule_id: data.rule_id, why: data.why || '', built_as: data.built_as || {}, fallback: !!data.fallback };
+                    const builtAs = data.built_as || person.builtAs;
+                    this.nameIt = {
+                        ...this.nameIt,
+                        person: { ...person, builtAs, ...(person.draft ? { draft: { ...person.draft, built_as: builtAs } } : {}) },
+                    };
+                    // a draft keeps its pick (it's asked once)
+                    if (!data.thing_id && this.draft?.key === data.draft_key) {
+                        const stored = this.draft.edited.fields?.name_parts || { language: data.language_id, shape: 0, parts: [] };
+                        this.editDraft({ fields: { ...(this.draft.edited.fields || {}), name_parts: { ...stored, rule: data.rule_id, built_as: data.built_as || {} } } });
+                    }
+                    break;
+                }
+                case 'name_it_pick_failed':
+                    this.nameItPicking = false;
                     break;
                 case 'name_it_suggest': {
                     if (!this.nameIt) break;

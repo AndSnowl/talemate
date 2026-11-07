@@ -386,12 +386,9 @@ def test_name_it_lists_main_rules_before_pieces(app, page):
     assert "noble-women" in items[:at] and "women-given" in items[at:]
 
 
-def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
-    """Languages 4c: the sovereign rule says "Gosmar" (tsar), so "Tsar
-    Aleksi III" becomes "Gosmar <name> III": the English title goes, the
-    number stays."""
-
-    import re
+def _tsar_world(app, page, stem):
+    """A sovereign rule that says "Gosmar" (tsar), and Tsar Aleksi III with
+    no name parts (languages 4c)."""
 
     from talemate.languages.models import GeneratorDef, NamePart, NameShape
 
@@ -414,7 +411,7 @@ def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
         )
     )
     lang = lang.model_validate(lang.model_dump())
-    name = _world_name("Person tsar")
+    name = _world_name(stem)
     seed_fm_world(
         app.root,
         name,
@@ -440,6 +437,16 @@ def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
     _open_world(page, name)
     _world_tab(page)
     _open_thing(page, "Tsar Aleksi III")
+
+
+def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
+    """Languages 4c: the sovereign rule says "Gosmar" (tsar), so "Tsar
+    Aleksi III" becomes "Gosmar <name> III": the English title goes, the
+    number stays."""
+
+    import re
+
+    _tsar_world(app, page, "Person tsar")
     page.get_by_test_id("name-it-thing").click()
     panel = page.get_by_test_id("name-it")
     panel.get_by_test_id("name-it-rule").click()
@@ -453,4 +460,20 @@ def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
     panel.get_by_test_id("name-it-use").click()
     expect(page.get_by_test_id("thing-name")).to_have_text(
         re.compile(r"^Gosmar \w+ III$"), timeout=TIMEOUT_MS
+    )
+
+
+def test_name_it_opens_on_the_models_pick(app, page, fixed_language):
+    """Languages 4c: Name it on an unpicked person asks the model, switches
+    to its pick and says why."""
+
+    fixed_language({"rule": "sovereign", "sex": "man", "rank": "sovereign"})
+    _tsar_world(app, page, "Person pick")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel.get_by_test_id("name-it-picked")).to_contain_text(
+        "the tsar and his heirs", timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Gosmar", timeout=TIMEOUT_MS
     )

@@ -32,6 +32,8 @@ __all__ = [
     "remove_title",
     "set_built_as",
     "set_part",
+    "store_pick",
+    "stored_rule",
     "set_regnal",
     "set_pet_name",
     "stored_parts",
@@ -199,6 +201,52 @@ def _rewrite(
     name = rewritten_name(old_name, stored_written(view, stored), new_written)
     rename_everywhere(rev, world, thing_id, name)
     rev.set_field(thing_id, "name_parts", new, None)
+
+
+def stored_rule(view, thing_id: str) -> str:
+    """The rule a person's name is kept with: picked, or used; "" none."""
+
+    state = view.thing(thing_id)
+    stored = state.fields.get("name_parts") if state is not None else None
+    return str(stored.get("rule") or "") if isinstance(stored, dict) else ""
+
+
+def store_pick(
+    rev: Revision, world: World, thing_id: str, language_id: str, pick
+) -> None:
+    """The model's pick kept with the person (languages 4c): its rule and
+    built-as, in their name details (made with no parts when they have
+    none); a rule already kept is never overwritten."""
+
+    view = world.view()
+    state = view.thing(thing_id)
+    if state is None:
+        raise KeyError(f"no such thing: {thing_id}")
+    stored = state.fields.get("name_parts")
+    if isinstance(stored, dict) and stored.get("rule"):
+        return
+    base = (
+        stored
+        if isinstance(stored, dict)
+        else {"language": language_id, "shape": 0, "parts": []}
+    )
+    rev.set_field(
+        thing_id,
+        "name_parts",
+        {**base, "rule": pick.rule_id, "built_as": dict(pick.built_as)},
+        None,
+    )
+
+
+def person_text(view, thing_id: str) -> str:
+    """Who a person is, for the model: their name and facts."""
+
+    state = view.thing(thing_id)
+    if state is None:
+        return ""
+    lines = [view.name_of(thing_id) or ""]
+    lines += [f"- {f.text}" for f in state.facts]
+    return "\n".join(lines)
 
 
 def set_built_as(rev: Revision, world: World, thing_id: str, built_as: dict) -> None:

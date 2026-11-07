@@ -4545,6 +4545,29 @@ check('Use this name on a person renames the whole name, its title dropped (4c)'
     assert.equal(asked.regnal, 'III');
 });
 
+check('opening Name it on an unpicked person asks for a pick (4c)', () => {
+    const { store, sent } = freshStore();
+    store.openNameIt({ words: 'Aleksi', languageId: 'L', kind: 'character', target: { thingId: 't1', fullName: 'Aleksi' }, person: { thingId: 't1', builtAs: {} }, ruleId: '' });
+    store.nameItPick('L');
+    const asked = sent.filter((m) => m.action === 'name_it_pick').at(-1);
+    assert.equal(asked.thing_id ?? asked.data?.thing_id, 't1');
+    assert.equal(store.nameItPicking, true);
+    store.handleMessage(reply('name_it_pick', { language_id: 'L', thing_id: 't1', rule_id: 'sovereign', built_as: { sex: 'man' }, why: 'the tsar and his heirs', fallback: false }));
+    assert.equal(store.nameItPicking, false);
+    assert.deepEqual(store.nameItPicked, { rule_id: 'sovereign', why: 'the tsar and his heirs', built_as: { sex: 'man' }, fallback: false });
+});
+
+check('a late pick for another request is dropped (4c)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Aleksi', languageId: 'L', kind: 'character', target: { thingId: 't1', fullName: 'Aleksi' }, person: { thingId: 't1', builtAs: {} }, ruleId: '' });
+    store.nameItPick('L');
+    store.handleMessage(reply('name_it_pick', { language_id: 'L', thing_id: 't2', rule_id: 'men', built_as: {}, why: '', fallback: false }));
+    assert.equal(store.nameItPicked, null);
+    store.closeNameIt();
+    store.handleMessage(reply('name_it_pick', { language_id: 'L', thing_id: 't1', rule_id: 'men', built_as: {}, why: '', fallback: false }));
+    assert.equal(store.nameItPicked, null);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

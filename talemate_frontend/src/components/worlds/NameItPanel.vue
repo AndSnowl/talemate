@@ -42,6 +42,7 @@
                     v-if="!titleMode"
                     v-model="ruleId"
                     :items="ruleItems"
+                    @update:model-value="ownerChose = true"
                     label="Rule"
                     density="compact"
                     variant="outlined"
@@ -50,6 +51,7 @@
                     :disabled="!languageId"
                     data-testid="name-it-rule"
                 ></v-select>
+                <span v-if="worlds.nameItPicking" class="text-caption text-muted" data-testid="name-it-picking">picking the rule…</span>
                 <v-select
                     v-if="!composed && !titleMode"
                     v-model="pattern"
@@ -90,6 +92,10 @@
                 >Suggest meanings from {{ suggestName }}'s facts</v-btn>
             </div>
             <div v-if="!languageId" class="text-body-2 text-muted mt-2">Pick the language to name it in.</div>
+            <!-- why the model picked this rule (languages 4c) -->
+            <div v-if="worlds.nameItPicked && worlds.nameItPicked.rule_id === ruleId && worlds.nameItPicked.why" class="text-caption text-muted mt-1" data-testid="name-it-picked">
+                picked: {{ worlds.nameItPicked.why }}<template v-if="worlds.nameItPicked.fallback"> (by sex and rank)</template>
+            </div>
 
             <!-- a composed rule: the builder, part by part (languages 4b-1) -->
             <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
@@ -178,7 +184,7 @@ export default {
     },
     data() {
         // `picked`: the indices of the entry name's words chosen to rename
-        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [], adopting: false };
+        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [], adopting: false, ownerChose: false };
     },
     computed: {
         request() {
@@ -256,6 +262,7 @@ export default {
                 if (before && request.target === before.target) return;
                 if (!this.worlds.things.language) this.worlds.listThings('language');
                 this.picked = this.indicesOf(request.words || '');
+                this.ownerChose = false;
                 this.meaning = '';
                 this.ruleId = null;
                 this.pattern = null;
@@ -276,7 +283,11 @@ export default {
             if (this.request?.person) {
                 // a person's (languages 4b-2): theirs, or the server's pick
                 this.ruleId = this.request.ruleId || '';
-                if (this.ruleId === '') this.roll();
+                if (this.ruleId === '') {
+                    // today's matching shows while the model picks (4c)
+                    this.roll();
+                    this.worlds.nameItPick(this.languageId);
+                }
                 return;
             }
             const kind = this.request?.kind || 'place';
@@ -302,6 +313,13 @@ export default {
             const person = this.request?.person;
             if (person?.prefill && this.ruleId === this.request.ruleId) this.worlds.nameItPartPinned = { ...person.prefill };
             this.roll();
+        },
+        // the model's pick arrived: the panel switches to it (4c)
+        'worlds.nameItPicked'(picked) {
+            // a rule the owner chose first is kept
+            if (picked && this.request?.person && !this.ownerChose && picked.rule_id && picked.rule_id !== this.ruleId) {
+                this.ruleId = picked.rule_id;
+            }
         },
         // the rule the server picked for a person, shown as the panel's
         'worlds.nameItParts'(parts) {
