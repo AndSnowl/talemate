@@ -176,6 +176,23 @@
           "title": "For Person",
           "type": "object"
         },
+        "main": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Main"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
         "capitalize": {
           "default": true,
           "title": "Capitalize",

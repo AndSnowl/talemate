@@ -241,6 +241,11 @@ def _people_names_problems(language: Language) -> list[str]:
 
     for generator in language.generators:
         unknown(f"The name rule {generator.id!r}", generator.for_person)
+        if len(generator.description) > 120:
+            problems.append(
+                f"The name rule {generator.id!r} has a description over 120 "
+                "characters: keep it to one short line"
+            )
         for shape in generator.shapes:
             for part in shape.parts:
                 if part.label:

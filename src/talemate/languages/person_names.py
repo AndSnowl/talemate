@@ -30,6 +30,7 @@ __all__ = [
     "address_row",
     "build_person_name",
     "choose",
+    "is_main",
     "connections_of",
     "fact_role",
     "kept_title",
@@ -270,6 +271,22 @@ def pick_rule(language: Language, built_as: dict[str, str]) -> GeneratorDef:
 # the kinds a parent can be (a realm "daughter of the sovereign" names
 # isn't one, acceptance 4b-2)
 PARENT_KINDS = ("character", "being")
+
+
+# the uses whose rules are never a whole name by default (languages 4c)
+PIECE_USES = ("words", "pet names")
+
+
+def is_main(language: Language, generator: GeneratorDef) -> bool:
+    """A main rule (a whole name: a person's, a place's…) or a piece other
+    rules are made of: the file's say first; else a rule another rule uses
+    as a part, or one for ordinary words or pet names, is a piece."""
+
+    if generator.main is not None:
+        return generator.main
+    if generator.use in PIECE_USES:
+        return False
+    return generator.id not in _building_blocks(language)
 
 
 def _parent_like(connection: Connection) -> bool:

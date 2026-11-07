@@ -257,3 +257,12 @@ def test_names_brief_asks_for_people_names():
     assert "pet names" in brief and "never give it back as it is" in brief
     # the valid uses, so a rule never says "given name"
     assert "character" in brief and "demonym" in brief
+
+
+def test_names_brief_asks_for_main_and_descriptions():
+    """Languages 4c: Fill them in marks main rules and describes them."""
+
+    brief = write_brief(
+        None, MakeRequest(kind="names", target_id="x", text=""), current=SAMPLE_FILE
+    )
+    assert "`main`" in brief and "`description`" in brief
