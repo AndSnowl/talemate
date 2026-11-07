@@ -120,9 +120,10 @@ def test_new_version_shows_kept_used_words(app, page):
     thing = _open_thing(page, "Velskar")
     thing.get_by_test_id("language-tab-language").click()
     _chapter(thing, "Name rules")
-    expect(thing.get_by_test_id("language-generator").first).to_contain_text(
-        "Words", timeout=TIMEOUT_MS
-    )
+    # the words rule is a piece now, folded below the main rules (4c)
+    expect(
+        thing.get_by_test_id("language-generator").filter(has_text="Words")
+    ).to_have_count(1, timeout=TIMEOUT_MS)
     _chapter(thing, "Sounds")
     expect(thing.get_by_test_id("language-inventory")).to_contain_text("C")
     # the import box sits in the Overview chapter

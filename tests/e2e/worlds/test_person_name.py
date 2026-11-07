@@ -477,3 +477,80 @@ def test_name_it_opens_on_the_models_pick(app, page, fixed_language):
     expect(panel.get_by_test_id("name-it-built")).to_contain_text(
         "Gosmar", timeout=TIMEOUT_MS
     )
+
+
+def test_name_it_from_the_page_keeps_the_narrator_words(app, page):
+    """Final review C1: Name it from the page replaces the proper part
+    only; with a rule that says no title, "Tsar" and "III" stay."""
+
+    import re
+
+    _tsar_world(app, page, "Person keeps tsar")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    page.locator(".v-overlay--active .v-list-item").filter(
+        has_text="noble-men"
+    ).first.click()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        " of ", timeout=TIMEOUT_MS
+    )
+    panel.get_by_test_id("name-it-use").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        re.compile(r"^Tsar \w+ of \w+ III$"), timeout=TIMEOUT_MS
+    )
+
+
+def test_a_composed_place_rule_shows_no_stale_rolls(app, page):
+    """Final review I4: switching a place's Name it from a plain rule to a
+    composed one shows the builder alone."""
+
+    from talemate.languages.models import GeneratorDef, NamePart, NameShape
+
+    lang = LANGUAGE.model_copy(deep=True)
+    lang.generators.extend(
+        [
+            GeneratorDef(
+                id="towns", name="Towns", use="place", patterns=["[Vesk|Morv]ansk"]
+            ),
+            GeneratorDef(
+                id="lakes",
+                name="Lakes by meaning",
+                use="place",
+                shapes=[NameShape(parts=[NamePart(kind="meaning")])],
+            ),
+        ]
+    )
+    lang = lang.model_validate(lang.model_dump())
+    name = _world_name("Place composed")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Drassonais",
+                "fields": {"name": "Drassonais", **fields_of(lang)},
+            },
+            {
+                "kind": "place",
+                "name": "Lake Vamod",
+                "languages": [{"language": "Drassonais", "role": "official"}],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    _open_thing(page, "Lake Vamod")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel.get_by_test_id("name-it-name").first).to_be_visible(timeout=TIMEOUT_MS)
+    panel.get_by_test_id("name-it-rule").click()
+    page.locator(".v-overlay--active .v-list-item").filter(
+        has_text="Lakes by meaning"
+    ).first.click()
+    expect(panel.get_by_test_id("name-builder-part").first).to_be_visible(
+        timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-name")).to_have_count(0)

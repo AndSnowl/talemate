@@ -133,3 +133,28 @@ async def test_a_persons_mark_covers_the_whole_proper_part(world, moscavia):
         lists=NameLists(real=["Aleksi", "Romanov"]),
     )
     assert [(m.name, m.part) for m in marks] == [("Aleksi Romanov", "Aleksi Romanov")]
+
+
+async def test_keep_and_never_flag_stick_for_a_whole_person_name(world, moscavia):
+    """Final review C2: a person's mark is the whole proper part; Keep it
+    (keep) and Never flag it (the keep list) skip it next time."""
+
+    texts = ["Tsar Aleksi Romanov III rules from the north."]
+    listed = [("Tsar Aleksi Romanov III", "character")]
+    kept = await _mark(
+        world,
+        moscavia,
+        texts,
+        listed=listed,
+        lists=NameLists(real=["Aleksi", "Romanov"]),
+        keep={"Aleksi Romanov"},
+    )
+    assert kept == []
+    never = await _mark(
+        world,
+        moscavia,
+        texts,
+        listed=listed,
+        lists=NameLists(real=["Aleksi", "Romanov"], keep=["Aleksi Romanov"]),
+    )
+    assert never == []

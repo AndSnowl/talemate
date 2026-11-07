@@ -99,6 +99,7 @@
 
             <!-- a composed rule: the builder, part by part (languages 4b-1) -->
             <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
+            <NameRolls v-else-if="!titleMode" class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
             <!-- a ruler's number, the narrator's (languages 4c) -->
             <div v-if="request.person && composed" class="d-flex align-center ga-2 mt-2" data-testid="name-it-regnal">
                 <span class="text-caption text-muted">number after the name</span>
@@ -113,7 +114,6 @@
                 ></v-text-field>
                 <span class="text-caption text-muted">Roman numerals, as the narrator writes them</span>
             </div>
-            <NameRolls v-else-if="!titleMode" class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
             <div v-if="meaningShown && !composed && !titleMode" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
             <!-- a plain rule only: the whole name from a meaning (a rule made

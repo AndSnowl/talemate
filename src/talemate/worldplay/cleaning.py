@@ -264,12 +264,17 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
                 "shown": "before",
             }
         )
-    marks = [m for m in preview.marks if m.name != preview.name]
+    # one mark, on the name's proper part: Name it keeps the narrator words
+    # around it (final review C1/I2)
+    from talemate.languages.cleaning.find import proper_part
+
+    proper = proper_part(preview.name) or preview.name
+    marks = [m for m in preview.marks if m.name not in (preview.name, proper)]
     marks.append(
         Mark(
             id=uuid.uuid4().hex[:12],
-            name=preview.name,
-            part=preview.name,
+            name=proper,
+            part=proper,
             why=f"Name it can build it from {language.name}'s rules for people",
             language_id=language_id,
             entry_kind="character",

@@ -6426,7 +6426,13 @@ class WorldsPlugin(Plugin):
         echo = {"language_id": state.id, "thing_id": thing_id, "draft_key": draft_key}
         view = world.view()
         if thing_id:
-            kept = stored_rule(view, thing_id)
+            kept_parts = view.thing(thing_id).fields.get("name_parts") or {}
+            # a rule kept in another language isn't this one's (review I3)
+            kept = (
+                stored_rule(view, thing_id)
+                if kept_parts.get("language") == state.id
+                else ""
+            )
             if kept:
                 rule = next((g for g in language.generators if g.id == kept), None)
                 stored = view.thing(thing_id).fields.get("name_parts") or {}

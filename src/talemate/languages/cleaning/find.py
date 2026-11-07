@@ -198,7 +198,12 @@ def spots(
     def add(full: str, kind: str, own: bool, listed_name: bool = False) -> None:
         for name, part in _parts(full, kind):
             key = name.lower()
-            if key in protected or full.lower() in protected:
+            # a person's whole proper part kept counts too (final review C2)
+            if (
+                key in protected
+                or full.lower() in protected
+                or (kind in PERSON_KINDS and proper_part(full).lower() in protected)
+            ):
                 continue
             if named_languages(view, name):
                 continue

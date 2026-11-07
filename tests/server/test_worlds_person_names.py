@@ -456,11 +456,15 @@ def test_a_drafted_persons_name_view_is_the_pages():
         fields={"name": "Drassonais", **fields_of(DRASSONAIS)},
     )
     view = View({lang.id: lang})
-    preview = NS(kind="character", fields={"name_parts": _parts(lang.id)})
+    preview = NS(
+        kind="character",
+        name="Maëlis of Drassone",
+        fields={"name_parts": _parts(lang.id)},
+    )
     shown = draft_name_view(view, preview)
     assert shown["language"]["name"] == "Drassonais"
     assert [p["written"] for p in shown["parts"]] == ["Maëlis", "of", "Drassone"]
-    assert draft_name_view(view, NS(kind="character", fields={})) is None
+    assert draft_name_view(view, NS(kind="character", name="X", fields={})) is None
 
 
 async def test_name_it_parts_says_the_rules_title_words(plugin):
@@ -600,4 +604,46 @@ async def test_a_draft_pick_is_answered_not_stored(plugin, monkeypatch):
         "noble-men",
         "d1",
         "man",
+    )
+
+
+async def test_the_name_view_says_the_proper_part(plugin):
+    """Final review C1: Name it from the page replaces the proper part,
+    narrator words kept."""
+
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.set_field(w.maelis, "name", "Lady Maëlis of Drassone the Fair", None)
+    await _act(plugin, "get_thing", id=w.maelis)
+    assert _last(plugin, "get_thing")["data"]["name_view"]["proper"] == "Maëlis"
+
+
+async def test_a_pick_in_another_language_is_answered_for_it(plugin, monkeypatch):
+    """Final review I3: a rule kept in one language isn't answered for
+    another, and a pick in another language doesn't overwrite the parts."""
+
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        other = rev.create_thing(
+            "language",
+            {
+                "name": "Other",
+                **fields_of(DRASSONAIS.model_copy(update={"name": "Other"})),
+            },
+        )
+    monkeypatch.setattr(
+        WorldsPlugin,
+        "_language_reply",
+        lambda self: (
+            None,
+            '{"rule": "common-women", "sex": "woman", "rank": "common"}',
+        ),
+    )
+    await _act(plugin, "name_it_pick", language_id=other, thing_id=w.maelis)
+    assert _last(plugin, "name_it_pick")["data"]["rule_id"] == "common-women"
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert (
+        stored["language"] == w.lang
+        and stored["rule"] == "noble-women"
+        and len(stored["parts"]) == 3
     )

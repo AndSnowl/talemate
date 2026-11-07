@@ -187,7 +187,7 @@ import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import { markEdit, pickName, swapName } from '../components/worlds/nameMarks.js';
 import { draftNameEdit } from '../components/worlds/personName.js';
-import { personRename } from '../components/worlds/nameParts.js';
+import { personRename, regnalError } from '../components/worlds/nameParts.js';
 import { composeName } from '../components/worlds/nameParts.js';
 import {
     factsKey,
@@ -738,6 +738,7 @@ export const useWorldsStore = defineStore('worlds', {
         // (languages 4c): `{rule_id, why, built_as, fallback}` once it's in
         nameItPicking: false,
         nameItPicked: null,
+        nameItPickLanguage: null,
         nameItBuilding: false,
         // the language and rule the builder last asked for: a reply for
         // another is dropped (final review I5)
@@ -1433,7 +1434,9 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameIt = { ...request };
             // a ruler's number in the name, kept unless the owner changes
             // it (languages 4c)
-            const full = request.target?.fullName || request.words || '';
+            // a draft's own name when it has no full name (final review I2)
+            const draftName = request.target?.draftKey && this.draft?.key === request.target.draftKey ? this.draft.edited?.name : '';
+            const full = request.target?.fullName || draftName || request.words || '';
             this.nameItRegnal = full.split(/\s+/).find((w) => /^[IVXLCDM]+$/.test(w)) || '';
         },
 
@@ -1505,6 +1508,7 @@ export const useWorldsStore = defineStore('worlds', {
             if (!person || !languageId) return;
             this.nameItPicking = true;
             this.nameItPicked = null;
+            this.nameItPickLanguage = languageId;
             const draftKey = request.target?.draftKey;
             const edited = draftKey && this.draft?.key === draftKey ? this.draft.edited : null;
             this.request('name_it_pick', {
@@ -1679,6 +1683,8 @@ export const useWorldsStore = defineStore('worlds', {
         pickNameIt(languageId, name, meaning = '', newWords = []) {
             const request = this.nameIt;
             if (!request) return;
+            // a number the narrator can't write is never used (review I1)
+            if (request.person && regnalError(this.nameItRegnal)) return;
             const target = request.target || {};
             const options = { flagged: !!request.markId, kind: request.kind || 'place' };
             const words = languageId ? [...newWords.map((part) => [part.word, part.meaning]), [name, meaning]] : [];
@@ -3092,7 +3098,9 @@ export const useWorldsStore = defineStore('worlds', {
                     // only for the person Name it is still open on
                     const person = this.nameIt?.person;
                     if (!person) break;
-                    const ours = data.thing_id ? data.thing_id === person.thingId : !!data.draft_key && data.draft_key === this.nameIt.target?.draftKey;
+                    const ours = (data.thing_id ? data.thing_id === person.thingId : !!data.draft_key && data.draft_key === this.nameIt.target?.draftKey)
+                        // and for the language asked in (final review I3)
+                        && data.language_id === this.nameItPickLanguage;
                     if (!ours) break;
                     this.nameItPicking = false;
                     this.nameItPicked = { rule_id: data.rule_id, why: data.why || '', built_as: data.built_as || {}, fallback: !!data.fallback };

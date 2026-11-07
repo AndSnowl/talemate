@@ -1533,7 +1533,8 @@ export default {
         },
         // Name it on a drafted person, from its Name section (4b-2)
         nameItDraftPerson() {
-            this.nameItOwnName({ part: this.edited.name, name: this.edited.name, id: null, language_id: this.edited.fields?.name_parts?.language });
+            const proper = this.thing.name_view?.proper || this.edited.name;
+            this.nameItOwnName({ part: proper, name: proper, id: null, language_id: this.edited.fields?.name_parts?.language });
         },
         nameItOwnName(flag = null) {
             const mark = flag || this.nameFlag;
@@ -1573,7 +1574,9 @@ export default {
                 }
                 : null;
             this.worlds.openNameIt({
-                words: this.thing.name,
+                // a person: the name's proper part, its narrator words kept
+                // (final review C1)
+                words: view?.proper || this.thing.name,
                 languageId: view?.language?.id || [...own, ...seen][0]?.language || null,
                 kind: this.thing.kind,
                 // the panel can rename only part of it (owner, Test3)

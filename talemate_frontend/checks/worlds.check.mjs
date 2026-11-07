@@ -4568,6 +4568,31 @@ check('a late pick for another request is dropped (4c)', () => {
     assert.equal(store.nameItPicked, null);
 });
 
+check('a number that is not a Roman numeral blocks Use this name (final review I1)', () => {
+    const { store, sent } = personNameIt();
+    store.nameItRegnal = 'the Third';
+    store.pickNameIt('L', store.nameItBuilt);
+    assert.equal(sent.filter((m) => m.action === 'name_it_rename').length, 0);
+    assert.ok(store.nameIt, 'the panel stays open');
+});
+
+check('Name it on a drafted ruler keeps the draft name number (final review I2)', () => {
+    const { store } = freshStore();
+    store.draft = { key: 'd1', edited: { name: 'Tsar Aleksi III', fields: {} } };
+    store.openNameIt({ words: 'Aleksi', languageId: 'L', kind: 'character', target: { draftKey: 'd1' }, person: { builtAs: {}, draft: {} } });
+    assert.equal(store.nameItRegnal, 'III');
+});
+
+check('a pick for another language is dropped (final review I3)', () => {
+    const { store } = freshStore();
+    store.openNameIt({ words: 'Aleksi', languageId: 'L', kind: 'character', target: { thingId: 't1', fullName: 'Aleksi' }, person: { thingId: 't1', builtAs: {} }, ruleId: '' });
+    store.nameItPick('M');
+    store.handleMessage(reply('name_it_pick', { language_id: 'L', thing_id: 't1', rule_id: 'men', built_as: {}, why: '', fallback: false }));
+    assert.equal(store.nameItPicked, null);
+    store.handleMessage(reply('name_it_pick', { language_id: 'M', thing_id: 't1', rule_id: 'men', built_as: {}, why: '', fallback: false }));
+    assert.equal(store.nameItPicked.rule_id, 'men');
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

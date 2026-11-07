@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import random
 
+from talemate.languages.cleaning.find import proper_part
 from talemate.languages.entry import language_of
 from talemate.languages.lookup import default_language, languages_for
 from talemate.languages.person_names import (
@@ -223,7 +224,18 @@ def store_pick(
     if state is None:
         raise KeyError(f"no such thing: {thing_id}")
     stored = state.fields.get("name_parts")
-    if isinstance(stored, dict) and stored.get("rule"):
+    if (
+        isinstance(stored, dict)
+        and stored.get("rule")
+        and stored.get("language") == language_id
+    ):
+        return
+    # parts built in another language aren't overwritten (final review I3)
+    if (
+        isinstance(stored, dict)
+        and stored.get("language") not in (None, "", language_id)
+        and stored.get("parts")
+    ):
         return
     base = (
         stored
@@ -233,7 +245,12 @@ def store_pick(
     rev.set_field(
         thing_id,
         "name_parts",
-        {**base, "rule": pick.rule_id, "built_as": dict(pick.built_as)},
+        {
+            **base,
+            "language": language_id,
+            "rule": pick.rule_id,
+            "built_as": dict(pick.built_as),
+        },
         None,
     )
 
@@ -425,7 +442,10 @@ def name_view(view, state) -> dict | None:
     if state.kind != "character":
         return None
     return _name_view(
-        view, person_language(view, state.id), state.fields.get("name_parts")
+        view,
+        person_language(view, state.id),
+        state.fields.get("name_parts"),
+        view.name_of(state.id) or "",
     )
 
 
@@ -440,10 +460,10 @@ def draft_name_view(view, preview) -> dict | None:
     state = view.thing(str(stored.get("language") or ""))
     if state is None or state.kind != "language":
         return None
-    return _name_view(view, state, stored)
+    return _name_view(view, state, stored, preview.name)
 
 
-def _name_view(view, language_state, stored) -> dict | None:
+def _name_view(view, language_state, stored, name: str = "") -> dict | None:
     from talemate.languages.composed import _generator
 
     if language_state is None:
@@ -452,6 +472,9 @@ def _name_view(view, language_state, stored) -> dict | None:
     people = language.people_names
     out: dict = {
         "language": {"id": language_state.id, "name": language.name},
+        # the words Name it replaces: the name without its narrator words
+        # (final review C1)
+        "proper": proper_part(name) or name,
         "rule": None,
         "rule_name": None,
         "built_as": {},
