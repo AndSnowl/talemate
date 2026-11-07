@@ -80,6 +80,8 @@ Which parent is the language's choice. The rule says which role words it reads, 
 
 ### On the draft
 
+**Changed before merge (owner, 2026-11-06): drafts only mark.** The automatic build below was turned off. A person's draft keeps the model's name and marks it ("Name it can build it from ⟨Language⟩'s rules for people"). The draft also keeps who the person is built as, and the model's title. Name it opens with the rule for them and the inherited parts pinned. Building automatically waits for 4c, where the model picks the rule from descriptions Claude writes, and one shared draft pipeline does the same for "+ Add facts" and group adds. The rest of this section describes the build Name it now does.
+
 Drafts only mark names (4a). *My call* (the owner agreed to the playback): **the draft shows the full name at once,** with the inherited parts filled from the parent and the rest made up, and the whole name still marked. **Name it…** opens with the inherited parts pinned, showing where they came from, so a reroll changes only the made-up parts. Whatever the owner typed in the prompt as the name wins over every rule.
 
 *My calls* on how far that goes:

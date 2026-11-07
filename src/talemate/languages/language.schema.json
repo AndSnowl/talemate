@@ -1,5 +1,38 @@
 {
   "$defs": {
+    "AddressRow": {
+      "description": "How one kind of relationship addresses a person: the role words\nthat map onto it and the parts it uses (part labels, \"title\", \"pet\nname\"); the `default` row is for anyone unmatched.",
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "uses": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Uses",
+          "type": "array"
+        },
+        "default": {
+          "type": "boolean",
+          "default": false,
+          "title": "Default"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "AddressRow",
+      "type": "object"
+    },
     "DictionaryEntry": {
       "description": "A word and its meanings (\"wind\", \"breath\"); a word made only to be\na name may have none. An older file's single `meaning` is read as the\nfirst meaning and never written back.",
       "properties": {
@@ -136,6 +169,13 @@
           "title": "Reject",
           "type": "array"
         },
+        "for_person": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "For Person",
+          "type": "object"
+        },
         "capitalize": {
           "default": true,
           "title": "Capitalize",
@@ -263,6 +303,25 @@
       "title": "GrammarTable",
       "type": "object"
     },
+    "KeptTitle": {
+      "description": "A title the language keeps in its own word (a Tsar), with what it\nmeans in English; every other title is written in English.",
+      "properties": {
+        "word": {
+          "title": "Word",
+          "type": "string"
+        },
+        "meaning": {
+          "title": "Meaning",
+          "type": "string"
+        }
+      },
+      "required": [
+        "word",
+        "meaning"
+      ],
+      "title": "KeptTitle",
+      "type": "object"
+    },
     "Language": {
       "properties": {
         "name": {
@@ -352,6 +411,17 @@
             }
           ],
           "default": null
+        },
+        "people_names": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PeopleNames"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -424,13 +494,15 @@
       "type": "object"
     },
     "NamePart": {
-      "description": "One part of a composed name rule: another rule, a fixed word, or a\nmeaning part (words of the language built from a meaning).",
+      "description": "One part of a composed name rule: another rule, a fixed word, a\nmeaning part (words of the language built from a meaning), a part\ntaken from a connection (\"connection\": the father's house), or one of\nthe person's own parts (\"own\": a pet name from the given name).",
       "properties": {
         "kind": {
           "enum": [
             "rule",
             "word",
-            "meaning"
+            "meaning",
+            "connection",
+            "own"
           ],
           "title": "Kind",
           "type": "string"
@@ -493,6 +565,30 @@
         "label": {
           "default": "",
           "title": "Label",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "take": {
+          "default": "",
+          "title": "Take",
+          "type": "string"
+        },
+        "person_forms": {
+          "items": {
+            "$ref": "#/$defs/PersonForm"
+          },
+          "title": "Person Forms",
+          "type": "array"
+        },
+        "english": {
+          "default": "",
+          "title": "English",
           "type": "string"
         }
       },
@@ -568,6 +664,58 @@
         "text"
       ],
       "title": "OfRule",
+      "type": "object"
+    },
+    "PeopleNames": {
+      "description": "A language's people's names (languages 4b-2): the choices a\nperson's name depends on (the first of each the default), the titles\nit keeps, and its forms of address.",
+      "properties": {
+        "choices": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Choices",
+          "type": "object"
+        },
+        "kept_titles": {
+          "items": {
+            "$ref": "#/$defs/KeptTitle"
+          },
+          "title": "Kept Titles",
+          "type": "array"
+        },
+        "address": {
+          "items": {
+            "$ref": "#/$defs/AddressRow"
+          },
+          "title": "Address",
+          "type": "array"
+        }
+      },
+      "title": "PeopleNames",
+      "type": "object"
+    },
+    "PersonForm": {
+      "description": "A part's form for who the person is (languages 4b-2): its changes\napply when every `when` choice matches (\"sex\": \"woman\").",
+      "properties": {
+        "when": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "When",
+          "type": "object"
+        },
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/FormChange"
+          },
+          "title": "Changes",
+          "type": "array"
+        }
+      },
+      "title": "PersonForm",
       "type": "object"
     },
     "Phrase": {

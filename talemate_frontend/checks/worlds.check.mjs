@@ -10,7 +10,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
-import { composeName, partLabel, resultLine } from '../src/components/worlds/nameParts.js';
+import { composeName, forPersonLine, partLabel, resultLine, ruleChipLabel } from '../src/components/worlds/nameParts.js';
+import { callsFor, draftNameEdit, draftParentRows, partSourceLine, plainAka, pronounOf, titleShownChange, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
     akaChanged,
@@ -4295,6 +4296,169 @@ check('a rename keeps the words left out (owner, 2026-11-04)', () => {
     store.pickNameIt(null, 'Velmar');
     const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
     assert.equal(asked.name ?? asked.data?.name, 'King Velmar III');
+});
+
+// --- people's names (languages 4b-2) -----------------------------------------
+
+check('a person name is written with each fixed word in English', () => {
+    const parts = [{ text: 'Maëlis' }, { text: 'di' }, { text: 'Drassone' }];
+    assert.equal(writtenName(parts, { 1: 'of' }), 'Maëlis of Drassone');
+    assert.equal(writtenName(parts), 'Maëlis di Drassone');
+    assert.equal(writtenName([{ text: 'Maëlis' }, { text: '(missing rule)' }]), 'Maëlis');
+});
+
+check('calls her shows only names used by an entry the fact links', () => {
+    const calls = [
+        { name: 'Maë', kind: 'own', by: 'tib' },
+        { name: 'Lisette', kind: 'pet', by: '' },
+        { name: 'the Drassone girl', kind: 'own', by: 'wardens' },
+    ];
+    assert.deepEqual(callsFor(calls, { refs: ['tib'] }).map((c) => c.name), ['Maë']);
+    assert.deepEqual(callsFor(calls, { refs: ['aur'] }), []);
+    assert.deepEqual(callsFor(calls, {}), []);
+});
+
+check('an inherited part says where it came from', () => {
+    const sources = { eil: { name: 'Eilhaud of Drassone', sex: 'man' }, aur: { name: 'Aurande', sex: '' }, duchy: { name: 'Drassone', sex: '' } };
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'eil', from_role: 'daughter of' }, sources, 'her'), 'from her father Eilhaud of Drassone');
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'aur', from_role: 'Daughter of Aurande, her mother' }, sources, 'her'), 'from her mother Aurande');
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'aur', from_role: 'child of' }, sources, 'her'), 'from her parent Aurande');
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'duchy', from_role: 'lives in' }, sources, 'her'), 'from Drassone');
+    assert.equal(partSourceLine({ source: 'rolled' }, sources, 'her'), 'rolled');
+    assert.equal(partSourceLine({ source: 'meaning' }, sources, 'her'), 'from a meaning');
+    assert.equal(partSourceLine({ source: 'word' }, sources, 'her'), 'fixed word');
+});
+
+check('the pronoun follows what the name is built as', () => {
+    assert.equal(pronounOf({ sex: 'woman' }), 'her');
+    assert.equal(pronounOf({ sex: 'man' }), 'him');
+    assert.equal(pronounOf({}), 'them');
+});
+
+check('a person name kinds stay out of Other names and the header', () => {
+    const aka = [
+        { name: 'Old Name', tag: 'common', everyday: false },
+        { name: 'Maë', tag: 'proper', everyday: false, kind: 'own', by: 'tib' },
+        { name: 'Lady', tag: 'proper', everyday: false, kind: 'title' },
+    ];
+    assert.deepEqual(plainAka(aka).map((a) => a.name), ['Old Name']);
+    assert.deepEqual(headerNames(aka).map((a) => a.name), ['Old Name']);
+});
+
+const PERSON_PARTS = {
+    language_id: 'L',
+    rule_id: 'noble-women',
+    shape: 0,
+    parts: [
+        { index: 0, kind: 'rule', label: 'given', rolls: [{ text: 'Maëlis', parts: [] }, { text: 'Ysolde', parts: [] }], pinned: false, source: 'rolled' },
+        { index: 1, kind: 'word', label: 'of', rolls: [{ text: 'di', parts: [] }], pinned: false, source: 'word', english: 'of' },
+        { index: 2, kind: 'connection', label: 'house', rolls: [{ text: 'Drassone', parts: [] }], pinned: true, source: 'inherited', from_id: 'eil', from_role: 'daughter of' },
+    ],
+};
+
+function personNameIt() {
+    const { store, sent } = freshStore();
+    store.openNameIt({
+        words: 'Maëlis of Drassone',
+        languageId: 'L',
+        kind: 'character',
+        target: { thingId: 't1', fullName: 'Maëlis of Drassone' },
+        person: { thingId: 't1', builtAs: { sex: 'woman', rank: 'noble' } },
+    });
+    store.nameItAsked = { languageId: 'L', ruleId: 'noble-women' };
+    store.nameItTakeParts(PERSON_PARTS);
+    return { store, sent };
+}
+
+check('the builder writes a fixed word in English', () => {
+    const { store } = personNameIt();
+    assert.equal(store.nameItBuilt, 'Maëlis of Drassone');
+});
+
+check('a person builder asks with the person and the parts set free', () => {
+    const { store, sent } = personNameIt();
+    store.nameItFreePart(2);
+    store.nameItRollParts('L', 'noble-women');
+    const asked = sent.filter((m) => m.action === 'name_it_parts').at(-1);
+    assert.equal(asked.thing_id, 't1');
+    assert.deepEqual(asked.free, [2]);
+});
+
+check('a person builder with no rule lets the server pick it', () => {
+    const { store, sent } = personNameIt();
+    store.nameItRollParts('L', '');
+    const asked = sent.filter((m) => m.action === 'name_it_parts').at(-1);
+    assert.equal(asked.rule_id, '');
+    store.nameItTakeParts({ ...PERSON_PARTS, rule_id: 'noble-women' });
+    assert.equal(store.nameItParts.rule_id, 'noble-women');
+});
+
+check('use this name on a person stores the parts with the rename', () => {
+    const { store, sent } = personNameIt();
+    store.nameItChoosePart(0, 'Ysolde');
+    store.pickNameIt('L', store.nameItBuilt);
+    const asked = sent.filter((m) => m.action === 'name_it_rename').at(-1);
+    assert.equal(asked.name, 'Ysolde of Drassone');
+    assert.equal(asked.rule_id, 'noble-women');
+    assert.deepEqual(asked.built_as, { sex: 'woman', rank: 'noble' });
+    assert.deepEqual(asked.parts, [
+        { label: 'given', text: 'Ysolde', source: 'rolled' },
+        { label: 'of', text: 'di', source: 'word' },
+        { label: 'house', text: 'Drassone', source: 'inherited', from_id: 'eil', from_role: 'daughter of' },
+    ]);
+});
+
+check('the Names chapter says what a people rule part takes', () => {
+    const gens = [{ id: 'houses', name: 'Houses' }, { id: 'given', name: 'Given names' }];
+    assert.equal(ruleChipLabel({ kind: 'connection', roles: ['father', 'mother'], take: 'house', label: 'house' }, gens), 'from father, then mother · house');
+    assert.equal(ruleChipLabel({ kind: 'connection', roles: ['lord'], take: '' }, gens), 'from lord · whole name');
+    assert.equal(ruleChipLabel({ kind: 'own', take: 'given' }, gens), 'own given');
+    assert.equal(ruleChipLabel({ kind: 'word', word: 'di', english: 'of' }, gens), 'di → “of”');
+    assert.equal(ruleChipLabel({ kind: 'word', word: 'Ul' }, gens), 'Ul');
+    assert.equal(ruleChipLabel({ kind: 'rule', rule: 'given', label: 'given' }, gens), 'given');
+    assert.equal(ruleChipLabel({ kind: 'rule', rule: 'given', label: 'given', person_forms: [{ when: { sex: 'woman' } }] }, gens), 'given · forms by sex');
+    assert.equal(forPersonLine({ for_person: { sex: 'woman', rank: 'noble' } }), 'for: woman · noble');
+    assert.equal(forPersonLine({}), '');
+});
+
+check('draft Name it sends ticked rows and the model\'s parent rows (final review I8)', () => {
+    const rows = [
+        { target_id: 'duchy', role: 'lives in', ticked: true },
+        { target_id: 'eil', role: 'daughter', ticked: false },
+        { target_id: 'rival', role: 'sworn rival', ticked: false },
+        { new_name: { name: 'X' }, role: 'daughter of', ticked: false },
+    ];
+    assert.deepEqual(draftParentRows(rows), [['duchy', 'lives in'], ['eil', 'daughter']]);
+});
+
+check('an inherited part from a gone entry is plain text (final review I11)', () => {
+    assert.equal(partSourceLine({ source: 'inherited', from_id: 'gone', from_role: 'daughter of' }, {}, 'her'), 'from her parent, no longer in the world');
+});
+
+check('showing a title keeps its language (final review I13)', () => {
+    const change = titleShownChange({ name: 'Chef', tag: 'proper', everyday: false, kind: 'title', language: 'L', meaning: 'chief' });
+    assert.deepEqual(change, { name: 'Chef', shown: 'before', language_id: 'L', meaning: 'chief' });
+    assert.equal(titleShownChange({ name: 'Lady', kind: 'title', shown: 'after' }).shown, null);
+});
+
+check('a drafted person name section edits the draft (owner, 2026-11-05)', () => {
+    const edited = {
+        name: 'Maëlis of Drassone',
+        aka: [{ name: 'Lady', tag: 'proper', everyday: false, kind: 'title', shown: 'before' }],
+        facts: [{ category: 'background', text: 'Maëlis of Drassone grew up at court.' }],
+        fields: { name_parts: { language: 'L', rule: 'noble-women', shape: 0, built_as: { sex: 'woman' }, parts: [
+            { label: 'given', text: 'Maëlis', source: 'rolled' }, { label: 'of', text: 'di', source: 'word' }, { label: 'house', text: 'Drassone', source: 'inherited', from_id: 'e' }] } },
+    };
+    const english = { 1: 'of' };
+    const part = draftNameEdit(edited, { part: [0, 'Ysolde'] }, english);
+    assert.equal(part.name, 'Ysolde of Drassone');
+    assert.equal(part.facts[0].text, 'Ysolde of Drassone grew up at court.');
+    assert.deepEqual(part.fields.name_parts.parts[0], { label: 'given', text: 'Ysolde', source: 'typed' });
+    const title = draftNameEdit(edited, { title: { name: 'Warden', shown: 'after', language_id: 'L', meaning: 'keeper' } }, english);
+    assert.deepEqual(title.aka.map((a) => [a.name, a.shown ?? null, a.language ?? null]), [['Lady', null, null], ['Warden', 'after', 'L']]);
+    assert.deepEqual(draftNameEdit(edited, { removeTitle: 'Lady' }, english).aka, []);
+    assert.deepEqual(draftNameEdit(edited, { builtAs: { sex: 'woman', rank: 'noble' } }, english).fields.name_parts.built_as, { sex: 'woman', rank: 'noble' });
+    assert.deepEqual(draftNameEdit(edited, { pet: 'Lili' }, english).aka.find((a) => a.kind === 'pet'), { name: 'Lili', tag: 'proper', everyday: false, kind: 'pet' });
 });
 
 if (failures.length) {

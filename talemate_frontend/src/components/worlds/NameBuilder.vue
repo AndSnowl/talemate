@@ -9,7 +9,17 @@
                 <div class="cell title" :style="at(c, 1)" :title="titleOf(part, c)">
                     <span class="title-text">{{ titleOf(part, c) }}</span>
                     <v-btn
-                        v-if="part.kind === 'rule'"
+                        v-if="part.kind === 'connection' && part.source === 'inherited' || inheritedFree(part)"
+                        :icon="inheritedFree(part) ? 'mdi-pin-outline' : 'mdi-pin'"
+                        variant="text"
+                        size="x-small"
+                        density="compact"
+                        :aria-label="(inheritedFree(part) ? 'Take it from ' : 'Let it roll, not from ') + (part.from_role || 'the connection')"
+                        data-testid="name-builder-inherited-pin"
+                        @click="freePart(part)"
+                    ></v-btn>
+                    <v-btn
+                        v-else-if="part.kind === 'rule' || part.kind === 'connection'"
                         :icon="pinned(part) ? 'mdi-pin' : 'mdi-pin-outline'"
                         variant="text"
                         size="x-small"
@@ -22,7 +32,7 @@
                 <!-- 2: how it's filled -->
                 <div class="cell what" :style="at(c, 2)" :title="whatOf(part)">{{ whatOf(part) }}</div>
                 <!-- 3: the box -->
-                <div v-if="part.kind === 'word'" class="fixed-word" :style="at(c, 3)">{{ part.rolls[0]?.text }}</div>
+                <div v-if="part.kind === 'word'" class="fixed-word" :style="at(c, 3)">{{ part.english || part.rolls[0]?.text }}</div>
                 <v-text-field
                     v-else-if="part.kind === 'meaning'"
                     :model-value="worlds.nameItPartMeanings[part.index] || ''"
@@ -152,7 +162,16 @@ export default {
             }
             return part.label;
         },
+        // an inherited part the owner set free to roll (languages 4b-2)
+        inheritedFree(part) {
+            return part.kind === 'connection' && this.worlds.nameItPartFree.includes(part.index);
+        },
+        freePart(part) {
+            this.worlds.nameItFreePart(part.index);
+            this.worlds.nameItRollParts(this.languageId, this.worlds.nameItParts?.rule_id);
+        },
         whatOf(part) {
+            if (part.source === 'inherited') return 'inherited · unpin to roll it';
             if (part.kind === 'word') {
                 const meaning = this.meaningOfWord(part);
                 return meaning ? `always · “${meaning}”` : 'always';

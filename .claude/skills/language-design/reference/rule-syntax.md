@@ -95,3 +95,35 @@ rules: aim for close to none fitting the neighbour.
 engine applies them: the model only ever chooses meanings. A language
 without them still works; names are then built in the owner's English
 word order.
+
+## People's names
+
+A people rule is a composed rule whose parts may also be `connection`
+(taken from a parent: `roles`, `take`, and `rule` to roll from without
+one) or `own` (the person's own part, for pet names), with `person_forms`
+by sex or rank and `for_person` saying who it's for. A Drassonais noble
+woman's rule:
+
+```json
+{"id": "noble-women", "name": "Noble women", "use": "character",
+ "for_person": {"sex": "woman", "rank": "noble"},
+ "shapes": [{"parts": [
+   {"kind": "rule", "rule": "women-given", "label": "given"},
+   {"kind": "word", "word": "di", "english": "of", "label": "of"},
+   {"kind": "connection", "roles": ["father", "mother"], "take": "house",
+    "rule": "houses", "label": "house"}]}]}
+```
+
+A Varovni family name in the woman's form:
+
+```json
+{"kind": "connection", "roles": ["father", "mother"], "take": "family",
+ "rule": "family", "label": "family",
+ "person_forms": [{"when": {"sex": "woman"},
+                   "changes": [{"kind": "ending", "text": "a"}]}]}
+```
+
+`people_names` (choices, kept titles, address) is described in
+`SKILL.md`. The app reads sex and rank from a person's facts, takes the
+inherited parts from the world, and builds the rest; a language without
+people rules gives people plain rolled names.

@@ -147,9 +147,14 @@ def test_expand_stub_prefills_and_fills_it(app, page, fixed_preview):
     page.get_by_test_id("kind-species").click()
     owl = _open_thing(page, "Owl-folk")
 
-    # clicking the stub opens the place create box from it, its prompt
-    # suggested from what mentions it
+    # clicking the stub opens its page (owner, 2026-11-05); filling it there
+    # opens the place create box from it, its prompt suggested from what
+    # mentions it
     _fact(owl, ORIGIN).get_by_test_id("linked-stub").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        "Tsardom of Moscavia", timeout=TIMEOUT_MS
+    )
+    page.get_by_test_id("stub-card").get_by_role("button").first.click()
     box = page.get_by_test_id("create-box")
     box.get_by_test_id("from-stub").filter(has_text="Tsardom of Moscavia").wait_for(
         state="visible", timeout=TIMEOUT_MS

@@ -69,3 +69,25 @@ async def test_a_row_that_cannot_build_says_so(plugin):  # noqa: F811
     rows = {r["key"]: r for r in _last(plugin, "language_name_grammar")["data"]["rows"]}
     assert rows["more_than_one"]["error"] and not rows["more_than_one"]["example"]
     assert rows["the"]["example"] == "skelt → skeltek"
+
+
+async def test_language_people_names_answers_rows_with_examples(plugin):  # noqa: F811
+    from _people_names_helpers import DRASSONAIS
+
+    lid = await _language(plugin, DRASSONAIS)
+    await _act(plugin, "language_people_names", thing_id=lid)
+    data = _last(plugin, "language_people_names")["data"]
+    assert data["thing_id"] == lid and data["has_people"] is True
+    assert data["choices"] == {"sex": ["man", "woman"], "rank": ["common", "noble"]}
+    assert data["kept_titles"] == [{"word": "Tsar", "meaning": "emperor"}]
+    family, strangers = data["address"]
+    assert family["kind"] == "family" and family["example"].endswith("ette")
+    assert strangers["default"] is True and strangers["example"].startswith("[title] ")
+    assert data["sample"]
+
+
+async def test_a_language_without_people_names_says_so(plugin):  # noqa: F811
+    lid = await _language(plugin, VAROVNI)
+    await _act(plugin, "language_people_names", thing_id=lid)
+    data = _last(plugin, "language_people_names")["data"]
+    assert data["has_people"] is False and data["address"] == []

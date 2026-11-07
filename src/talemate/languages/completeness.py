@@ -64,6 +64,9 @@ class Completeness(BaseModel):
     # no grammar for names yet (languages 4b-1): names are built in the
     # owner's word order until it's filled in
     name_grammar_missing: bool = False
+    # no people's names yet (languages 4b-2): no choices, or no rule that
+    # takes from a connection or is for someone
+    people_names_missing: bool = False
 
 
 def _key(meaning: str) -> str:
@@ -97,6 +100,21 @@ def completeness(language: Language) -> Completeness:
             title for topic, title in GRAMMAR_TOPICS if topic not in topics
         ],
         name_grammar_missing=language.name_grammar is None,
+        people_names_missing=not _has_people_names(language),
+    )
+
+
+def _has_people_names(language: Language) -> bool:
+    if language.people_names is None or not language.people_names.choices:
+        return False
+    return any(
+        generator.for_person
+        or any(
+            part.kind == "connection"
+            for shape in generator.shapes
+            for part in shape.parts
+        )
+        for generator in language.generators
     )
 
 

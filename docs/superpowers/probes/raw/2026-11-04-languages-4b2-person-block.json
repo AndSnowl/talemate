@@ -1,0 +1,308 @@
+{
+ "model": "Skyfall-31B-v4.2-i1-Q4_K_M",
+ "person": [
+  {
+   "world": "Test3",
+   "prompt": "a daughter of Eilhaud of Drassone, raised at court",
+   "sex": "woman",
+   "ranks": [
+    "noble"
+   ],
+   "reply_head": "  \"name\": \"Seraine of Drassone\",  \"age\": 22,  \"person\": {    \"sex\": \"woman\",    \"rank\": \"noble\",    \"name_meaning\": \"of the stars' reflection\",    \"title\": \"Lady\"  },  \"aka\": [    { \"name\": \"Seraine\", \"tag\": \"common\", \"everyday\": true }  ],  \"tag\": \"royalty\",  \"facts\": [    { \"category\": \"background\", \"text\": \"Seraine is the only surviving child of King Eilhaud of Drassone and his first wife, the late Lady Maren of Velline.\", \"since\": 998, \"held_by\": null },    { \"category\": \"appearance\", \"text\": \"She stands at five feet and five inches, with a slender frame that carries the refined delicacy o",
+   "seconds": 39.1,
+   "block": {
+    "sex": "woman",
+    "rank": "noble",
+    "name_meaning": "of the stars' reflection",
+    "title": "Lady"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test3",
+   "prompt": "Eilhaud's heir, a quiet young man who prefers books to swords",
+   "sex": "man",
+   "ranks": [
+    "noble"
+   ],
+   "reply_head": "  \n  \"name\": \"Aldric Eilhaudson\",\n  \"age\": 22,\n  \"person\": {\n    \"sex\": \"man\",\n    \"rank\": \"noble\",\n    \"name_meaning\": \"ruler's son\",\n    \"title\": \"Young Lord\"\n  },\n  \"aka\": [\n    {\n      \"name\": \"Aldric\",\n      \"tag\": \"common\",\n      \"everyday\": true\n    }\n  ],\n  \"tag\": \"royalty\",\n  \"facts\": [\n    {\n      \"category\": \"background\",\n      \"text\": \"Aldric Eilhaudson is the only son and heir of King Eilhaud of Drassone, born in the autumn of 978 to Princess Consort Esrelle's memory and the court's quiet hope for a successor.\",\n      \"since\": 978\n    },\n    {\n      \"category\": \"appearance\",\n     ",
+   "seconds": 34.6,
+   "block": {
+    "sex": "man",
+    "rank": "noble",
+    "name_meaning": "ruler's son",
+    "title": "Young Lord"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test3",
+   "prompt": "a fisherman's girl from the Drassone coast",
+   "sex": "woman",
+   "ranks": [
+    "common"
+   ],
+   "reply_head": " \n  \"name\": \"Marenne Dalvasse\",\n  \"age\": 19,\n  \"person\": {\n    \"sex\": \"woman\",\n    \"rank\": \"common\",\n    \"name_meaning\": \"bitter wave\",\n    \"title\": \"\"\n  },\n  \"aka\": [\n    {\n      \"name\": \"Dalvasse\",\n      \"tag\": \"surname\",\n      \"everyday\": false\n    },\n    {\n      \"name\": \"Maren\",\n      \"tag\": \"common\",\n      \"everyday\": true\n    }\n  ],\n  \"tag\": \"fisherman's girl\",\n  \"facts\": [\n    {\n      \"category\": \"background\",\n      \"text\": \"Marenne is the eldest daughter of Aldric Dalvasse, a salt-cure fisherman who works the rocky coves along Drassone's southern coast, below the third wall where the l",
+   "seconds": 48.3,
+   "block": {
+    "sex": "woman",
+    "rank": "common",
+    "name_meaning": "bitter wave",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test3",
+   "prompt": "the old smith who shoes the duke's horses",
+   "sex": "man",
+   "ranks": [
+    "common"
+   ],
+   "reply_head": "   \"name\": \"Brennan Halward\",   \"age\": 67,   \"person\": {     \"sex\": \"man\",     \"rank\": \"common\",     \"name_meaning\": \"\",     \"title\": \"\"   },   \"aka\": [     { \"name\": \"Old Brennan\", \"tag\": \"common\", \"everyday\": true },     { \"name\": \"The Duke's Smith\", \"tag\": \"common\", \"everyday\": false }   ],   \"tag\": \"smith\",   \"facts\": [     {       \"category\": \"appearance\",       \"text\": \"Brennan is a barrel-chested man with sun-darkened skin creased into deep lines around his eyes and mouth, evidence of decades spent squinting against forge-light and open sky.\"     },     {       \"category\": \"appearance\",",
+   "seconds": 34.4,
+   "block": {
+    "sex": "man",
+    "rank": "common",
+    "name_meaning": "",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test3",
+   "prompt": "a Tsevrani river-priestess who reads omens in the current",
+   "sex": "woman",
+   "ranks": [
+    "clergy"
+   ],
+   "reply_head": " \"name\": \"Vesela Zharova\", \"age\": 42, \"person\": { \"sex\": \"woman\", \"rank\": \"clergy\", \"name_meaning\": \"joyful one, of the Ember\", \"title\": \"River-Priestess\" }, \"aka\": [ { \"name\": \"Vesela\", \"tag\": \"common\", \"everyday\": true }, { \"name\": \"Matushka Vesela\", \"tag\": \"proper\", \"everyday\": false } ], \"tag\": \"river-priestess\", \"facts\": [ { \"category\": \"appearance\", \"text\": \"She is a tall woman with a gaunt, angular face and deep-set grey eyes that always seem to be watching the water, even when she speaks to you.\" }, { \"category\": \"appearance\", \"text\": \"Her hair, once dark brown, has gone prematurely si",
+   "seconds": 29.6,
+   "block": {
+    "sex": "woman",
+    "rank": "clergy",
+    "name_meaning": "joyful one, of the Ember",
+    "title": "River-Priestess"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test3",
+   "prompt": "the duke's heir",
+   "sex": "any",
+   "ranks": [
+    "noble",
+    "royal"
+   ],
+   "reply_head": "  \"name\": \"Aldric of Drassone\",  \"age\": 22,  \"person\": {    \"sex\": \"man\",    \"rank\": \"noble\",    \"name_meaning\": \"ruler-protector\",    \"title\": \"Duke's Heir\"  },  \"aka\": [    { \"name\": \"Aldric\", \"tag\": \"common\", \"everyday\": true },    { \"name\": \"The Young Duke\", \"tag\": \"common\", \"everyday\": false }  ],  \"tag\": \"royalty\",  \"facts\": [    { \"category\": \"background\", \"text\": \"He is the eldest son of Duke Harlan of Drassone and his wife, the Duchess Ysara née Montfort.\", \"since\": 978 },    { \"category\": \"appearance\", \"text\": \"He stands a head taller than most men in Drassone, with broad shoulders a",
+   "seconds": 34.2,
+   "block": {
+    "sex": "man",
+    "rank": "noble",
+    "name_meaning": "ruler-protector",
+    "title": "Duke's Heir"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Moscavia",
+   "prompt": "Lady Nyekha Vostrik's youngest son, sent to the monastery as a boy",
+   "sex": "man",
+   "ranks": [
+    "noble",
+    "clergy"
+   ],
+   "reply_head": " \"name\": \"Brother Cassian Vostrik\", \"age\": 27, \"person\": { \"sex\": \"man\", \"rank\": \"clergy\", \"name_meaning\": \"steadfast or cut stone\", \"title\": \"Brother\" }, \"aka\": [ { \"name\": \"Cassian\", \"tag\": \"common\", \"everyday\": true } ], \"tag\": \"historical figure\", \"facts\": [ { \"category\": \"background\", \"text\": \"He is the youngest son of Lady Nyekha Vostrik of the House of Vostrik, sent to the Monastery of the White Owl as a boy of seven in 986.\", \"since\": 986 }, { \"category\": \"background\", \"text\": \"His mother placed him in the monastery partly because the Vostrik household was already large with older sons",
+   "seconds": 30.2,
+   "block": {
+    "sex": "man",
+    "rank": "clergy",
+    "name_meaning": "steadfast or cut stone",
+    "title": "Brother"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Moscavia",
+   "prompt": "a serf woman on the Vostrik estates",
+   "sex": "woman",
+   "ranks": [
+    "common",
+    "serf"
+   ],
+   "reply_head": "  \"name\": \"Marfa Zhukova\",  \"age\": 28,  \"person\": {    \"sex\": \"woman\",    \"rank\": \"common\",    \"name_meaning\": \"of the crane\",    \"title\": \"\"  },  \"aka\": [    { \"name\": \"Marfa the Crane\", \"tag\": \"common\", \"everyday\": true }  ],  \"tag\": \"serf\",  \"facts\": [    { \"category\": \"appearance\", \"text\": \"She is lean and sun-weathered, with deep-set grey eyes and a sharp, angular face that speaks of years of hard living. Her hair, once dark, is streaked with early silver at the temples, and she keeps it pulled back tightly under a linen cloth.\" },    { \"category\": \"appearance\", \"text\": \"She stands at a m",
+   "seconds": 31.8,
+   "block": {
+    "sex": "woman",
+    "rank": "common",
+    "name_meaning": "of the crane",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Moscavia",
+   "prompt": "the Tsar's cousin, a cavalry commander",
+   "sex": "man",
+   "ranks": [
+    "royal",
+    "noble"
+   ],
+   "reply_head": " \"name\": \"Dmitri Vostrik\", \"age\": 34, \"person\": { \"sex\": \"man\", \"rank\": \"noble\", \"name_meaning\": \"\", \"title\": \"Commander\" }, \"aka\": [ { \"name\": \"Dmitri Vostrik\", \"tag\": \"proper\", \"everyday\": false }, { \"name\": \"Dmitri the Iron\", \"tag\": \"common\", \"everyday\": true } ], \"tag\": \"historical figure\", \"facts\": [ { \"category\": \"background\", \"text\": \"Dmitri is the first cousin of Tsar Alexei III of Moscavia, born to Prince Yuri Vostrik and his wife, a lady of the house of Kolchak.\", \"since\": null, \"held_by\": null }, { \"category\": \"background\", \"text\": \"He was raised in the Vostrik estate at Oryol, deep",
+   "seconds": 33.9,
+   "block": {
+    "sex": "man",
+    "rank": "noble",
+    "name_meaning": "",
+    "title": "Commander"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Moscavia",
+   "prompt": "a travelling tinker who mends pots for bread",
+   "sex": "man",
+   "ranks": [
+    "common"
+   ],
+   "reply_head": " \"name\": \"Aleksei Zheleznyakov\", \"age\": 52, \"person\": { \"sex\": \"man\", \"rank\": \"common\", \"name_meaning\": \"of the Iron\", \"title\": \"\" }, \"aka\": [ { \"name\": \"Zheleznyak\", \"tag\": \"common\", \"everyday\": true } ], \"tag\": \"tinker\", \"facts\": [ { \"category\": \"background\", \"text\": \"Aleksei was born in the village of Khoromny, a settlement of perhaps forty souls nestled along the River Vostrik's southern tributary, where his father mended ironwork for the local miller and his mother spun wool for the tsar's tax collectors.\", \"since\": \"948\" }, { \"category\": \"ability\", \"text\": \"He learned the hammer and the ",
+   "seconds": 30.5,
+   "block": {
+    "sex": "man",
+    "rank": "common",
+    "name_meaning": "of the Iron",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Moscavia",
+   "prompt": "the miller's widow",
+   "sex": "woman",
+   "ranks": [
+    "common"
+   ],
+   "reply_head": "  \"name\": \"Marfa Andreyevna Korolyova\",  \"age\": 42,  \"person\": {    \"sex\": \"woman\",    \"rank\": \"common\",    \"name_meaning\": \"of Andrew\",    \"title\": \"\"  },  \"aka\": [    {      \"name\": \"Marfa Korolyova\",      \"tag\": \"common\",      \"everyday\": true    },    {      \"name\": \"the Miller's Widow\",      \"tag\": \"common\",      \"everyday\": true    }  ],  \"tag\": \"historical figure\",  \"facts\": [    {      \"category\": \"background\",      \"text\": \"She was born Marfa Andreyevna in the village of Zerkalny on the banks of the Vostrik River, the daughter of a miller who ground grain for the estates of the local ",
+   "seconds": 35.5,
+   "block": {
+    "sex": "woman",
+    "rank": "common",
+    "name_meaning": "of Andrew",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test2",
+   "prompt": "an owl-folk hunter who watches the stars",
+   "sex": "man",
+   "ranks": [
+    "common"
+   ],
+   "reply_head": " \"name\": \"Maren Solnishko\", \"age\": 42, \"person\": { \"sex\": \"woman\", \"rank\": \"common\", \"name_meaning\": \"little sun\", \"title\": \"\" }, \"aka\": [ { \"name\": \"Maren\", \"tag\": \"common\", \"everyday\": true } ], \"tag\": \"hunter\", \"facts\": [ { \"category\": \"appearance\", \"text\": \"She is lean and weathered, with deep-set grey eyes and a long nose that has been broken at least once, leaving a faint crooked ridge across the bridge.\", \"since\": null, \"held_by\": null }, { \"category\": \"appearance\", \"text\": \"Her hair is dark brown and coarse, kept in a short braid that she tucks beneath a fur-lined hood trimmed with owl",
+   "seconds": 27.8,
+   "block": {
+    "sex": "woman",
+    "rank": "common",
+    "name_meaning": "little sun",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": false,
+   "rank_ok": true
+  },
+  {
+   "world": "Test2",
+   "prompt": "Zakan's daughter, a healer of the eyrie",
+   "sex": "woman",
+   "ranks": [
+    "common",
+    "noble"
+   ],
+   "reply_head": " \"name\": \"Yelena Zhuskovsk Ul Yechra\", \"age\": 31, \"person\": { \"sex\": \"woman\", \"rank\": \"noble\", \"name_meaning\": \"light\", \"title\": \"Lady Healer\" }, \"aka\": [ { \"name\": \"Yelena Zhuskovsk\", \"tag\": \"common\", \"everyday\": true }, { \"name\": \"Yelena Ul Yechra\", \"tag\": \"common\", \"everyday\": false } ], \"tag\": \"healer, noble\", \"facts\": [ { \"category\": \"appearance\", \"text\": \"Yelena is a tall Snowy Owl woman whose white plumage is thick and well-maintained, with a soft downy quality that contrasts sharply with her father's thinning coat; her breast feathers carry a faint creamy undertone, and her facial disc",
+   "seconds": 46.6,
+   "block": {
+    "sex": "woman",
+    "rank": "noble",
+    "name_meaning": "light",
+    "title": "Lady Healer"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test2",
+   "prompt": "the Patriarch of Otsyenya's scribe",
+   "sex": "any",
+   "ranks": [
+    "clergy",
+    "common"
+   ],
+   "reply_head": "   \"name\": \"Dmitri Volkov\",\n    \"age\": 42,\n    \"person\": {\n        \"sex\": \"man\",\n        \"rank\": \"clergy\",\n        \"name_meaning\": \"of the wolf\",\n        \"title\": \"Scribe\"\n    },\n    \"aka\": [\n        {\n            \"name\": \"Dmitri Volkov\",\n            \"tag\": \"common\",\n            \"everyday\": true\n        }\n    ],\n    \"tag\": \"role\",\n    \"facts\": [\n        {\n            \"category\": \"appearance\",\n            \"text\": \"Dmitri Volkov is a lean, sharp-featured man with a close-cropped beard the color of birch bark and pale grey eyes that seem perpetually narrowed in thought.\",\n            \"held_by\": n",
+   "seconds": 35.5,
+   "block": {
+    "sex": "man",
+    "rank": "clergy",
+    "name_meaning": "of the wolf",
+    "title": "Scribe"
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  },
+  {
+   "world": "Test2",
+   "prompt": "a young owl-folk weaver girl",
+   "sex": "woman",
+   "ranks": [
+    "common"
+   ],
+   "reply_head": "  \"name\": \"Marenka Dzhivovoi\",  \"age\": 17,  \"person\": {    \"sex\": \"woman\",    \"rank\": \"common\",    \"name_meaning\": \"\",    \"title\": \"\"  },  \"aka\": [    { \"name\": \"Marenka\", \"tag\": \"common\", \"everyday\": true },    { \"name\": \"Dzhivovoi Weavergirl\", \"tag\": \"proper\", \"everyday\": false }  ],  \"tag\": \"weaver\",  \"facts\": [    { \"category\": \"species\", \"text\": \"She is owl-folk, a member of the Varovni race, with large round eyes and feathered tufts that frame her face like an owl's ears.\", \"since\": null, \"held_by\": null },    { \"category\": \"appearance\", \"text\": \"Her eyes are a pale, luminous gold, and h",
+   "seconds": 31.3,
+   "block": {
+    "sex": "woman",
+    "rank": "common",
+    "name_meaning": "",
+    "title": ""
+   },
+   "parsed": true,
+   "sex_ok": true,
+   "rank_ok": true
+  }
+ ],
+ "score": {
+  "parsed": 0,
+  "sex": 2,
+  "rank": 0,
+  "of": 15
+ },
+ "score_rescored": {
+  "parsed": 15,
+  "sex": 14,
+  "rank": 15,
+  "of": 15
+ }
+}

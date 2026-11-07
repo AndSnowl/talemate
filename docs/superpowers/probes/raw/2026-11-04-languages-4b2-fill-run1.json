@@ -1,0 +1,605 @@
+{
+ "fill": {
+  "Tsevrani": {
+   "world": "Test3",
+   "reply": "```json\n{\n  \"people_names\": {\n    \"choices\": {\n      \"sex\": [\"man\", \"woman\"]\n    },\n    \"kept_titles\": [],\n    \"address\": [\n      {\"kind\": \"family\", \"roles\": [\"father\", \"mother\", \"brother\", \"sister\", \"son\", \"daughter\", \"husband\", \"wife\"], \"uses\": [\"pet name\"]},\n      {\"kind\": \"friends\", \"roles\": [\"friend\"], \"uses\": [\"given\"]},\n      {\"kind\": \"elders and superiors\", \"roles\": [\"elder\", \"superior\", \"lord\", \"lady\", \"master\", \"priest\"], \"uses\": [\"given\", \"family\", \"title\"]},\n      {\"kind\": \"strangers\", \"roles\": [\"stranger\"], \"uses\": [\"given\", \"family\", \"title\"], \"default\": true}\n    ]\n  },\n  \"generators\": [\n    {\n      \"id\": \"men\",\n      \"name\": \"Men's names\",\n      \"use\": \"character\",\n      \"patterns\": [\"C(L)VCV[v|r|sh|n|k]\", \"CVC[ev|ar|osh|ik|an]\"],\n      \"shapes\": [],\n      \"reject\": [\"^tver\", \"yy\", \"iy\", \"yi\", \"^y[^aeiou]\", \"^(l[lrv]|n[rlv]|r[rl]|m[rl]|y[rlvy])\", \"([^aeiouy])\\\\1\"],\n      \"for_person\": {\"sex\": \"man\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"women\",\n      \"name\": \"Women's names\",\n      \"use\": \"character\",\n      \"patterns\": [\"C(L)VCV[ra|na|sha|va]\", \"CVC[a|ya|ina]\"],\n      \"shapes\": [],\n      \"reject\": [\"yy\", \"iy\", \"yi\", \"^y[^aeiou]\", \"^(l[lrv]|n[rlv]|r[rl]|m[rl]|y[rlvy])\", \"([^aeiouy])\\\\1\"],\n      \"for_person\": {\"sex\": \"woman\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"son-of\",\n      \"name\": \"Son's family names\",\n      \"use\": \"character\",\n      \"patterns\": [\"C(L)VCV[v|r|sh|n|k]ovik\", \"CVC[ev|ar|osh|ik|an]ovik\"],\n      \"shapes\": [],\n      \"reject\": [\"yy\", \"iy\", \"yi\", \"^y[^aeiou]\", \"^(l[lrv]|n[rlv]|r[rl]|m[rl]|y[rlvy])\", \"([^aeiouy])\\\\1\"],\n      \"for_person\": {\"sex\": \"man\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"daughter-of\",\n      \"name\": \"Daughter's family names\",\n      \"use\": \"character\",\n      \"patterns\": [\"C(L)VCV[v|r|sh|n|k]ovra\", \"CVC[ev|ar|osh|ik|an]ovra\"],\n      \"shapes\": [],\n      \"reject\": [\"yy\", \"iy\", \"yi\", \"^y[^aeiou]\", \"^(l[lrv]|n[rlv]|r[rl]|m[rl]|y[rlvy])\", \"([^aeiouy])\\\\1\"],\n      \"for_person\": {\"sex\": \"woman\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"men-full\",\n      \"name\": \"Men's full names\",\n      \"use\": \"character\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\n          \"weight\": 3,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"men\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"men\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"man\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"ovik\"}]}]}\n          ]\n        },\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"men\", \"label\": \"given\"},\n            {\"kind\": \"meaning\", \"hint\": \"the colour or look of his feathers\", \"label\": \"feather\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"men\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"man\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"ovik\"}]}]}\n          ]\n        },\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"men\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"men\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"man\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"ovik\"}]}]},\n            {\"kind\": \"word\", \"word\": \"tre\", \"english\": \"of\", \"label\": \"of\"},\n            {\"kind\": \"rule\", \"rule\": \"places\", \"label\": \"home\"}\n          ]\n        }\n      ],\n      \"reject\": [],\n      \"for_person\": {\"sex\": \"man\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 36\n    },\n    {\n      \"id\": \"women-full\",\n      \"name\": \"Women's full names\",\n      \"use\": \"character\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\n          \"weight\": 3,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"women\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"men\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"woman\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"ovra\"}]}]}\n          ]\n        },\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"women\", \"label\": \"given\"},\n            {\"kind\": \"meaning\", \"hint\": \"the colour or look of her feathers\", \"label\": \"feather\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"men\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"woman\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"ovra\"}]}]}\n          ]\n        },\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"women\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"men\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"woman\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"ovra\"}]}]},\n            {\"kind\": \"word\", \"word\": \"tre\", \"english\": \"of\", \"label\": \"of\"},\n            {\"kind\": \"rule\", \"rule\": \"places\", \"label\": \"home\"}\n          ]\n        }\n      ],\n      \"reject\": [],\n      \"for_person\": {\"sex\": \"woman\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 36\n    },\n    {\n      \"id\": \"pet-names\",\n      \"name\": \"Pet names\",\n      \"use\": \"pet names\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"own\", \"take\": \"given\", \"label\": \"pet name\",\n             \"person_forms\": [\n               {\"when\": {\"sex\": \"man\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"yk\"}]},\n               {\"when\": {\"sex\": \"woman\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"yk\", \"drop\": \"a\"}]}\n             ]}\n          ]\n        }\n      ],\n      \"reject\": [\"yy\", \"iy\", \"yi\"],\n      \"for_person\": {},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    }\n  ]\n}\n```\n",
+   "blocking": [],
+   "warnings": [
+    "5 of 263 words don't follow the language's own word rules: -ek, -y, Kobav Vorogovik, Zhatar Kamyr Dekoshovik, Rasik Kamanovik"
+   ],
+   "people_names": {
+    "choices": {
+     "sex": [
+      "man",
+      "woman"
+     ]
+    },
+    "kept_titles": [],
+    "address": [
+     {
+      "kind": "family",
+      "roles": [
+       "father",
+       "mother",
+       "brother",
+       "sister",
+       "son",
+       "daughter",
+       "husband",
+       "wife"
+      ],
+      "uses": [
+       "pet name"
+      ],
+      "default": false
+     },
+     {
+      "kind": "friends",
+      "roles": [
+       "friend"
+      ],
+      "uses": [
+       "given"
+      ],
+      "default": false
+     },
+     {
+      "kind": "elders and superiors",
+      "roles": [
+       "elder",
+       "superior",
+       "lord",
+       "lady",
+       "master",
+       "priest"
+      ],
+      "uses": [
+       "given",
+       "family",
+       "title"
+      ],
+      "default": false
+     },
+     {
+      "kind": "strangers",
+      "roles": [
+       "stranger"
+      ],
+      "uses": [
+       "given",
+       "family",
+       "title"
+      ],
+      "default": true
+     }
+    ]
+   },
+   "samples": [
+    {
+     "rank": "",
+     "sex": "man",
+     "father": "Tanov",
+     "child": "Mugosh",
+     "rule": "men",
+     "parts": [
+      [
+       "Men's names",
+       "Mugosh",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "",
+     "sex": "woman",
+     "father": "Tanov",
+     "child": "Risasha",
+     "rule": "women",
+     "parts": [
+      [
+       "Women's names",
+       "Risasha",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    }
+   ]
+  },
+  "Drassonais": {
+   "world": "Test3",
+   "reply": "```json\n{\n  \"people_names\": {\n    \"choices\": {\n      \"sex\": [\"man\", \"woman\"],\n      \"rank\": [\"common\", \"noble\"]\n    },\n    \"kept_titles\": [],\n    \"address\": [\n      {\"kind\": \"family\", \"roles\": [\"father\", \"mother\", \"brother\", \"sister\", \"son\", \"daughter\", \"husband\", \"wife\", \"child\", \"grandparent\", \"cousin\"], \"uses\": [\"given\"], \"default\": false},\n      {\"kind\": \"friends\", \"roles\": [\"friend\", \"companion\"], \"uses\": [\"given\"], \"default\": false},\n      {\"kind\": \"elders and superiors\", \"roles\": [\"elder\", \"lord\", \"lady\", \"superior\", \"prince\", \"courtier\"], \"uses\": [\"title\"], \"default\": false},\n      {\"kind\": \"strangers\", \"roles\": [\"stranger\"], \"uses\": [\"given\", \"title\"], \"default\": true}\n    ]\n  },\n  \"generators\": [\n    {\"id\": \"words\", \"name\": \"Words\", \"use\": \"words\", \"patterns\": [\"(I)V(F)(e)*2\", \"(I)V(M)OV(F)(e)*3\", \"(I)V(M)OV(M)OV(F)(e)\"], \"shapes\": [], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"men\", \"name\": \"Men's names\", \"use\": \"character\", \"patterns\": [\"IV(M)O[aud|in|ou|ert|ac]*3\", \"IV(M)OV(M)O[aud|in|ou]\", \"V(M)O[aud|in|ert]\"], \"shapes\": [], \"reject\": [], \"for_person\": {\"sex\": \"man\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"women\", \"name\": \"Women's names\", \"use\": \"character\", \"patterns\": [\"IV(M)O[ette|elle|aine|ine|ie]*3\", \"IV(M)OV(M)O[e|ette|elle|aine]\", \"V(M)O[ette|elle|ine]\"], \"shapes\": [], \"reject\": [], \"for_person\": {\"sex\": \"woman\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"places\", \"name\": \"Places\", \"use\": \"place\", \"patterns\": [\"IV(M)O[onne|ac|enc|eil]*3\", \"IV(M)OV[ssonne|nac|lenc|reil]\", \"IV(M)O[onne|ac|eil] di IV(M)OV(F)\"], \"shapes\": [], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"items\", \"name\": \"Named things\", \"use\": \"item\", \"patterns\": [\"lo IV(M)OV(F)\", \"lo IV(M)O[el|ette]\"], \"shapes\": [], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"groups\", \"name\": \"Orders and guilds\", \"use\": \"things\", \"patterns\": [\"lou IV(M)O[aud|in|el]s\", \"lou IV(M)OV[ls|ns|rs]\"], \"shapes\": [], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"demonym\", \"name\": \"People of a place\", \"use\": \"demonym\", \"patterns\": [\"IV(M)O[onn|ac|enc|eil]ais\", \"IV(M)OV(M)Oais\"], \"shapes\": [], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\n      \"id\": \"homes\",\n      \"name\": \"Family homes\",\n      \"use\": \"places\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\"parts\": [{\"kind\": \"meaning\", \"slot\": \"noun\", \"hint\": \"the place or feature of the land their family comes from (mountain, forest)\", \"label\": \"home\"}], \"weight\": 2},\n        {\"parts\": [{\"kind\": \"rule\", \"rule\": \"places\", \"label\": \"home\"}], \"weight\": 1}\n      ],\n      \"reject\": [],\n      \"for_person\": {},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"names-by-home\",\n      \"name\": \"Men's full names\",\n      \"use\": \"character\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\"parts\": [\n          {\"kind\": \"rule\", \"rule\": \"men\", \"label\": \"given\"},\n          {\"kind\": \"word\", \"word\": \"di\", \"english\": \"of\", \"label\": \"of\"},\n          {\"kind\": \"connection\", \"roles\": [\"father\", \"mother\"], \"take\": \"family\", \"rule\": \"homes\", \"label\": \"family\"}\n        ], \"weight\": 1}\n      ],\n      \"reject\": [],\n      \"for_person\": {\"sex\": \"man\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"women-by-home\",\n      \"name\": \"Women's full names\",\n      \"use\": \"character\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\"parts\": [\n          {\"kind\": \"rule\", \"rule\": \"women\", \"label\": \"given\"},\n          {\"kind\": \"word\", \"word\": \"di\", \"english\": \"of\", \"label\": \"of\"},\n          {\"kind\": \"connection\", \"roles\": [\"father\", \"mother\"], \"take\": \"family\", \"rule\": \"homes\", \"label\": \"family\"}\n        ], \"weight\": 1}\n      ],\n      \"reject\": [],\n      \"for_person\": {\"sex\": \"woman\"},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    },\n    {\n      \"id\": \"pet-names\",\n      \"name\": \"Pet names\",\n      \"use\": \"pet names\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\"parts\": [{\"kind\": \"own\", \"take\": \"given\", \"ending\": \"el\", \"label\": \"pet name\"}], \"weight\": 1}\n      ],\n      \"reject\": [],\n      \"for_person\": {},\n      \"capitalize\": true,\n      \"min_length\": 2,\n      \"max_length\": 24\n    }\n  ]\n}\n```\n",
+   "blocking": [
+    "The name rule 'pet-names' uses an ending the grammar for names doesn't have: 'el'"
+   ],
+   "warnings": [],
+   "people_names": {
+    "choices": {
+     "sex": [
+      "man",
+      "woman"
+     ],
+     "rank": [
+      "common",
+      "noble"
+     ]
+    },
+    "kept_titles": [],
+    "address": [
+     {
+      "kind": "family",
+      "roles": [
+       "father",
+       "mother",
+       "brother",
+       "sister",
+       "son",
+       "daughter",
+       "husband",
+       "wife",
+       "child",
+       "grandparent",
+       "cousin"
+      ],
+      "uses": [
+       "given"
+      ],
+      "default": false
+     },
+     {
+      "kind": "friends",
+      "roles": [
+       "friend",
+       "companion"
+      ],
+      "uses": [
+       "given"
+      ],
+      "default": false
+     },
+     {
+      "kind": "elders and superiors",
+      "roles": [
+       "elder",
+       "lord",
+       "lady",
+       "superior",
+       "prince",
+       "courtier"
+      ],
+      "uses": [
+       "title"
+      ],
+      "default": false
+     },
+     {
+      "kind": "strangers",
+      "roles": [
+       "stranger"
+      ],
+      "uses": [
+       "given",
+       "title"
+      ],
+      "default": true
+     }
+    ]
+   },
+   "samples": [
+    {
+     "rank": "common",
+     "sex": "man",
+     "father": "Faultaud",
+     "child": "Mulcranllou",
+     "rule": "men",
+     "parts": [
+      [
+       "Men's names",
+       "Mulcranllou",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "common",
+     "sex": "woman",
+     "father": "Faultaud",
+     "child": "Quaguelle",
+     "rule": "women",
+     "parts": [
+      [
+       "Women's names",
+       "Quaguelle",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "noble",
+     "sex": "man",
+     "father": "Cloisguac",
+     "child": "Plefou",
+     "rule": "men",
+     "parts": [
+      [
+       "Men's names",
+       "Plefou",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "noble",
+     "sex": "woman",
+     "father": "Cloisguac",
+     "child": "Musttette",
+     "rule": "women",
+     "parts": [
+      [
+       "Women's names",
+       "Musttette",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    }
+   ]
+  },
+  "Varsenyk": {
+   "world": "Test",
+   "reply": "```json\n{\n  \"people_names\": {\n    \"choices\": {\n      \"sex\": [\"man\", \"woman\"],\n      \"rank\": [\"common\", \"noble\"]\n    },\n    \"kept_titles\": [\n      {\"word\": \"Tsar\", \"meaning\": \"emperor\"}\n    ],\n    \"address\": [\n      {\"kind\": \"family\", \"roles\": [\"father\", \"mother\", \"brother\", \"sister\", \"son\", \"daughter\", \"child\", \"spouse\", \"husband\", \"wife\"], \"uses\": [\"given\"]},\n      {\"kind\": \"close friend\", \"roles\": [\"friend\"], \"uses\": [\"given\"]},\n      {\"kind\": \"elder or superior\", \"roles\": [\"elder\", \"superior\", \"lord\", \"master\"], \"uses\": [\"given\", \"family\"]},\n      {\"kind\": \"stranger\", \"roles\": [], \"uses\": [\"given\", \"family\"], \"default\": true}\n    ]\n  },\n  \"generators\": [\n    {\"id\": \"words\", \"name\": \"Words\", \"use\": \"words\", \"patterns\": [\"CV(F)*3\", \"V(F)\", \"VCV(F)*2\", \"V(F)CV(F)\", \"CVCV(F)*6\", \"CV(F)CV(F)*2\", \"CVCVCV(F)*2\", \"CV(F)CV(F)CV(F)\", \"V(F)CV(F)CV(F)\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"[bcdfghjklmnpqrstvwxz]{4}\", \"^dukh$\"], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"places\", \"name\": \"Places\", \"use\": \"place\", \"patterns\": [\"CVCV[rsk|nsk]*2\", \"CV(F)C[enya|ava|ozhye]*2\", \"CV(F)C[ets|evo]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"items\", \"name\": \"Things\", \"use\": \"item\", \"patterns\": [\"CVCV[ka|nik]*2\", \"CV(F)C[ets|ina]\", \"CV(F)voy CVC[ar|ets|ina]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"groups\", \"name\": \"Groups\", \"use\": \"lore\", \"patterns\": [\"CV(F)vye CVC[ary|ory|eny]*2\", \"CVC[ovtsy|ovichi|evichi]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"demonym\", \"name\": \"Peoples\", \"use\": \"demonym\", \"patterns\": [\"CVCV[nets|vets]\", \"CV(F)C[entsy|ovtsy]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"given-male\", \"name\": \"Given names (male)\", \"use\": \"name part\", \"patterns\": [\"CVCV[rek|dosh|vel|mir|lan|zhek]*3\", \"CV[rek|dosh|vel|mir|lan|zhek]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"y[aeiou]y\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {\"sex\": \"man\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"given-female\", \"name\": \"Given names (female)\", \"use\": \"name part\", \"patterns\": [\"CV(F)C[ya|ena|isha|ilya]*2\", \"CVC[ya|ena]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"y[aeiou]y\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {\"sex\": \"woman\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"family-male\", \"name\": \"Family names (male)\", \"use\": \"name part\", \"patterns\": [\"CV(F)CV[vanov]\", \"CV(F)C[eskoy|arin]*2\", \"CV[vanov]\", \"C[eskoy|arin]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"y[aeiou]y\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {\"sex\": \"man\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"family-female\", \"name\": \"Family names (female)\", \"use\": \"name part\", \"patterns\": [\"CV(F)CV[vanova]\", \"CV(F)C[eskaya|arina]*2\", \"CV[vanova]\", \"C[eskaya|arina]\"], \"shapes\": [], \"reject\": [\"(.)\\\\1\\\\1\", \"yy\", \"yi\", \"iy\", \"y[aeiou]y\", \"[bcdfghjklmnpqrstvwxz]{4}\"], \"for_person\": {\"sex\": \"woman\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24},\n    {\"id\": \"people-male\", \"name\": \"People (male)\", \"use\": \"character\", \"patterns\": [], \"shapes\": [\n      {\"weight\": 1, \"parts\": [\n        {\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"},\n        {\"kind\": \"rule\", \"rule\": \"family-male\", \"label\": \"family\"}\n      ]}\n    ], \"reject\": [], \"for_person\": {\"sex\": \"man\", \"rank\": \"common\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 30},\n    {\"id\": \"people-female\", \"name\": \"People (female)\", \"use\": \"character\", \"patterns\": [], \"shapes\": [\n      {\"weight\": 1, \"parts\": [\n        {\"kind\": \"rule\", \"rule\": \"given-female\", \"label\": \"given\"},\n        {\"kind\": \"rule\", \"rule\": \"family-female\", \"label\": \"family\"}\n      ]}\n    ], \"reject\": [], \"for_person\": {\"sex\": \"woman\", \"rank\": \"common\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 30},\n    {\"id\": \"people-male-noble\", \"name\": \"People (male, old house)\", \"use\": \"character\", \"patterns\": [], \"shapes\": [\n      {\"weight\": 1, \"parts\": [\n        {\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"},\n        {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"given-male\", \"ending\": \"revich\", \"label\": \"family\"}\n      ]},\n      {\"weight\": 1, \"parts\": [\n        {\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"},\n        {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"given-male\", \"ending\": \"osich\", \"label\": \"family\"}\n      ]}\n    ], \"reject\": [], \"for_person\": {\"sex\": \"man\", \"rank\": \"noble\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 32},\n    {\"id\": \"people-female-noble\", \"name\": \"People (female, old house)\", \"use\": \"character\", \"patterns\": [], \"shapes\": [\n      {\"weight\": 1, \"parts\": [\n        {\"kind\": \"rule\", \"rule\": \"given-female\", \"label\": \"given\"},\n        {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"given-male\", \"ending\": \"revich\", \"label\": \"family\"}\n      ]},\n      {\"weight\": 1, \"parts\": [\n        {\"kind\": \"rule\", \"rule\": \"given-female\", \"label\": \"given\"},\n        {\"kind\": \"connection\", \"roles\": [\"father\"], \"take\": \"given\", \"rule\": \"given-male\", \"ending\": \"osich\", \"label\": \"family\"}\n      ]}\n    ], \"reject\": [], \"for_person\": {\"sex\": \"woman\", \"rank\": \"noble\"}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 32}\n  ]\n}\n```\n",
+   "error": "4 validation errors for Language\ngenerators.7.use\n  Value error, unknown generator use: 'name part' [type=value_error, input_value='name part', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error\ngenerators.8.use\n  Value error, unknown generator use: 'name part' [type=value_error, input_value='name part', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error\ngenerators.9.use\n  Value error, unknown generator use: 'name part' [type=value_error, input_value='name part', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error\ngenerators.10.use\n  Value error, unknown generator use: 'name part' [type=value_error, input_value='name part', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "Bumbagoo": {
+   "world": "Test",
+   "reply": "```json\n{\"people_names\": {\"choices\": {\"sex\": [\"man\", \"woman\"], \"rank\": [\"common\", \"elder\"]}, \"kept_titles\": [], \"address\": [{\"kind\": \"family\", \"roles\": [\"father\", \"mother\", \"brother\", \"sister\", \"son\", \"daughter\", \"child\", \"husband\", \"wife\", \"spouse\", \"grandfather\", \"grandmother\"], \"uses\": [\"given\"], \"default\": false}, {\"kind\": \"friends\", \"roles\": [\"friend\"], \"uses\": [\"given\"], \"default\": false}, {\"kind\": \"elders and bosses\", \"roles\": [\"elder\", \"boss\", \"chief\"], \"uses\": [\"given\"], \"default\": false}, {\"kind\": \"strangers\", \"roles\": [], \"uses\": [\"given\"], \"default\": true}]}, \"generators\": [{\"id\": \"given_names\", \"name\": \"Given names\", \"use\": \"given name\", \"patterns\": [\"CVCV[ba|bo|goo]*2\", \"CVCCV[ba|bo|goo]\", \"CVCVCVC\"], \"shapes\": [], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24}, {\"id\": \"characters\", \"name\": \"Characters\", \"use\": \"character\", \"patterns\": [], \"shapes\": [{\"parts\": [{\"kind\": \"rule\", \"rule\": \"given_names\", \"label\": \"given\"}], \"weight\": 1}], \"reject\": [], \"for_person\": {}, \"capitalize\": true, \"min_length\": 2, \"max_length\": 24}]}\n```\n",
+   "error": "1 validation error for Language\ngenerators.6.use\n  Value error, unknown generator use: 'given name' [type=value_error, input_value='given name', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "Skrathik": {
+   "world": "Test",
+   "reply": "```json\n{\n  \"people_names\": {\n    \"choices\": {\n      \"sex\": [\"man\", \"woman\"],\n      \"rank\": [\"hatchling\", \"elder\"]\n    },\n    \"kept_titles\": [\n      {\"word\": \"sesh\", \"meaning\": \"honoured one\"}\n    ],\n    \"address\": [\n      {\n        \"kind\": \"clutch-mates\",\n        \"roles\": [\"clutch-mate\", \"sibling\", \"brother\", \"sister\", \"friend\"],\n        \"uses\": [\"given\"]\n      },\n      {\n        \"kind\": \"elders\",\n        \"roles\": [\"elder\", \"mother\", \"father\", \"grandmother\", \"grandfather\"],\n        \"uses\": [\"given\", \"clutch\", \"title\"]\n      },\n      {\n        \"kind\": \"strangers\",\n        \"roles\": [\"stranger\"],\n        \"uses\": [\"given\", \"title\"],\n        \"default\": true\n      }\n    ]\n  },\n  \"generators\": [\n    {\n      \"id\": \"hatch_names\",\n      \"name\": \"Hatch names\",\n      \"use\": \"given name\",\n      \"patterns\": [\"IVMV*2\", \"IVMVF*2\", \"IVF\"],\n      \"shapes\": [],\n      \"reject\": [],\n      \"for_person\": {},\n      \"capitalize\": true,\n      \"min_length\": 3,\n      \"max_length\": 12\n    },\n    {\n      \"id\": \"characters\",\n      \"name\": \"Characters\",\n      \"use\": \"character\",\n      \"patterns\": [],\n      \"shapes\": [\n        {\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"hatch_names\", \"label\": \"given\"},\n            {\n              \"kind\": \"connection\",\n              \"roles\": [\"elder\", \"mother\", \"father\"],\n              \"take\": \"given\",\n              \"rule\": \"hatch_names\",\n              \"ending\": \"i\",\n              \"optional\": true,\n              \"label\": \"clutch\"\n            }\n          ],\n          \"weight\": 1\n        }\n      ],\n      \"reject\": [],\n      \"for_person\": {},\n      \"capitalize\": true,\n      \"min_length\": 3,\n      \"max_length\": 24\n    }\n  ]\n}\n```\n",
+   "error": "1 validation error for Language\ngenerators.6.use\n  Value error, unknown generator use: 'given name' [type=value_error, input_value='given name', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error"
+  },
+  "Moscavian": {
+   "world": "Moscavia",
+   "reply": "{\"people_names\":{\"choices\":{\"sex\":[\"man\",\"woman\"],\"rank\":[\"commoner\",\"boyar\",\"priest\",\"tsar\"]},\"kept_titles\":[{\"word\":\"Tsevarot\",\"meaning\":\"the Tsar\"}],\"address\":[{\"kind\":\"family\",\"roles\":[\"father\",\"mother\",\"brother\",\"sister\",\"son\",\"daughter\",\"husband\",\"wife\",\"grandfather\",\"grandmother\",\"child\"],\"uses\":[\"pet name\"]},{\"kind\":\"friends\",\"roles\":[\"friend\"],\"uses\":[\"given\"]},{\"kind\":\"respect (elder, boyar, priest)\",\"roles\":[\"elder\",\"boyar\",\"priest\",\"superior\"],\"uses\":[\"given\",\"patronymic\"]},{\"kind\":\"the Tsar's subjects\",\"roles\":[\"subject\"],\"uses\":[\"title\"]},{\"kind\":\"strangers\",\"roles\":[\"stranger\"],\"uses\":[\"given\",\"patronymic\"],\"default\":true}]},\"generators\":[{\"id\":\"given_men\",\"name\":\"Men's own names\",\"use\":\"character\",\"patterns\":[\"[C|R]VCV[slan|yar|dey|vik|mon]\"],\"shapes\":[],\"reject\":[],\"for_person\":{\"sex\":\"man\"},\"capitalize\":true,\"min_length\":2,\"max_length\":24},{\"id\":\"given_women\",\"name\":\"Women's own names\",\"use\":\"character\",\"patterns\":[\"[C|R]VC[eva|ena|isha|ya]\"],\"shapes\":[],\"reject\":[],\"for_person\":{\"sex\":\"woman\"},\"capitalize\":true,\"min_length\":2,\"max_length\":24},{\"id\":\"family_names\",\"name\":\"Family names\",\"use\":\"character\",\"patterns\":[\"[C|R]VC[ov|in|evsky]\"],\"shapes\":[],\"reject\":[],\"for_person\":{},\"capitalize\":true,\"min_length\":2,\"max_length\":24},{\"id\":\"people\",\"name\":\"Characters (men)\",\"use\":\"character\",\"patterns\":[],\"shapes\":[{\"parts\":[{\"kind\":\"rule\",\"rule\":\"given_men\",\"label\":\"given\"},{\"kind\":\"connection\",\"roles\":[\"father\"],\"take\":\"given\",\"rule\":\"given_men\",\"label\":\"patronymic\",\"person_forms\":[{\"when\":{\"sex\":\"man\"},\"changes\":[{\"when\":\"ends in ey\",\"kind\":\"ending\",\"drop\":\"ey\",\"text\":\"evik\"},{\"when\":\"not ends in ey\",\"kind\":\"ending\",\"text\":\"evik\"}]}]},{\"kind\":\"connection\",\"roles\":[\"father\",\"mother\"],\"take\":\"family\",\"rule\":\"family_names\",\"label\":\"family\"}],\"weight\":1}],\"reject\":[],\"for_person\":{\"sex\":\"man\"},\"capitalize\":true,\"min_length\":2,\"max_length\":40},{\"id\":\"people_women\",\"name\":\"Characters (women)\",\"use\":\"character\",\"patterns\":[],\"shapes\":[{\"parts\":[{\"kind\":\"rule\",\"rule\":\"given_women\",\"label\":\"given\"},{\"kind\":\"connection\",\"roles\":[\"father\"],\"take\":\"given\",\"rule\":\"given_men\",\"label\":\"patronymic\",\"person_forms\":[{\"when\":{\"sex\":\"woman\"},\"changes\":[{\"when\":\"ends in ey\",\"kind\":\"ending\",\"drop\":\"ey\",\"text\":\"evra\"},{\"when\":\"not ends in ey\",\"kind\":\"ending\",\"text\":\"evra\"}]}]},{\"kind\":\"connection\",\"roles\":[\"father\",\"mother\"],\"take\":\"family\",\"rule\":\"family_names\",\"label\":\"family\",\"person_forms\":[{\"when\":{\"sex\":\"woman\"},\"changes\":[{\"when\":\"ends in y\",\"kind\":\"ending\",\"drop\":\"y\",\"text\":\"aya\"},{\"when\":\"not ends in y\",\"kind\":\"ending\",\"text\":\"a\"}]}]}],\"weight\":1}],\"reject\":[],\"for_person\":{\"sex\":\"woman\"},\"capitalize\":true,\"min_length\":2,\"max_length\":40},{\"id\":\"pet_names\",\"name\":\"Pet names\",\"use\":\"pet names\",\"patterns\":[],\"shapes\":[{\"parts\":[{\"kind\":\"own\",\"take\":\"given\",\"label\":\"pet name\",\"person_forms\":[{\"when\":{},\"changes\":[{\"when\":\"ends in ey\",\"kind\":\"ending\",\"drop\":\"ey\",\"text\":\"enka\"},{\"when\":\"ends in a\",\"kind\":\"ending\",\"drop\":\"a\",\"text\":\"enka\"},{\"when\":\"ends in o\",\"kind\":\"ending\",\"drop\":\"o\",\"text\":\"enka\"},{\"when\":\"not ends in ey, a, o\",\"kind\":\"ending\",\"text\":\"enka\"}]}]}],\"weight\":1}],\"reject\":[],\"for_person\":{},\"capitalize\":true,\"min_length\":2,\"max_length\":24}]}\n",
+   "blocking": [],
+   "warnings": [
+    "23 of 263 words don't follow the language's own word rules: zlov, bolsh, dolgav, tolshav, muzhets, yazhka, krylets, znavati, stoyti, kholdov, moskavets, moskavtsi …"
+   ],
+   "people_names": {
+    "choices": {
+     "sex": [
+      "man",
+      "woman"
+     ],
+     "rank": [
+      "commoner",
+      "boyar",
+      "priest",
+      "tsar"
+     ]
+    },
+    "kept_titles": [
+     {
+      "word": "Tsevarot",
+      "meaning": "the Tsar"
+     }
+    ],
+    "address": [
+     {
+      "kind": "family",
+      "roles": [
+       "father",
+       "mother",
+       "brother",
+       "sister",
+       "son",
+       "daughter",
+       "husband",
+       "wife",
+       "grandfather",
+       "grandmother",
+       "child"
+      ],
+      "uses": [
+       "pet name"
+      ],
+      "default": false
+     },
+     {
+      "kind": "friends",
+      "roles": [
+       "friend"
+      ],
+      "uses": [
+       "given"
+      ],
+      "default": false
+     },
+     {
+      "kind": "respect (elder, boyar, priest)",
+      "roles": [
+       "elder",
+       "boyar",
+       "priest",
+       "superior"
+      ],
+      "uses": [
+       "given",
+       "patronymic"
+      ],
+      "default": false
+     },
+     {
+      "kind": "the Tsar's subjects",
+      "roles": [
+       "subject"
+      ],
+      "uses": [
+       "title"
+      ],
+      "default": false
+     },
+     {
+      "kind": "strangers",
+      "roles": [
+       "stranger"
+      ],
+      "uses": [
+       "given",
+       "patronymic"
+      ],
+      "default": true
+     }
+    ]
+   },
+   "samples": [
+    {
+     "rank": "commoner",
+     "sex": "man",
+     "father": "Latsamon",
+     "child": "Svibymon",
+     "rule": "given_men",
+     "parts": [
+      [
+       "Men's own names",
+       "Svibymon",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "commoner",
+     "sex": "woman",
+     "father": "Latsamon",
+     "child": "Dvyutisha",
+     "rule": "given_women",
+     "parts": [
+      [
+       "Women's own names",
+       "Dvyutisha",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "boyar",
+     "sex": "man",
+     "father": "Khaguslan",
+     "child": "Dvemeslan",
+     "rule": "given_men",
+     "parts": [
+      [
+       "Men's own names",
+       "Dvemeslan",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "boyar",
+     "sex": "woman",
+     "father": "Khaguslan",
+     "child": "Slokeva",
+     "rule": "given_women",
+     "parts": [
+      [
+       "Women's own names",
+       "Slokeva",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "priest",
+     "sex": "man",
+     "father": "Giyamon",
+     "child": "Byamyadey",
+     "rule": "given_men",
+     "parts": [
+      [
+       "Men's own names",
+       "Byamyadey",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "priest",
+     "sex": "woman",
+     "father": "Giyamon",
+     "child": "Spomisha",
+     "rule": "given_women",
+     "parts": [
+      [
+       "Women's own names",
+       "Spomisha",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "tsar",
+     "sex": "man",
+     "father": "Gyamyodey",
+     "child": "Ptikeyar",
+     "rule": "given_men",
+     "parts": [
+      [
+       "Men's own names",
+       "Ptikeyar",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    },
+    {
+     "rank": "tsar",
+     "sex": "woman",
+     "father": "Gyamyodey",
+     "child": "Pashena",
+     "rule": "given_women",
+     "parts": [
+      [
+       "Women's own names",
+       "Pashena",
+       "rolled"
+      ]
+     ],
+     "pet": null,
+     "orphan_missing": []
+    }
+   ]
+  },
+  "Varovni": {
+   "world": "Test2",
+   "reply": "```json\n{\n  \"people_names\": {\n    \"choices\": {\n      \"sex\": [\"man\", \"woman\"],\n      \"rank\": [\"commoner\", \"tsar\"]\n    },\n    \"kept_titles\": [],\n    \"address\": [\n      {\"kind\": \"family\", \"roles\": [\"father\", \"mother\", \"brother\", \"sister\", \"son\", \"daughter\", \"child\", \"husband\", \"wife\", \"spouse\", \"grandfather\", \"grandmother\", \"cousin\"], \"uses\": [\"given\"]},\n      {\"kind\": \"friends\", \"roles\": [\"friend\", \"companion\"], \"uses\": [\"given\"]},\n      {\"kind\": \"strangers\", \"roles\": [\"stranger\"], \"uses\": [\"given\", \"family\"], \"default\": true},\n      {\"kind\": \"elders and superiors\", \"roles\": [\"elder\", \"superior\", \"official\", \"servant\"], \"uses\": [\"given\", \"family\"]},\n      {\"kind\": \"the faithful\", \"roles\": [\"parishioner\", \"faithful\", \"deacon\"], \"uses\": [\"title\"]},\n      {\"kind\": \"subjects and court\", \"roles\": [\"subject\", \"courtier\", \"court\"], \"uses\": [\"title\"]}\n    ]\n  },\n  \"generators\": [\n    {\n      \"id\": \"people-male\",\n      \"name\": \"People (male)\",\n      \"use\": \"character\",\n      \"for_person\": {\"sex\": \"man\", \"rank\": \"commoner\"},\n      \"shapes\": [\n        {\n          \"weight\": 2,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\", \"mother\"], \"take\": \"family\", \"rule\": \"family-male\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"man\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"\", \"drop\": \"a\"}]}]}\n          ]\n        },\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\", \"mother\"], \"take\": \"family\", \"rule\": \"family-male\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"man\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"\", \"drop\": \"a\"}]}]},\n            {\"kind\": \"word\", \"word\": \"Ul\", \"english\": \"Owl-of\"},\n            {\"kind\": \"meaning\", \"slot\": \"noun\", \"hint\": \"an owl-name taken since the Light: a star, the sun, wind, snow\", \"label\": \"owl-name\"}\n          ]\n        }\n      ]\n    },\n    {\n      \"id\": \"people-female\",\n      \"name\": \"People (female)\",\n      \"use\": \"character\",\n      \"for_person\": {\"sex\": \"woman\"},\n      \"shapes\": [\n        {\n          \"weight\": 2,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"given-female\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\", \"mother\"], \"take\": \"family\", \"rule\": \"family-female\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"woman\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"a\", \"drop\": \"a\"}]}]}\n          ]\n        },\n        {\n          \"weight\": 1,\n          \"parts\": [\n            {\"kind\": \"rule\", \"rule\": \"given-female\", \"label\": \"given\"},\n            {\"kind\": \"connection\", \"roles\": [\"father\", \"mother\"], \"take\": \"family\", \"rule\": \"family-female\", \"label\": \"family\",\n             \"person_forms\": [{\"when\": {\"sex\": \"woman\"}, \"changes\": [{\"kind\": \"ending\", \"text\": \"a\", \"drop\": \"a\"}]}]},\n            {\"kind\": \"word\", \"word\": \"Ul\", \"english\": \"Owl-of\"},\n            {\"kind\": \"meaning\", \"slot\": \"noun\", \"hint\": \"an owl-name taken since the Light: a star, the sun, wind, snow\", \"label\": \"owl-name\"}\n          ]\n        }\n      ]\n    },\n    {\n      \"id\": \"people-tsar\",\n      \"name\": \"Tsars\",\n      \"use\": \"character\",\n      \"for_person\": {\"sex\": \"man\", \"rank\": \"tsar\"},\n      \"shapes\": [\n        {\"weight\": 3, \"parts\": [{\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"}, {\"kind\": \"word\", \"word\": \"I\", \"english\": \"I\", \"label\": \"number\"}]},\n        {\"weight\": 3, \"parts\": [{\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"}, {\"kind\": \"word\", \"word\": \"II\", \"english\": \"II\", \"label\": \"number\"}]},\n        {\"weight\": 2, \"parts\": [{\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"}, {\"kind\": \"word\", \"word\": \"III\", \"english\": \"III\", \"label\": \"number\"}]},\n        {\"weight\": 1, \"parts\": [{\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"}, {\"kind\": \"word\", \"word\": \"IV\", \"english\": \"IV\", \"label\": \"number\"}]},\n        {\"weight\": 1, \"parts\": [{\"kind\": \"rule\", \"rule\": \"given-male\", \"label\": \"given\"}, {\"kind\": \"word\", \"word\": \"V\", \"english\": \"V\", \"label\": \"number\"}]}\n      ]\n    },\n    {\"id\": \"given-male\", \"name\": \"Men's given names\", \"use\": \"character\", \"patterns\": [\"CVMV[n|k|l]\"], \"for_person\": {\"sex\": \"man\"}},\n    {\"id\": \"given-female\", \"name\": \"Women's given names\", \"use\": \"character\", \"patterns\": [\"CVM[a|ena]\"], \"for_person\": {\"sex\": \"woman\"}},\n    {\"id\": \"family-male\", \"name\": \"Family names (men)\", \"use\": \"character\", \"patterns\": [\"CVMovsk\"], \"for_person\": {\"sex\": \"man\"}},\n    {\"id\": \"family-female\", \"name\": \"Family names (women)\", \"use\": \"character\", \"patterns\": [\"CVMovska\"], \"for_person\": {\"sex\": \"woman\"}}\n  ]\n}\n```\n",
+   "blocking": [],
+   "warnings": [
+    "13 of 304 words don't follow the language's own word rules: -ek, Breskovina, -ets, -nya, -in, -ush, Court of Kinchvovy Brezhi, Osvarsk Batsk, Pravsk Dyevra, tyomborva, rubskar, Zakan Zopsovsk Ul Yechra …"
+   ],
+   "people_names": {
+    "choices": {
+     "sex": [
+      "man",
+      "woman"
+     ],
+     "rank": [
+      "commoner",
+      "tsar"
+     ]
+    },
+    "kept_titles": [],
+    "address": [
+     {
+      "kind": "family",
+      "roles": [
+       "father",
+       "mother",
+       "brother",
+       "sister",
+       "son",
+       "daughter",
+       "child",
+       "husband",
+       "wife",
+       "spouse",
+       "grandfather",
+       "grandmother",
+       "cousin"
+      ],
+      "uses": [
+       "given"
+      ],
+      "default": false
+     },
+     {
+      "kind": "friends",
+      "roles": [
+       "friend",
+       "companion"
+      ],
+      "uses": [
+       "given"
+      ],
+      "default": false
+     },
+     {
+      "kind": "strangers",
+      "roles": [
+       "stranger"
+      ],
+      "uses": [
+       "given",
+       "family"
+      ],
+      "default": true
+     },
+     {
+      "kind": "elders and superiors",
+      "roles": [
+       "elder",
+       "superior",
+       "official",
+       "servant"
+      ],
+      "uses": [
+       "given",
+       "family"
+      ],
+      "default": false
+     },
+     {
+      "kind": "the faithful",
+      "roles": [
+       "parishioner",
+       "faithful",
+       "deacon"
+      ],
+      "uses": [
+       "title"
+      ],
+      "default": false
+     },
+     {
+      "kind": "subjects and court",
+      "roles": [
+       "subject",
+       "courtier",
+       "court"
+      ],
+      "uses": [
+       "title"
+      ],
+      "default": false
+     }
+    ]
+   },
+   "error": "ValueError('an ending needs its letters')"
+  }
+ }
+}

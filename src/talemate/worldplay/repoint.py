@@ -109,7 +109,9 @@ FIELD_TARGET_KINDS: dict[str, tuple[str, ...]] = {
 }
 
 # the stub's own fields that aren't carried over as they are
-_OWN_HANDLED = ("name", "aka", "stub", "filings")
+# (languages 4b-2) a merged entry's name parts write its own name, never
+# the target's: they aren't carried
+_OWN_HANDLED = ("name", "aka", "stub", "filings", "name_parts")
 
 
 class RepointResult(BaseModel):
@@ -803,7 +805,7 @@ def _names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[str]]:
         held.add(key)
         added.append(name)
         aka.append({"name": name, "tag": "common", "everyday": False})
-    return aka, added
+    return _with_kinds(aka, job.stub), added
 
 
 def _target_names(state: ThingState, name: str) -> list[str]:
@@ -867,7 +869,37 @@ def _merge_names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[st
         if index >= names_first:
             job.link_names.append(name)
         aka.append({"name": name, "tag": tag, "everyday": False})
-    return aka, added
+    return _with_kinds(aka, job.stub), added
+
+
+def _with_kinds(aka: list[dict], stub) -> list[dict]:
+    """`aka` with the stub's titles, pet names and names someone uses
+    (languages 4b-2) as they were, not plain other names (final review
+    I10); a second shown title isn't shown."""
+
+    kinded = {
+        name_key(entry["name"]): entry
+        for entry in stub.fields.get("aka") or []
+        if isinstance(entry, dict)
+        and entry.get("kind")
+        and isinstance(entry.get("name"), str)
+    }
+    shown = any(isinstance(e, dict) and e.get("shown") for e in aka)
+    out = []
+    for entry in aka:
+        found = (
+            kinded.get(name_key(entry.get("name", "")))
+            if isinstance(entry, dict)
+            else None
+        )
+        if found is not None and not entry.get("kind"):
+            entry = {**found, "everyday": False}
+            if entry.get("shown"):
+                if shown:
+                    entry.pop("shown")
+                shown = True
+        out.append(entry)
+    return out
 
 
 def _inside_either(job: _Job, thing_id: str) -> bool:
@@ -1641,6 +1673,27 @@ def rename_everywhere(rev: Revision, world: World, thing_id: str, name: str) -> 
                 fact.fact_id,
                 text=fact.text.replace(shown, f"[[thing:{thing_id}|{name}]]"),
             )
+    clear_stale_parts(rev, view, thing_id, name)
+
+
+def clear_stale_parts(rev: Revision, view, thing_id: str, name: str) -> None:
+    """A person renamed to a name their parts don't write (languages 4b-2):
+    the parts go, and the page says it's not built from a rule; what
+    they're built as stays (final review I7). The text wins."""
+
+    from talemate.languages.person_names import stored_written
+
+    state = view.thing(thing_id)
+    stored = state.fields.get("name_parts") if state is not None else None
+    if not isinstance(stored, dict) or not stored.get("parts"):
+        return
+    if stored_written(view, stored) != " ".join(name.split()):
+        rev.set_field(
+            thing_id,
+            "name_parts",
+            {**stored, "rule": "", "shape": 0, "parts": []},
+            None,
+        )
 
 
 def drop_other_names(rev: Revision, world: World, thing_id: str, aka: object) -> None:

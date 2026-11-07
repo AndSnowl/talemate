@@ -7,10 +7,12 @@ things with Name it…."""
 from __future__ import annotations
 
 import re
+import uuid
 
 from talemate.languages.cleaning import model as clean_model
 from talemate.languages.cleaning.languages import language_rows, named_languages
 from talemate.languages.cleaning.lists import effective
+from talemate.languages.cleaning.marks import Mark
 from talemate.languages.cleaning.mark import mark_texts
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import languages_for
@@ -24,6 +26,7 @@ __all__ = [
     "clean_group_draft",
     "clean_preview",
     "inherited_rows",
+    "name_person",
     "owner_kept",
 ]
 
@@ -104,11 +107,153 @@ async def clean_preview(
         if from_words
         else [dict(r) for r in rows]
     )
-    return preview.model_copy(
+    cleaned = preview.model_copy(
         update={
             "marks": marks,
             "languages": shown,
             "inherited_languages": _shown_inherited(view, inherited),
+        }
+    )
+    language_id = _main_language(used)
+    if preview.kind == "character" and not language_id:
+        # a person: their parents' language, from the model's parent rows
+        # (unticked, ruling F7) when nothing else gives one (4b-2)
+        language_id = _main_language(_parent_languages(view, preview))
+    if preview.kind == "character" and language_id:
+        cleaned = name_person(view, cleaned, language_id)
+    return cleaned
+
+
+def _parent_languages(view, preview: CreatePreview) -> list:
+    """The languages of the draft's parent rows, ticked or not; with none,
+    of any of its rows (the model's place for them, acceptance 4b-2)."""
+
+    from talemate.languages.person_names import PARENT_WORDS, role_matches
+
+    rows: list = []
+    for row in preview.filings:
+        if row.target_id and role_matches(list(PARENT_WORDS), row.role or ""):
+            rows += languages_for(view, row.target_id)
+    if not rows:
+        for row in preview.filings:
+            if row.target_id:
+                rows += languages_for(view, row.target_id)
+    return rows
+
+
+def _main_language(rows: list) -> str | None:
+    """The language a draft's person is named in: an official row's, else
+    the first's."""
+
+    def lid(row) -> str | None:
+        if isinstance(row, dict):
+            return row.get("language") or row.get("language_id")
+        return getattr(row, "language_id", None)
+
+    def role(row) -> str:
+        return (
+            row.get("role") if isinstance(row, dict) else getattr(row, "role", "")
+        ) or ""
+
+    for row in rows:
+        if role(row) == "official" and lid(row):
+            return lid(row)
+    return next((lid(row) for row in rows if lid(row)), None)
+
+
+def _has_people_rules(language) -> bool:
+    return any(
+        g.for_person or any(p.kind == "connection" for s in g.shapes for p in s.parts)
+        for g in language.generators
+    )
+
+
+def _owners_name(preview: CreatePreview) -> bool:
+    """The draft's name is the owner's: the whole of it, or its first word
+    (a given name the model added to: "Ysolde" → "Ysolde of Drassone",
+    final review I1), is written in the prompt with a capital."""
+
+    words = preview.name.split()
+    if not words:
+        return False
+    for wanted in (preview.name, words[0]):
+        if re.search(rf"(?<!\w){re.escape(wanted)}(?!\w)", preview.prompt):
+            return True
+    return False
+
+
+def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview:
+    """A drafted person's name, marked for Name it (languages 4b-2; owner,
+    2026-11-06: drafts only mark): the owner's own name, a stub's or a set
+    name is left alone; otherwise the draft keeps who the person is built
+    as (for Name it, which builds the name from the rules with what's
+    inherited pinned) and the model's title, and its name is marked. A
+    language without people rules leaves it as it is."""
+
+    from talemate.languages.entry import language_of
+    from talemate.languages.person_names import choose, stored_written
+
+    state = view.thing(language_id)
+    if state is None or state.kind != "language":
+        return preview
+    language = language_of(state)
+    if not _has_people_rules(language):
+        return preview
+    # a stub's name, or one the owner set: never rebuilt (final review C1)
+    if preview.stub_id or preview.fields.get("name"):
+        return preview
+    stored = preview.fields.get("name_parts")
+    if stored is not None:
+        # marked already (no parts yet), or built and still so: as it is
+        if not stored.get("parts") or stored_written(view, stored) == preview.name:
+            return preview
+        # built once, then renamed by the owner: their name stands, the
+        # parts go (final review C2)
+        return preview.model_copy(
+            update={
+                "fields": {k: v for k, v in preview.fields.items() if k != "name_parts"}
+            }
+        )
+    if _owners_name(preview):
+        # the owner's own name: never rebuilt
+        return preview
+    # drafts only mark (owner, 2026-11-06): the name the rules would build
+    # waits in Name it, which reads who the person is built as from here
+    stored = {
+        "language": language_id,
+        "rule": "",
+        "shape": 0,
+        "built_as": choose(language, preview.person),
+        "parts": [],
+    }
+    aka = [dict(a) for a in preview.aka if a.get("kind") != "title"]
+    title = preview.person.get("title", "")
+    if title:
+        aka.append(
+            {
+                "name": title,
+                "tag": "proper",
+                "everyday": False,
+                "kind": "title",
+                "shown": "before",
+            }
+        )
+    marks = [m for m in preview.marks if m.name != preview.name]
+    marks.append(
+        Mark(
+            id=uuid.uuid4().hex[:12],
+            name=preview.name,
+            part=preview.name,
+            why=f"Name it can build it from {language.name}'s rules for people",
+            language_id=language_id,
+            entry_kind="character",
+        )
+    )
+    return preview.model_copy(
+        update={
+            "fields": {**preview.fields, "name_parts": stored},
+            "aka": aka,
+            "marks": marks,
         }
     )
 

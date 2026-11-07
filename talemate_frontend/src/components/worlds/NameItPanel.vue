@@ -27,6 +27,7 @@
             </div>
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
+                <span v-if="titleMode" class="text-body-2" data-testid="name-it-title-note">A title held, in its language: the name stays as it is.</span>
                 <v-select
                     v-model="languageId"
                     :items="languageItems"
@@ -38,6 +39,7 @@
                     data-testid="name-it-language"
                 ></v-select>
                 <v-select
+                    v-if="!titleMode"
                     v-model="ruleId"
                     :items="ruleItems"
                     label="Rule"
@@ -49,7 +51,7 @@
                     data-testid="name-it-rule"
                 ></v-select>
                 <v-select
-                    v-if="!composed"
+                    v-if="!composed && !titleMode"
                     v-model="pattern"
                     :items="patternItems"
                     label="Pattern"
@@ -73,7 +75,7 @@
                     data-testid="name-it-form"
                     @update:model-value="chooseForm"
                 ></v-select>
-                <v-btn color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll the unpinned parts' : 'Reroll' }}</v-btn>
+                <v-btn v-if="!titleMode" color="accent" variant="outlined" size="small" prepend-icon="mdi-dice-multiple" :disabled="!ruleId" data-testid="name-it-reroll" @click="roll">{{ composed ? 'Reroll the unpinned parts' : 'Reroll' }}</v-btn>
                 <v-btn
                     v-if="composed && request.target?.thingId"
                     color="accent"
@@ -91,15 +93,15 @@
 
             <!-- a composed rule: the builder, part by part (languages 4b-1) -->
             <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
-            <NameRolls v-else class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
-            <div v-if="meaningShown && !composed" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
+            <NameRolls v-else-if="!titleMode" class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
+            <div v-if="meaningShown && !composed && !titleMode" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
             <!-- a plain rule only: the whole name from a meaning (a rule made
                  of parts has a meaning box in each meaning part, round 4) -->
             <template v-if="!composed">
             <v-divider class="my-3"></v-divider>
             <div class="d-flex align-center flex-wrap ga-2">
-                <span class="text-body-2"><b>A whole name from a meaning</b></span>
+                <span class="text-body-2"><b>{{ titleMode ? 'A title from a meaning' : 'A whole name from a meaning' }}</b></span>
                 <v-text-field
                     v-model="meaning"
                     placeholder="lakeland, the white water…"
@@ -162,7 +164,7 @@ export default {
     },
     data() {
         // `picked`: the indices of the entry name's words chosen to rename
-        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [] };
+        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [], adopting: false };
     },
     computed: {
         request() {
@@ -197,7 +199,14 @@ export default {
         formHasMeaning() {
             return (this.worlds.nameItParts?.parts || []).some((p) => p.kind === 'meaning');
         },
+        // a title made from a meaning (languages 4b-2): no rule, no rolls
+        titleMode() {
+            return !!this.request?.target?.titleOf;
+        },
         composed() {
+            if (this.titleMode) return false;
+            // a person's rule the server is picking: the builder
+            if (this.request?.person && this.ruleId === '') return true;
             const rule = this.worlds.nameItRules.find((r) => r.id === this.ruleId);
             return !!(rule && (rule.parts || []).length);
         },
@@ -211,6 +220,7 @@ export default {
         },
         effect() {
             const target = this.request?.target || {};
+            if (target.titleOf) return 'adds a title; the name stays';
             if (target.thingId) {
                 const old = target.fullName || this.request.words;
                 return this.request.stub
@@ -249,6 +259,12 @@ export default {
         },
         'worlds.nameItRules'(rules) {
             if (!rules.length || this.ruleId) return;
+            if (this.request?.person) {
+                // a person's (languages 4b-2): theirs, or the server's pick
+                this.ruleId = this.request.ruleId || '';
+                if (this.ruleId === '') this.roll();
+                return;
+            }
             const kind = this.request?.kind || 'place';
             const names = rules.filter((r) => r.use !== 'words');
             const wanted = [kind, BUCKETS[kind] || 'things', 'places'];
@@ -256,13 +272,29 @@ export default {
             this.ruleId = found?.id || null;
         },
         ruleId() {
+            // the rule the server picked for a person: already rolled
+            if (this.adopting) {
+                this.adopting = false;
+                return;
+            }
             this.pattern = null;
             // another rule: the builder starts again, no pins
             this.worlds.nameItParts = null;
             this.worlds.nameItPartPinned = {};
+            this.worlds.nameItPartFree = [];
             this.worlds.nameItPartChosen = {};
             this.worlds.nameItShapeChoice = null;
+            // a person's own rule: their parts pinned as they are (4b-2)
+            const person = this.request?.person;
+            if (person?.prefill && this.ruleId === this.request.ruleId) this.worlds.nameItPartPinned = { ...person.prefill };
             this.roll();
+        },
+        // the rule the server picked for a person, shown as the panel's
+        'worlds.nameItParts'(parts) {
+            if (this.request?.person && this.ruleId === '' && parts?.rule_id) {
+                this.adopting = true;
+                this.ruleId = parts.rule_id;
+            }
         },
         pattern() {
             this.roll();
@@ -300,6 +332,7 @@ export default {
             this.roll();
         },
         roll() {
+            if (this.titleMode) return;
             if (this.composed) this.worlds.nameItRollParts(this.languageId, this.ruleId);
             else this.worlds.nameItRoll(this.languageId, this.ruleId, this.pattern);
         },

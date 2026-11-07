@@ -163,6 +163,7 @@ def _file() -> list[str]:
         "- A full language needs a `words` generator, whose patterns the "
         "dictionary's own words follow.",
         *_name_grammar_rules(),
+        *_people_names_rules(),
     ]
 
 
@@ -186,6 +187,45 @@ def _name_grammar_rules() -> list[str]:
         "(`meaning`: words of the language built from a meaning, with `forms`, "
         "`of` and a `hint` saying what it takes). Use it for naming customs "
         "the grammar describes, such as a name after a place or a deed.",
+    ]
+
+
+def _people_names_rules() -> list[str]:
+    """How people's names are written (languages 4b-2); probe 4b-2's second
+    run's wording."""
+
+    from talemate.languages.models import GENERATOR_USES
+
+    return [
+        "- `people_names` holds the choices a person's name depends on "
+        '(`choices`: `{"sex": ["man", "woman"], "rank": [...]}` and any other '
+        "the customs use; each list's first value is the default), the titles "
+        "the language keeps in its own word (`kept_titles`: `{word, meaning}`, "
+        "the meaning in English; only titles the prose says are used in its "
+        "own word), and forms of address (`address`: `{kind, roles, uses, "
+        "default}`: how family, friends, strangers… address someone, `uses` "
+        'naming name-part labels, "title" or "pet name"; exactly one row is '
+        "the default, for strangers).",
+        "- People's rules are composed rules (`shapes`). Besides `rule`, "
+        '`word` and `meaning` parts, a part can be `"connection"` (taken from '
+        "a parent or other connection: `roles` are role words in order of "
+        'preference, such as ["father", "mother"]; `take` the label of the '
+        'connection\'s own part to take, such as "family"; `rule` the rule '
+        "rolled when there's no such connection) or `\"own\"` (this person's "
+        "own part, by `take`; used by pet-name rules, whose `use` is "
+        '"pet names"). Give each part a short `label` ("given", "family", '
+        '"house").',
+        '- `person_forms` are a part\'s forms by who the person is: `[{"when": '
+        '{"sex": "woman"}, "changes": [...]}]`, changes as in `name_grammar`. '
+        '`for_person` says who a rule is for: `{"sex": "woman", "rank": '
+        '"noble"}`. Rules that are only pieces of a name (given names, family '
+        "names) are used by the full-name rules as `rule` parts.",
+        '- A fixed word that joins a name, such as "of", gets `english`, '
+        'its English writing ("of" for "di"), unless the prose says the '
+        "native word is used in English text.",
+        "- A pet-name rule must change the name (an ending meaning small or "
+        "dear, a clipping), never give it back as it is.",
+        f"- A rule's `use` is one of: {', '.join(sorted(GENERATOR_USES))}.",
     ]
 
 
@@ -276,10 +316,15 @@ def _names(current, used) -> list[str]:
         "rule fakes such a custom with fixed words in its patterns, take those "
         "patterns out of it and keep its plain names. Change nothing else.",
         "",
+        "Then write `people_names` and the people rules from its naming "
+        "customs: how a person's name passes down from their parents, how it "
+        "changes by sex and rank, its pet names, and how people are addressed.",
+        "",
         "Every rule must build the examples the language's tables give: if a "
         "table says a word's forms, the rules applied to that word give them.",
         "",
         *_name_grammar_rules(),
+        *_people_names_rules(),
         "",
         *_change_rules(used),
     ]

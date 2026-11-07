@@ -1,0 +1,254 @@
+{
+ "fill_drassonais": {
+  "seconds": 109,
+  "review": "The change\nThe made file is filled in. Show the file\nDrassonais\nfull language\nsounds french\n257 words · 27 phrases\nSoft, rounded and flowing, full of ou, au and ai sounds, with words that close on a quiet -c, -l or -n and a stress that lands at the end. It sounds like an old southern tongue spoken slowly over wine.\nWords: Olvélnhoie, Estée, Aunzau, Elhae, Amnie, Trénsoue, Ougnu, Irex, Cloigloi, Egloi, Quudrae, Ejee\nMen's names: Chailttarnou, Blaucac, Quarlac, Oibaud, Mogrert, Vrausstert, Oncrert, Dagrou, Gorraflaud, Attin, Feurpou, Iecert\nWomen's names: Ergine, Soulline, Julelle, Ceupline, Housstégaine, Vastelle, Chollaine, Ugrine, Jiplénpette, Ouflette, Tienreimflaine, Ouguine\nPlaces: Crousseil, Praubrenc, Doiproissonne, Crezac, Dramquonne, Quounfroireil, Pravonne, Raclareil, Rousenc, Cirbac, Coirlliessonne, Maunac\nNamed things: Lo Guércrette, Lo Trisaurs, Lo Florjux, Lo Clamgno, Lo Laurplaind, Lo Glaunfe, Lo Gloideur, Lo Hagnette, Lo Paustount, Lo Sossaul, Lo Caulplel, Lo Vraumprette\nOrders and guilds: Lou Jounauds, Lou Doisins, Lou Loungrils, Lou Bretins, Lou Blafins, Lou Sielzauds, Lou Deimzauds, Lou Voimnens, Lou Morouls, Lou Crouspars, Lou Dairclaurs, Lou Rarvrouls\nPeople of a place: Pasvristtais, Guilclacais, Tantrencais, Cumneilais, Maudreilais, Recleilais, Valoullais, Blamlieplais, Frouveusbrais, Bitauquais, Guoleilais, Drielreilais\nNames by home: Lobrou Di Dossic, Nainbac Di Pairé, Crinpraucraud Di Pelhe, Aurrin Di Solenc, Grepraud Di Salic, Soubrumprou Di Ouvel, Greifaud Di Jenoul, Crirrert Di Peirecauve, Seussaud Di Ouvel, Bounmaud Di Dauné, Pleurin Di Chaumet, Chonjascraud Di Boudaille\nPlaces named of something: Sertrassonne Di Homel, Pauseil Di Ounglic, Gléponne Di Plouge, Sarressonne Di Auvre, Vamttac Di Fumic, Traurrrenc Di Oculh, Folvonne Di Manc, Pébenc Di Ventric, Ploundronne Di Plumil, Melgnareil Di Mardel, Sorvaureil Di Sablou, Lousseil Di Peissoc\nOrders named for a sign: Lou Cauvettes, Lou Pezouls, Lou Flourdes, Lou Escourcs, Lou Mairés, Lou Lacous, Lou Ossels, Lou Ounglics, Lou Nevies, Lou Pairés, Lou Sablous, Lou Auvrefougres\nFamily names: Di Pédou, Di Drassone, Di Sablou, Di Dauné, Di Bestou, Di Lacou, Di Rivache, Di Ventric, Di Oculh, Di Mountel, Di Boudaille, Di Mesté\nA man's full name: Chelhert Di Corve, Mauchaud Di Mardel, Lenflin Di Peirec, Valhac Di Chantaud, Neiblin Di Semenc, Niegou Di Maric, Eurmin Di Cordiel, Flamnaisin Di Cournel, Lajaclin Di Jornel, Omstert Di Cournel, Maurplin Di Aureil, Bargou Di Célor\nA woman's full name: Amflelle Di Sanvre, Pévrie Di Rasic, Aizine Di Jenoul, Homglie Di Auvre, Sausglie Di Mountel, Guourgline Di Mesté, Anlelle Di Auvrefougre, Airgline Di Cauvette, Trauplidaine Di Persoume, Meinumguette Di Jornel, Frelsie Di Vaunt, Zougnine Di Lunec\nPet names:\nThe name rules change: compare the sample names above.\nWorth fixing:\n9 of 257 words don't follow the language's own word rules: -el, -aud, -auve, -ais, -s, peirecauve, Cuvronne Di Pieproi, Blanchic Aunfoimtte, Blasac Di Poubreu\n96% of the words follow the language's own word rules. Real words not checked: no list of real words for this flavour.\nCOPY NOTE\nto paste back to the assistant that made it\nACCEPT THE CHANGE\nDROP IT",
+  "card": "PEOPLE'S NAMESe.g. Revélnhaud Di Jaumbe\nCHANGE IT…\nsex\nman · woman\ndefault man\nrank\ncommon · noble\ndefault common\nkept titles\nmesté\n “sir”\ndauné\n “madam”\nKEPT TITLE\nHow people are addressed (used in scenes):\nfamily\npet name · mother, father, brother, sister, son, daughter, child, wife, husband\n[pet name]\nfriends\ngiven · friend, lover, companion\nRevélnhaud\nthose of lower rank\ngiven + title · servant, vassal, subject, courtier\nRevélnhaud [title]\nstrangers (anyone else)\ngiven + family\nRevélnhaud Di Jaumbe\nADDRESS",
+  "chips": [
+   "Men's names",
+   "a meaning · of",
+   "Places",
+   "a meaning · of",
+   "a meaning · plural · the",
+   "family",
+   "given",
+   "from father, then mother · family",
+   "given",
+   "from father, then mother · family",
+   "own given · forms by sex"
+  ],
+  "for_person": [
+   "for: man",
+   "for: woman"
+  ]
+ },
+ "daughter": {
+  "prompt": "a daughter of Eilhaud of Drassone, raised at court",
+  "seconds": 46,
+  "draft": {
+   "name": "Blorgette Drassone",
+   "person": {
+    "sex": "woman",
+    "rank": "noble",
+    "name_meaning": "morning star",
+    "title": "Lady"
+   },
+   "name_parts": {
+    "language": "4c63d241f6bb4590a41add29921a1d34",
+    "rule": "woman",
+    "shape": 0,
+    "built_as": {
+     "sex": "woman",
+     "rank": "noble"
+    },
+    "parts": [
+     {
+      "label": "given",
+      "text": "Blorgette",
+      "source": "rolled"
+     },
+     {
+      "label": "family",
+      "text": "Drassone",
+      "source": "inherited",
+      "from_id": "55dc0632b9b74e7e940f61813d35de80",
+      "from_role": "heir and daughter of the sovereign"
+     }
+    ]
+   },
+   "aka": [
+    {
+     "name": "Lady",
+     "tag": "proper",
+     "everyday": false,
+     "kind": "title",
+     "shown": "before"
+    }
+   ],
+   "facts": [
+    "Blorgette is the only child of Eilhaud of Drassone and the late Princess Consort Esrelle, born in the autumn of 978 when her father was still crown prince.",
+    "Her mother, Esrelle, died in childbed when Blorgette was barely two days old, a loss that left the infant in the care of wet nurses and the court's most trusted attendants.",
+    "She stands at five feet and four inches, with a slender, willowy frame that her court gowns do little to conceal, and her skin carries the same warm olive tone as her father's, though her features betray the Tsevranyan Owl lineage more visibly than he does.",
+    "Her eyes are large and luminous, with the characteristic vertically slit pupils of amber-gold, set in a face of softer, rounder lines than her father's angular countenance, though the resemblance is unmistakable to anyone who knows the Prince well.",
+    "Her hair is dark brown like her father's, but she wears it longer, falling in loose waves past her shoulders in a fashion that blends Drassonais courtly elegance with the softer Tsevranyan style her mother's heritage would have favored.",
+    "Where Eilhaud is measured and deliberate, Blorgette tends toward impulsiveness, a trait that her governesses have spent years trying to temper with varying degrees of success.",
+    "She possesses a quick, sharp wit that she deploys freely in conversation, sometimes to the embarrassment of older courtiers who are not accustomed to being outpaced by a young woman at social gatherings.",
+    "Beneath her sometimes brash exterior, Blorgette carries a deep-seated sensitivity about her mother's death, which she rarely discusses and which surfaces only in moments of unexpected vulnerability.",
+    "She has a genuinely warm and affectionate relationship with her father, though their different temperaments sometimes create a gulf of silence between them, particularly in the aftermath of her mother's death, which they both handle in very different ways.",
+    "Raised primarily by a succession of court governesses and tutors after her mother's death, Blorgette received an education befitting a princess of Drassone, including lessons in Drassonais literature, history, music, and the rudimentary skills of courtly administration.",
+    "She has a particular talent for languages, having mastered Drassonais in its literary and spoken forms and demonstrating a facility with Tsevrani that surpasses her father's own, a gift she inherited from her mother's side of the family.",
+    "She speaks Drassonais with a fluidity and warmth that contrasts with her father's clipped precision, though she occasionally drops Tsevrani expressions into casual conversation in a way that her more conservative attendants find unsettling."
+   ],
+   "marks": [
+    [
+     "Ysara",
+     "doesn't sound like Drassonais"
+    ],
+    [
+     "Princess Consort",
+     "A real English title used in royal courts."
+    ],
+    [
+     "Owl",
+     "An English word for the bird; not invented."
+    ],
+    [
+     "Blorgette Drassone",
+     "built from Drassonais's rules"
+    ]
+   ],
+   "filings": [
+    [
+     "Drassone",
+     "heir and daughter of the sovereign",
+     false,
+     false
+    ],
+    [
+     "Eilhaud of Drassone",
+     "only child",
+     false,
+     false
+    ]
+   ]
+  },
+  "page_name": "Blorgette Drassone",
+  "name_section": "NAME\nDrassonais · A woman's full name\nNAME IT…\ngiven\nBlorgette\nrolled\nfamily\nDrassone\nfrom her parent Drassone\nbuilt as:\nwoman\nnoble\npet name:\nnone\ntitles:\nLady\n· before\nTITLE"
+ },
+ "daughter_name_it": {
+  "parts": [
+   "given\nrolled · pin one, or type your own\nBlorgette",
+   "family\nrolled · pin one, or type your own\nDi Nevie\nDi Lacou\nDi Cordiel\nDi Maric\nDi Célor\nDi Pitoun\nDi Foilhe\nDi Ounglic"
+  ],
+  "built": [
+   "Blorgette Di Nevie",
+   "Pemnesplette Di Rivache",
+   "Bivraumzaine Di Drassonais",
+   "Lauttine Di Brumic",
+   "Agline Di Arbel"
+  ]
+ },
+ "daughter_title": {
+  "seconds": 11,
+  "candidates": [
+   "Uldrie Di Rivache\nuldrie “keeper” (new word, saved if you pick it) + di “of” + rivache “river”"
+  ],
+  "titles": [
+   "Lady\n· before",
+   "Uldrie Di Rivache"
+  ]
+ },
+ "fill_varovni": {
+  "seconds": 254,
+  "review": "The change\nThe made file is filled in. Show the file\nVarovni\nfull language\nsounds russian\n304 words · 36 phrases\nDark, heavy words with soft y-sounds slipped after consonants and thick clusters like zh, kh, sk and st. It sounds like talk around a stove in deep winter: slow, firm, with a soft edge.\nWords: Oshelnust, Etsu, Yuzhryozd, Orozvyo, Azhrezd, Ive, Kva, Yav, Yore, Epre, Ogror, Eru\nPlaces: Tsarovsk, Uzhna Rogna Rekhta, Ptyonovsk, Plyeskanya, Rovnovnya, Nochrovina, Vuskovsk, Zyuzdovsk, Tsvivlovsk, Givovnya, Sirkovsk, Nekra Gosvarnya Rekhta\nThings: Rekveka, Shyakhrovna, Khizdovna, Madiets, Spyoduets, Dlilveka, Machovna, Batsvovna, Magrovna, Skrarovna, Spokhriets, Lorovna\nGroups: Shisovy Brezhi, Vyupovsk Ulkhari, Bemyutsy, Gitvovy Brezhi, Nemkovsk Ulkhari, Kraskovy Brezhi, Gnazovy Brezhi, Ptenzyatsy, Kvabatsy, Lamitsy, Vlebrovy Brezhi, Zdyurtsovy Brezhi\nDemonym: Krerets, Vserzets, Lakhtovets, Sobrets, Zheleskets, Ptelkets, Kostvets, Barvits, Plesvets, Tsvibrovets, Gnyetsvits, Kobryots\nPeople (male): Spyurdan Dvakhvovsk, Nazhvok Kvernovsk Ul Vosht, Snavkin Grivrovsk, Zhmyoshkok Rarovsk, Glyonon Shyozovsk, Chavil Sasrovsk, Zhuren Givovsk, Vorzik Zozhvovsk, Vyayol Vlukovsk Ul Molya, Grevnik Dloshkovsk, Kalnol Povnovsk, Nikol Vlazdovsk\nPeople (female): Lyazhena Kvaskovska, Spaltena Khvyultovska Ul Rukva, Tyepa Svyernovska, Syatsena Zhetsovska Ul Rogna, Khordena Kurovska Ul Kolva, Skradrena Kirovska, Brilma Dlastovska Ul Breskovina, Ryatrena Dryatvovska, Skralena Glazhdovska, Pezra Vemrovska Ul Nozra, Vryarzhena Dalnovska, Myopena Zhmoshkovska\nCountry: Untsonya, Kyuzhryonya, Bretvovnya, Kvastrovnya, Amonya, Melnovnya, Rubrovnya, Lanzovnya, Ishenya, Spogvovnya, Digrovina, Erkonya\nTowns, squares and lakes: Zdobrovsk, Slyekhvovsk, Kashkovsk, Zhochovsk, Zdoskovsk, Chulovsk, Zhidnovsk, Gnezdovsk, Zvogvovsk, Blatovsk, Panzovsk, Shochrovsk\nMen's given names: Khoyruk, Verdak, Diltak, Slyosun, Gnostvak, Zvorkol, Narzhal, Gaston, Tvablyok, Pyozhvil, Shartok, Davol\nWomen's given names: Zvakva, Smama, Khatsva, Tanchva, Zvinra, Sosena, Zholka, Zebla, Skryelva, Vsyechena, Bevra, Buzhdena\nFamily names (men): Skenovsk, Sestvovsk, Vrinzovsk, Kyukhrovsk, Kvyoskovsk, Liblovsk, Snotvovsk, Lyunkovsk, Skryashrovsk, Venrovsk, Khirmovsk, Dryurovsk\nFamily names (women): Zvyokvovska, Dvonkovska, Chachrovska, Dronovska, Tyegvovska, Darnovska, Svogovska, Tyazovska, Gnakrovska, Kvezhvovska, Glyokrovska, Lavovska\nPeoples: Skryelkhotsy, Lanyutsy, Kornetsy, Strevlitsy, Choshratsy, Vlapryutsy, Valotsy, Tvogatsy, Vazvyotsy, Snavyotsy, Dagyotsy, Khvorkutsy\nOne from a place: Zmoznats, Sormets, Zhmetovets, Khichvats, Kvyadvots, Garnovets, Tvyurzovets, Khinovets, Sleznovets, Kryobrovets, Zhayryets, Rasovets\nOrders (brezh names): Vyusovy, Chodrovy, Zhmevovy, Zdortsovy, Syuvovy, Khashovy, Myabovy, Tsogvovy, Dazrovy, Dyulkhovy, Smaznovy, Zhmurzovy\nTsars: Skriprol Zhanzovsk Ul Rogna, Strodnun Lyetsvovsk Ul Glezn, Kisrek Degvovsk Ul Torvel, Zoshtan Myelmovsk Ul Solkh, Gdizek Dvastovsk Ul Medra, Zhakik Sogvovsk Ul Vsyarslevar, Stazhok Glyomovsk Ul Tyomborva, Sozek Ryenzovsk Ul Listr, Vremak Gdivovsk Ul Rogna, Tsavren Styokhvovsk Ul Nogva, Moskol Zmerzhovsk Ul Tyomra, Zhotsvun Vrosvovsk Ul Varovni\nOwl-names (Ul ...): Ul Ilvulkhar, Ul Pepsk, Ul Pechra, Ul Smorna, Ul Ulkha, Ul Batsk, Ul Listr, Ul Kherva, Ul Slozhvovsk, Ul Palvesk, Ul Voyarin, Ul Zovna\nPet names: Dovrin\nThe name rules change: compare the sample names above.\nWorth fixing:\n13 of 304 words don't follow the language's own word rules: -ek, Breskovina, -ets, -nya, -in, -ush, Court of Kinchvovy Brezhi, Osvarsk Batsk, Pravsk Dyevra, tyomborva, rubskar, Zakan Zopsovsk Ul Yechra …\n96% of the words follow the language's own word rules.\nCOPY NOTE\nto paste back to the assistant that made it\nACCEPT THE CHANGE\nDROP IT",
+  "card": "PEOPLE'S NAMESe.g. Gankok Syazovsk Ul Rukva\nCHANGE IT…\nsex\nman · woman\ndefault man\nrank\ncommon · priest · tsar\ndefault common\nkept titles\nGosvarush\n “Your Majesty”\nSlevarush\n “honoured priest”\nVsyarslevarush\n “Your Holiness”\nKEPT TITLE\nHow people are addressed (used in scenes):\nfamily\npet name · mother, father, sister, brother, daughter, son, wife, husband, grandmother, grandfather\ndear Gankok\nfriends\ngiven · friend\nGankok\ncourt and faithful\ntitle · subject, courtier, servant, parishioner\n[title]\nstrangers, elders and officials (anyone else)\ngiven + family · stranger\nGankok Syazovsk\nADDRESS",
+  "chips": [
+   "Towns, squares and lakes",
+   "Peoples",
+   "One from a place",
+   "given",
+   "from father, then mother · family · forms by sex",
+   "given",
+   "from father, then mother · family · forms by sex",
+   "given",
+   "from father · family",
+   "owl-name",
+   "Ul → “Owl-of”",
+   "owl-name",
+   "Dovrin → “dear”",
+   "own given"
+  ],
+  "for_person": [
+   "for: man",
+   "for: woman",
+   "for: man · tsar"
+  ]
+ },
+ "owl_son": {
+  "prompt": "an owl-folk hunter who watches the stars, a son of Zakan",
+  "seconds": 46,
+  "draft": {
+   "name": "Divlol Brezhi",
+   "person": {
+    "sex": "man",
+    "rank": "noble",
+    "name_meaning": "son of the Falcon",
+    "title": "Hunter-Ward"
+   },
+   "name_parts": {
+    "language": "c41072d7e2fc48939d6e7ca450b2a57b",
+    "rule": "people-male",
+    "shape": 0,
+    "built_as": {
+     "sex": "man",
+     "rank": "common"
+    },
+    "parts": [
+     {
+      "label": "given",
+      "text": "Divlol",
+      "source": "rolled"
+     },
+     {
+      "label": "family",
+      "text": "Brezhi",
+      "source": "inherited",
+      "from_id": "473dfcdc53c24d36805ec8afc747caab",
+      "from_role": "son of the sovereign"
+     }
+    ]
+   },
+   "aka": [
+    {
+     "name": "Hunter-Ward",
+     "tag": "proper",
+     "everyday": false,
+     "kind": "title",
+     "shown": "before"
+    },
+    {
+     "name": "dear Divlol",
+     "tag": "proper",
+     "everyday": false,
+     "kind": "pet",
+     "rule": "pet-names"
+    }
+   ],
+   "facts": [
+    "Divlol is a tall Snowy Owl with a compact, muscular build that speaks to a life spent moving through wild terrain, his white plumage still thick and unblemished at thirty-four, though the feathers along his forearms bear a faint silvery iridescence in certain light, a trait he inherited from his mother's line.",
+    "His eyes are the deep, piercing yellow common to Snowy Owl-folk, but where his father Zakan's gaze carries the weight of a throne room, Divlol's carries something more restless—a hunter's alertness that seems to be perpetually scanning the middle distance.",
+    "Divlol is an exceptional tracker and field hunter, trained from adolescence in the boreal forests north of Khyagovsk, capable of reading snow, wind, and bird movement to predict game and weather with uncanny accuracy.",
+    "Born in 966 to Tsar Zakan III and his consort, Divlol is the third son of the Tsar and the only one who showed early aptitude for fieldcraft rather than administration, a fact that led his father to steer him toward the Hunter-Ward's office rather than the Court of Kinchvovy Brezhi.",
+    "As a boy, Divlol was quiet and observant, more comfortable listening to the forest than speaking in the halls of the Slozhvovsk, a temperament that initially concerned his father, who feared the boy lacked the political instincts necessary for the Ul Zakan line.",
+    "Divlol's relationship with his father is one of mutual respect complicated by fundamental difference: where Zakan values structure and empirical governance, Divlol trusts instinct and pattern-reading, and the two men have spent years learning to communicate across that divide.",
+    "He is closer to his mother, Yelena Ul Zakan, whose patience and warmth counterbalanced the Tsar's austere discipline during Divlol's formative years, and who encouraged his love of the wild without romanticizing it.",
+    "Divlol possesses a dry, understated wit that surfaces most readily when he is uncomfortable—at court functions, during diplomatic dinners, anywhere he is expected to perform social grace rather than simply be himself.",
+    "He is genuinely gentle with people, particularly those who depend on the forests and lakes for their livelihood, and has a habit of listening longer than necessary before offering advice, which his few close friends read as both a courtesy and a genuine need to understand before acting.",
+    "He dislikes pretense and is unnervingly direct when he believes someone is being dishonest, though he delivers such observations so quietly and without malice that the offending party often doesn't realize the rebuke until hours later.",
+    "Divlol speaks Varovni in a low, unhurried cadence, often pausing mid-sentence as if reconsidering his choice of words, a habit that makes him seem either contemplative or indecisive depending on the listener's disposition.",
+    "When he is genuinely excited or alarmed, his Varovni becomes clipped and rapid, his old hunting tongue surfacing in fragments—phrases of the northern dialect his instructors used in training."
+   ],
+   "marks": [
+    [
+     "Divlol Brezhi",
+     "built from Varovni's rules"
+    ]
+   ],
+   "filings": [
+    [
+     "Tsardom of Otsyenya",
+     "princeling and Hunter-Ward",
+     false,
+     false
+    ],
+    [
+     "Court of Kinchvovy Brezhi",
+     "son of the sovereign",
+     false,
+     false
+    ]
+   ]
+  },
+  "page_name": "Divlol Brezhi",
+  "name_section": "NAME\nVarovni · People (male)\nNAME IT…\ngiven\nDivlol\nrolled\nfamily\nBrezhi\nfrom his parent Court of Kinchvovy Brezhi\nbuilt as:\nman\ncommon\npet name:\ndear Divlol\n· used by family · from the language’s rule\ntitles:\nHunter-Ward\n· before\nTITLE"
+ }
+}

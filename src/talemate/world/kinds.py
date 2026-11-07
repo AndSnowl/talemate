@@ -104,6 +104,8 @@ KINDS: dict[str, KindSpec] = {
             ("voice", "json"),
             ("color", "text"),
             ("heritage", "thing"),
+            # its name in labelled parts (languages 4b-2)
+            ("name_parts", "json"),
         ),
         categories=[
             "appearance",
@@ -376,6 +378,8 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
             _validate_measures(field, value)
         elif field == "aka":
             _validate_aka(field, value)
+        elif field == "name_parts":
+            _validate_name_parts(field, value)
         elif field == "stub":
             _validate_stub(field, value)
         elif field == "agent":
@@ -417,14 +421,34 @@ def _validate_measures(field: str, value: object) -> None:
 
 # an other name's keys; `language` marks a name given in one of the world's
 # languages (languages 3a, "Name it in…")
-AKA_KEYS: tuple[str, ...] = ("name", "tag", "everyday", "language")
+# (languages 4b-2) `kind` says what it is ("pet", "title", "own": a name
+# someone uses), `by` who uses it (a thing id; absent: everyone), `meaning`
+# and `rule` how it was made, and `shown` where a title goes with the name
+AKA_KEYS: tuple[str, ...] = (
+    "name",
+    "tag",
+    "everyday",
+    "language",
+    "kind",
+    "by",
+    "meaning",
+    "rule",
+    "shown",
+)
+AKA_KINDS: tuple[str, ...] = ("pet", "title", "own")
+# where a name part's text came from (languages 4b-2)
+NAME_PART_SOURCES: tuple[str, ...] = ("rolled", "typed", "meaning", "inherited", "word")
 
 
 def _validate_aka(field: str, value: object) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{field!r} must be a list of other names")
     everyday = 0
+    shown = 0
     for entry in value:
+        if isinstance(entry, dict):
+            _validate_aka_kind(field, entry)
+            shown += bool(entry.get("shown"))
         if (
             not isinstance(entry, dict)
             or not {"name", "tag", "everyday"} <= set(entry) <= set(AKA_KEYS)
@@ -451,6 +475,63 @@ def _validate_aka(field: str, value: object) -> None:
             everyday += 1
     if everyday > 1:
         raise ValueError(f"{field!r} may have at most one everyday name")
+    if shown > 1:
+        raise ValueError(f"{field!r} may show at most one title with the name")
+
+
+def _validate_aka_kind(field: str, entry: dict[str, object]) -> None:
+    """An other name's 4b-2 keys: a known kind, `by` a thing id, `meaning`
+    and `rule` text, `shown` only on a title."""
+
+    kind = entry.get("kind")
+    if kind is not None and kind not in AKA_KINDS:
+        raise ValueError(f"{field!r}: an other name's kind is one of {AKA_KINDS}")
+    by = entry.get("by")
+    if by is not None and not (isinstance(by, str) and _THING_ID_RE.match(by)):
+        raise ValueError(f"{field!r}: an other name's `by` is a thing id")
+    for key in ("meaning", "rule"):
+        if key in entry and not isinstance(entry[key], str):
+            raise ValueError(f"{field!r}: an other name's {key!r} is text")
+    if "shown" in entry:
+        if kind != "title" or entry["shown"] not in ("before", "after"):
+            raise ValueError(
+                f'{field!r}: only a title is shown, "before" or "after" the name'
+            )
+
+
+def _validate_name_parts(field: str, value: object) -> None:
+    """A person's name in parts: its language, rule, shape, what it was
+    built as, and each part's label, text and source."""
+
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("language"), str)
+        or not isinstance(value.get("rule"), str)
+        or isinstance(value.get("shape"), bool)
+        or not isinstance(value.get("shape"), int)
+        or not isinstance(value.get("built_as"), dict)
+        or not all(
+            isinstance(k, str) and isinstance(v, str)
+            for k, v in value["built_as"].items()
+        )
+        or not isinstance(value.get("parts"), list)
+    ):
+        raise ValueError(
+            f"{field!r} must be {{language, rule, shape, built_as, parts: [...]}}"
+        )
+    for part in value["parts"]:
+        if (
+            not isinstance(part, dict)
+            or not isinstance(part.get("label"), str)
+            or not isinstance(part.get("text"), str)
+            or part.get("source") not in NAME_PART_SOURCES
+            or not all(
+                isinstance(part.get(k, ""), str) for k in ("from_id", "from_role")
+            )
+        ):
+            raise ValueError(
+                f"{field!r} parts are {{label, text, source: {NAME_PART_SOURCES}}}"
+            )
 
 
 def _validate_stub(field: str, value: object) -> None:
@@ -546,6 +627,7 @@ RULES_KEYS: tuple[str, ...] = (
     "grammar",
     "writable",
     "name_grammar",
+    "people_names",
 )
 
 

@@ -25,6 +25,10 @@ __all__ = [
     "NamePart",
     "NameShape",
     "OfRule",
+    "AddressRow",
+    "KeptTitle",
+    "PeopleNames",
+    "PersonForm",
     "SimilarLink",
     "Language",
     "LanguageFile",
@@ -49,6 +53,8 @@ GENERATOR_USES: frozenset[str] = frozenset(
         "race",
         "adjective",
         "demonym",
+        # a person's pet name, from their own name (languages 4b-2)
+        "pet names",
     }
 )
 
@@ -115,13 +121,25 @@ class NameGrammar(BaseModel):
     endings: list[Ending] = Field(default_factory=list)
 
 
-class NamePart(BaseModel):
-    """One part of a composed name rule: another rule, a fixed word, or a
-    meaning part (words of the language built from a meaning)."""
+class PersonForm(BaseModel):
+    """A part's form for who the person is (languages 4b-2): its changes
+    apply when every `when` choice matches ("sex": "woman")."""
 
     model_config = ConfigDict(extra="ignore")
 
-    kind: Literal["rule", "word", "meaning"]
+    when: dict[str, str] = Field(default_factory=dict)
+    changes: list[FormChange] = Field(default_factory=list)
+
+
+class NamePart(BaseModel):
+    """One part of a composed name rule: another rule, a fixed word, a
+    meaning part (words of the language built from a meaning), a part
+    taken from a connection ("connection": the father's house), or one of
+    the person's own parts ("own": a pet name from the given name)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["rule", "word", "meaning", "connection", "own"]
     rule: str = ""
     word: str = ""
     slot: Literal["noun", "describing_noun"] = "noun"
@@ -134,6 +152,15 @@ class NamePart(BaseModel):
     hint: str = ""
     optional: bool = False
     label: str = ""
+    # a connection part's role words, tried in order ("mother", "father")
+    roles: list[str] = Field(default_factory=list)
+    # the label of the source person's part a connection or own part takes;
+    # "" for the whole name
+    take: str = ""
+    # forms by who the person is, the first that matches applies
+    person_forms: list[PersonForm] = Field(default_factory=list)
+    # a fixed word written in English ("of" for "di"); "" writes the word
+    english: str = ""
 
 
 class NameShape(BaseModel):
@@ -156,6 +183,9 @@ class GeneratorDef(BaseModel):
     # a composed rule's shapes (languages 4b-1), instead of patterns
     shapes: list[NameShape] = Field(default_factory=list)
     reject: list[str] = Field(default_factory=list)
+    # who a people rule is for (languages 4b-2): {"sex": "woman", "rank":
+    # "noble"}; empty for anyone
+    for_person: dict[str, str] = Field(default_factory=dict)
     capitalize: bool = True
     min_length: int = 2
     max_length: int = 24
@@ -328,6 +358,41 @@ class SimilarLink(BaseModel):
     degree: Literal["close", "distant", "one-way"]
 
 
+class KeptTitle(BaseModel):
+    """A title the language keeps in its own word (a Tsar), with what it
+    means in English; every other title is written in English."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    word: str
+    meaning: str
+
+
+class AddressRow(BaseModel):
+    """How one kind of relationship addresses a person: the role words
+    that map onto it and the parts it uses (part labels, "title", "pet
+    name"); the `default` row is for anyone unmatched."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: str
+    roles: list[str] = Field(default_factory=list)
+    uses: list[str] = Field(default_factory=list)
+    default: bool = False
+
+
+class PeopleNames(BaseModel):
+    """A language's people's names (languages 4b-2): the choices a
+    person's name depends on (the first of each the default), the titles
+    it keeps, and its forms of address."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    choices: dict[str, list[str]] = Field(default_factory=dict)
+    kept_titles: list[KeptTitle] = Field(default_factory=list)
+    address: list[AddressRow] = Field(default_factory=list)
+
+
 class Language(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -349,6 +414,8 @@ class Language(BaseModel):
     # the grammar for names (languages 4b-1); None: names are built in the
     # owner's word order, as in 4a
     name_grammar: NameGrammar | None = None
+    # people's names (languages 4b-2); None: people get 4b-1 names
+    people_names: PeopleNames | None = None
 
     @field_validator("grammar", mode="before")
     @classmethod

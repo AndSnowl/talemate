@@ -133,6 +133,7 @@
                         <div class="d-flex align-center ga-2">
                             <span class="text-body-1">{{ gen.name }}</span>
                             <span class="text-caption text-muted">{{ useLabel(gen.use) }}</span>
+                            <span v-if="forPersonLine(gen)" class="text-caption text-muted" data-testid="rule-for-person">{{ forPersonLine(gen) }}</span>
                             <v-btn icon="mdi-dice-multiple-outline" size="x-small" variant="text" density="comfortable" color="accent" aria-label="Roll" title="Roll new sample names" @click="reroll(null, gen.id)"></v-btn>
                         </div>
                         <div class="names" data-testid="language-samples">{{ (samples[gen.id] || []).slice(0, 12).join(', ') || 'Roll to see names.' }}</div>
@@ -149,7 +150,7 @@
                                 :class="{ 'part-fixed': part.kind === 'word' }"
                                 data-testid="rule-part"
                                 @click="editPart(g, pi)"
-                            >{{ rulePartLabel(part, local.generators) }}</v-chip>
+                            >{{ ruleChipLabel(part, local.generators) }}</v-chip>
                             <v-btn variant="text" size="small" color="accent" prepend-icon="mdi-plus" data-testid="rule-part-add" @click="addPart(g)">Part</v-btn>
                             <span v-if="gen.shapes.length > 1" class="text-caption text-muted">and {{ gen.shapes.length - 1 }} more shape{{ gen.shapes.length > 2 ? 's' : '' }} (Advanced edit)</span>
                         </div>
@@ -157,6 +158,16 @@
                             <v-select v-model="partForm.part.kind" :items="PART_KINDS" density="compact" variant="outlined" hide-details class="small-field"></v-select>
                             <v-select v-if="partForm.part.kind === 'rule'" v-model="partForm.part.rule" :items="ruleItems(gen.id)" label="Rule" density="compact" variant="outlined" hide-details class="small-field"></v-select>
                             <v-text-field v-if="partForm.part.kind === 'word'" v-model="partForm.part.word" label="Word" density="compact" variant="outlined" hide-details class="small-field"></v-text-field>
+                            <!-- languages 4b-2: a fixed word's English writing, a
+                                 connection's role words and part, a person's own part -->
+                            <v-text-field v-if="partForm.part.kind === 'word'" v-model="partForm.part.english" label="Written in English as" placeholder="of" density="compact" variant="outlined" hide-details class="small-field" data-testid="rule-part-english"></v-text-field>
+                            <template v-if="partForm.part.kind === 'connection'">
+                                <v-text-field :model-value="(partForm.part.roles || []).join(', ')" label="From (role words, in order)" placeholder="father, mother" density="compact" variant="outlined" hide-details class="pattern-field" @update:model-value="partForm.part.roles = $event.split(',').map((w) => w.trim()).filter(Boolean)"></v-text-field>
+                                <v-text-field v-model="partForm.part.take" label="Their part" placeholder="family (empty: whole name)" density="compact" variant="outlined" hide-details class="small-field"></v-text-field>
+                                <v-select v-model="partForm.part.rule" :items="ruleItems(gen.id)" label="Rolled from, without one" density="compact" variant="outlined" hide-details class="small-field"></v-select>
+                            </template>
+                            <v-text-field v-if="partForm.part.kind === 'own'" v-model="partForm.part.take" label="Their own part" placeholder="given" density="compact" variant="outlined" hide-details class="small-field"></v-text-field>
+                            <v-text-field v-if="['connection', 'own', 'rule'].includes(partForm.part.kind)" v-model="partForm.part.label" label="Label" placeholder="given, family, house" density="compact" variant="outlined" hide-details class="small-field"></v-text-field>
                             <template v-if="partForm.part.kind === 'meaning'">
                                 <v-select v-model="partForm.part.slot" :items="SLOTS" density="compact" variant="outlined" hide-details class="small-field"></v-select>
                                 <v-checkbox v-model="partForm.part.forms" value="more_than_one" label="more than one" density="compact" hide-details></v-checkbox>
@@ -426,13 +437,16 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import LanguageImport from './LanguageImport.vue';
-import { newPart, partLabel as rulePartLabel } from './nameParts.js';
+import { forPersonLine, newPart, partLabel as rulePartLabel, ruleChipLabel } from './nameParts.js';
 
 // a composed rule's part kinds and meaning slots (languages 4b-1)
 const PART_KINDS = [
     { title: 'another rule', value: 'rule' },
     { title: 'a fixed word', value: 'word' },
     { title: 'a meaning', value: 'meaning' },
+    // languages 4b-2
+    { title: 'from a connection', value: 'connection' },
+    { title: 'their own part', value: 'own' },
 ];
 const SLOTS = [
     { title: 'a noun', value: 'noun' },
@@ -744,6 +758,8 @@ export default {
             this.ruleForm = { name: '', use: 'places', pattern: '', composed: false };
         },
         rulePartLabel,
+        ruleChipLabel,
+        forPersonLine,
         // the rules a part may name: every rule but this one
         ruleItems(own) {
             return this.local.generators.filter((g) => g.id !== own).map((g) => ({ title: g.name, value: g.id }));
