@@ -55,13 +55,10 @@ export default {
             this.$emit('done');
         },
         nameIt() {
-            this.worlds.openNameIt({
-                words: this.mark.part || this.mark.name,
-                languageId: this.mark.language_id,
-                kind: this.mark.entry_kind,
-                target: this.smallKey ? { smallKey: this.smallKey } : { draftKey: this.worlds.draft?.key },
-                markId: this.markId,
-            });
+            this.worlds.openNameItForMark(
+                { ...this.mark, id: this.markId },
+                this.smallKey ? { smallKey: this.smallKey } : { draftKey: this.worlds.draft?.key },
+            );
             this.$emit('done');
         },
     },

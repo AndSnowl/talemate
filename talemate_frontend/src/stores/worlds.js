@@ -1500,6 +1500,23 @@ export const useWorldsStore = defineStore('worlds', {
             });
         },
 
+        // Name it on a flagged name (a mark on any draft): a person's opens
+        // in person mode, picking their rule (languages 4c: one panel for
+        // every draft)
+        openNameItForMark(mark, target) {
+            const person = mark.entry_kind === 'character'
+                ? { builtAs: {}, draft: { filings: [], facts: [], built_as: {} } }
+                : null;
+            this.openNameIt({
+                words: mark.part || mark.name,
+                languageId: mark.language_id,
+                kind: mark.entry_kind,
+                target,
+                markId: mark.id,
+                ...(person ? { person, ruleId: '' } : {}),
+            });
+        },
+
         // ask the model which rule fits the person Name it is open on (4c):
         // a page by its id, a draft by its prompt and facts
         nameItPick(languageId) {
@@ -1509,8 +1526,12 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameItPicking = true;
             this.nameItPicked = null;
             this.nameItPickLanguage = languageId;
-            const draftKey = request.target?.draftKey;
-            const edited = draftKey && this.draft?.key === draftKey ? this.draft.edited : null;
+            // a page draft, or a small one ("+ Add facts", a group's "+ Add")
+            const smallKey = request.target?.smallKey;
+            const draftKey = request.target?.draftKey || smallKey;
+            const edited = smallKey
+                ? this.smallDrafts[smallKey]?.edited
+                : draftKey && this.draft?.key === draftKey ? this.draft.edited : null;
             this.request('name_it_pick', {
                 language_id: languageId,
                 ...(person.thingId
@@ -3098,7 +3119,7 @@ export const useWorldsStore = defineStore('worlds', {
                     // only for the person Name it is still open on
                     const person = this.nameIt?.person;
                     if (!person) break;
-                    const ours = (data.thing_id ? data.thing_id === person.thingId : !!data.draft_key && data.draft_key === this.nameIt.target?.draftKey)
+                    const ours = (data.thing_id ? data.thing_id === person.thingId : !!data.draft_key && data.draft_key === (this.nameIt.target?.draftKey || this.nameIt.target?.smallKey))
                         // and for the language asked in (final review I3)
                         && data.language_id === this.nameItPickLanguage;
                     if (!ours) break;

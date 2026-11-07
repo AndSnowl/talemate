@@ -4593,6 +4593,22 @@ check('a pick for another language is dropped (final review I3)', () => {
     assert.equal(store.nameItPicked.rule_id, 'men');
 });
 
+check('Name it on a flagged person in "+ Add facts" is in person mode and picks (4c)', () => {
+    const { store, sent } = freshStore();
+    store.smallDrafts = { s1: { edited: { prompt: 'his younger brother', facts: [{ text: 'Tsar Aleksi III rides north.' }] } } };
+    const mark = { id: 'm1', name: 'Aleksi', part: 'Aleksi', language_id: 'L', entry_kind: 'character' };
+    store.openNameItForMark(mark, { smallKey: 's1' });
+    assert.ok(store.nameIt.person, 'person mode');
+    assert.equal(store.nameIt.ruleId, '');
+    store.nameItPick('L');
+    const asked = sent.filter((m) => m.action === 'name_it_pick').at(-1);
+    assert.equal(asked.draft_key, 's1');
+    assert.equal(asked.draft.prompt, 'his younger brother');
+    const place = { id: 'm2', name: 'Novgorod', part: 'Novgorod', language_id: 'L', entry_kind: 'place' };
+    store.openNameItForMark(place, { smallKey: 's1' });
+    assert.equal(store.nameIt.person, undefined);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);
