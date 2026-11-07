@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { markEdit, markSegments, pickName } from '../src/components/worlds/nameMarks.js';
-import { composeName, forPersonLine, partLabel, resultLine, ruleChipLabel } from '../src/components/worlds/nameParts.js';
+import { composeName, forPersonLine, partLabel, isMainRule, resultLine, ruleChipLabel, ruleMenuItems } from '../src/components/worlds/nameParts.js';
 import { callsFor, draftNameEdit, draftParentRows, partSourceLine, plainAka, pronounOf, titleShownChange, writtenName } from '../src/components/worlds/personName.js';
 import {
     akaAdded,
@@ -4459,6 +4459,33 @@ check('a drafted person name section edits the draft (owner, 2026-11-05)', () =>
     assert.deepEqual(draftNameEdit(edited, { removeTitle: 'Lady' }, english).aka, []);
     assert.deepEqual(draftNameEdit(edited, { builtAs: { sex: 'woman', rank: 'noble' } }, english).fields.name_parts.built_as, { sex: 'woman', rank: 'noble' });
     assert.deepEqual(draftNameEdit(edited, { pet: 'Lili' }, english).aka.find((a) => a.kind === 'pet'), { name: 'Lili', tag: 'proper', everyday: false, kind: 'pet' });
+});
+
+check('ruleMenuItems puts main rules first, then a Pieces header (4c)', () => {
+    const rules = [
+        { id: 'men', name: "Men's names", main: true },
+        { id: 'places', name: 'Places', main: true },
+        { id: 'given', name: 'Given names', main: false },
+    ];
+    assert.deepEqual(ruleMenuItems(rules), [
+        { title: "Men's names", value: 'men' },
+        { title: 'Places', value: 'places' },
+        { type: 'subheader', title: 'Pieces' },
+        { title: 'Given names', value: 'given' },
+    ]);
+    assert.deepEqual(ruleMenuItems(rules.slice(0, 2)).map((i) => i.value), ['men', 'places']);
+});
+
+check('isMainRule matches the server: a part, words or pet names is a piece unless main is set', () => {
+    const gens = [
+        { id: 'given', use: 'character', patterns: ['x'] },
+        { id: 'men', use: 'character', shapes: [{ parts: [{ kind: 'rule', rule: 'given' }] }] },
+        { id: 'words', use: 'words', patterns: ['CVC'] },
+        { id: 'pet', use: 'pet names', shapes: [{ parts: [{ kind: 'own', take: 'given' }] }] },
+        { id: 'places', use: 'place', patterns: ['x'] },
+    ];
+    assert.deepEqual(gens.map((g) => isMainRule(g, gens)), [false, true, false, false, true]);
+    assert.equal(isMainRule({ ...gens[0], main: true }, gens), true);
 });
 
 if (failures.length) {

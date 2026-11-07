@@ -84,3 +84,23 @@ export function forPersonLine(generator) {
     const values = Object.values(generator?.for_person || {});
     return values.length ? `for: ${values.join(' · ')}` : '';
 }
+
+// Name it's rule dropdown (languages 4c): the main rules first, then a
+// "Pieces" header and the rules other rules are made of
+export function ruleMenuItems(rules) {
+    const items = (rules || []).filter((r) => r.main !== false).map((r) => ({ title: r.name, value: r.id }));
+    const pieces = (rules || []).filter((r) => r.main === false).map((r) => ({ title: r.name, value: r.id }));
+    return pieces.length ? [...items, { type: 'subheader', title: 'Pieces' }, ...pieces] : items;
+}
+
+// a main rule (a whole name) or a piece other rules are made of, as the
+// server's `person_names.is_main` says: the file's `main` first; else a
+// rule used as another's part, or one for words or pet names, is a piece
+export function isMainRule(generator, generators = []) {
+    if (generator?.main === true || generator?.main === false) return generator.main;
+    if (['words', 'pet names'].includes(generator?.use)) return false;
+    const used = new Set(
+        generators.flatMap((g) => (g.shapes || []).flatMap((s) => (s.parts || []).filter((p) => ['rule', 'connection'].includes(p.kind) && p.rule).map((p) => p.rule))),
+    );
+    return !used.has(generator?.id);
+}

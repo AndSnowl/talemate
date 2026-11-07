@@ -146,7 +146,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import NameBuilder from './NameBuilder.vue';
-import { resultLine } from './nameParts.js';
+import { resultLine, ruleMenuItems } from './nameParts.js';
 import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
@@ -183,7 +183,7 @@ export default {
             return (this.worlds.things.language || []).map((t) => ({ title: t.name, value: t.id }));
         },
         ruleItems() {
-            return this.worlds.nameItRules.map((r) => ({ title: r.name, value: r.id }));
+            return ruleMenuItems(this.worlds.nameItRules);
         },
         // a composed rule's forms, with "any" first
         shapeItems() {

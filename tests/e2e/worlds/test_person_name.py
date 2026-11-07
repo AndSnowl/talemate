@@ -267,7 +267,9 @@ def test_use_this_name_stores_parts(app, page):
     )
 
 
-def test_draft_marks_the_name_and_name_it_builds_it(app, page, fixed_preview, fixed_clean):
+def test_draft_marks_the_name_and_name_it_builds_it(
+    app, page, fixed_preview, fixed_clean
+):
     from e2e.worlds.test_drafts import _draft
 
     world(app, page, "Person draft")
@@ -351,9 +353,7 @@ def test_a_drafted_person_has_the_name_section_and_keeps_its_titles(
     )
     draft = _draft(page, "character", "a Drassonais noblewoman of the court")
     section = draft.get_by_test_id("person-name")
-    expect(section.get_by_test_id("person-name-none")).to_be_visible(
-        timeout=TIMEOUT_MS
-    )
+    expect(section.get_by_test_id("person-name-none")).to_be_visible(timeout=TIMEOUT_MS)
     expect(
         section.get_by_test_id("person-title").filter(has_text="Lady")
     ).to_have_count(1)
@@ -370,3 +370,17 @@ def test_a_drafted_person_has_the_name_section_and_keeps_its_titles(
     expect(
         accepted.get_by_test_id("person-title").filter(has_text="Warden")
     ).to_have_count(1, timeout=TIMEOUT_MS)
+
+
+def test_name_it_lists_main_rules_before_pieces(app, page):
+    """Languages 4c: main rules first, then "Pieces" in Name it's dropdown."""
+
+    world(app, page, "Person rule menu")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    menu = page.locator(".v-overlay--active .v-list")
+    expect(menu.get_by_text("Pieces")).to_be_visible(timeout=TIMEOUT_MS)
+    items = menu.locator(".v-list-item, .v-list-subheader").all_inner_texts()
+    at = next(i for i, t in enumerate(items) if "Pieces" in t)
+    assert "noble-women" in items[:at] and "women-given" in items[at:]
