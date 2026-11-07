@@ -1,0 +1,571 @@
+{
+ "fill": {
+  "seconds": 184,
+  "reply": "{\n  \"format\": \"fantasymate.language\",\n  \"version\": 1,\n  \"language\": {\n    \"name\": \"Zhelvan\",\n    \"level\": \"full\",\n    \"writable\": true,\n    \"sound\": \"Soft y-glides (ya, ye, yo) and hushing zh, sh, ch sounds, with a throaty kh and words that end on a heavy -l, -v or -ch. It sounds Slavic and a little old-fashioned, like a winter evening in a stone house, but none of its words are real Russian.\",\n    \"categories\": {\n      \"C\": \"k*3 v*3 d*2 t*2 s*2 l*2 r*2 m*2 n*2 p b g z zh*2 sh ch kh ts dz y\",\n      \"R\": \"r l v n\",\n      \"S\": \"s z\",\n      \"V\": \"a*3 o*3 e*2 ye*2 i u y ya yo yu\",\n      \"K\": \"k*3 v*3 d*2 t*2 s*2 l*2 r*2 m*2 n*2 p b g z zh*2 sh ch kh ts\",\n      \"N\": \"a*4 o*4 e*3 i*2 u ye ya\"\n    },\n    \"syllable_notes\": [\n      \"Clusters at the start of a word (kr, zv, sl, pr) are common; at the end only -sk, -st, -ch.\",\n      \"Verbs are listed ending in -ech.\"\n    ],\n    \"generators\": [\n      {\n        \"id\": \"words\",\n        \"name\": \"Words\",\n        \"use\": \"words\",\n        \"patterns\": [\n          \"CVC*4\",\n          \"CVCVC*4\",\n          \"CRVC*3\",\n          \"CVCV*2\",\n          \"CRVCVC*2\",\n          \"VCVC\",\n          \"CVCCV(C)\",\n          \"CVCRVC\",\n          \"(S)(C)(R)V(C)(C)\",\n          \"(S)(C)(R)V(C)C(R)V(C)(C)\",\n          \"(S)(C)(R)V(C)C(R)V(C)C(R)V(C)\"\n        ],\n        \"shapes\": [],\n        \"reject\": [],\n        \"for_person\": {},\n        \"main\": null,\n        \"description\": \"\",\n        \"capitalize\": true,\n        \"min_length\": 2,\n        \"max_length\": 24\n      },\n      {\n        \"id\": \"men-given\",\n        \"name\": \"Men's given names\",\n        \"use\": \"character\",\n        \"patterns\": [\n          \"KNKN[l|r|n|d]*3\",\n          \"KN[l|r|v|s]K[ol|el|in|ar]*2\",\n          \"[kr|gr|br|dr|tr|vl|sl|sv|zv|kv|dv]NKN[l|r|n]\"\n        ],\n        \"shapes\": [],\n        \"reject\": [\n          \"^(nozin|ivan|pavel|oleg|igor|boris|denis|roman|artem|kiril|gleb|lev|petr|anton|ruslan|vadim|semen|egor|timur|marat|danil|savel|makar|nazar|zakhar|platon|taras|bogdan|fedor|nikolai|mikhail|dmitri|serge",
+  "rules": [
+   {
+    "id": "words",
+    "name": "Words",
+    "main": false,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "men-given",
+    "name": "Men's given names",
+    "main": false,
+    "description": "",
+    "for_person": {
+     "sex": "man"
+    },
+    "category": "common"
+   },
+   {
+    "id": "women-given",
+    "name": "Women's given names",
+    "main": false,
+    "description": "",
+    "for_person": {
+     "sex": "woman"
+    },
+    "category": "common"
+   },
+   {
+    "id": "family",
+    "name": "Family names",
+    "main": false,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "men",
+    "name": "Men's names",
+    "main": true,
+    "description": "ordinary Zhelvan men",
+    "for_person": {
+     "sex": "man"
+    },
+    "category": "common"
+   },
+   {
+    "id": "women",
+    "name": "Women's names",
+    "main": true,
+    "description": "ordinary Zhelvan women",
+    "for_person": {
+     "sex": "woman"
+    },
+    "category": "common"
+   },
+   {
+    "id": "noble-men",
+    "name": "Noble men's names",
+    "main": true,
+    "description": "noblemen named for their estate",
+    "for_person": {
+     "sex": "man",
+     "rank": "noble"
+    },
+    "category": "sovereign"
+   },
+   {
+    "id": "noble-women",
+    "name": "Noble women's names",
+    "main": true,
+    "description": "noblewomen named for their estate",
+    "for_person": {
+     "sex": "woman",
+     "rank": "noble"
+    },
+    "category": "sovereign"
+   },
+   {
+    "id": "snowy-owl-men",
+    "name": "Snowy Owl-folk men",
+    "main": true,
+    "description": "Snowy Owl-folk men, with a feather-name",
+    "for_person": {
+     "sex": "man",
+     "folk": "snowy owl"
+    },
+    "category": "owl"
+   },
+   {
+    "id": "snowy-owl-women",
+    "name": "Snowy Owl-folk women",
+    "main": true,
+    "description": "Snowy Owl-folk women, with a feather-name",
+    "for_person": {
+     "sex": "woman",
+     "folk": "snowy owl"
+    },
+    "category": "owl"
+   },
+   {
+    "id": "eared-owl-men",
+    "name": "Eared Owl-folk men",
+    "main": true,
+    "description": "Eared Owl-folk men, with a feather-name",
+    "for_person": {
+     "sex": "man",
+     "folk": "eared owl"
+    },
+    "category": "owl"
+   },
+   {
+    "id": "eared-owl-women",
+    "name": "Eared Owl-folk women",
+    "main": true,
+    "description": "Eared Owl-folk women, with a feather-name",
+    "for_person": {
+     "sex": "woman",
+     "folk": "eared owl"
+    },
+    "category": "owl"
+   },
+   {
+    "id": "pet",
+    "name": "Pet names",
+    "main": false,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "places",
+    "name": "Places",
+    "main": false,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "places-of",
+    "name": "Places named for a thing",
+    "main": true,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "items",
+    "name": "Items",
+    "main": true,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "items-described",
+    "name": "Items by look",
+    "main": true,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "groups",
+    "name": "Groups",
+    "main": true,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "demonym",
+    "name": "People of a place",
+    "main": true,
+    "description": "",
+    "for_person": {},
+    "category": "common"
+   },
+   {
+    "id": "sovereign",
+    "name": "The Gosmar (Tsar) of Zhelvanya",
+    "main": true,
+    "description": "the Gosmar (tsar) of Zhelvanya",
+    "for_person": {
+     "sex": "man",
+     "rank": "sovereign"
+    },
+    "category": "sovereign"
+   }
+  ]
+ },
+ "model": "Skyfall-31B-v4.2-i1-Q4_K_M",
+ "rules_shown": "- men: Men's names — ordinary Zhelvan men [for: man]\n- women: Women's names — ordinary Zhelvan women [for: woman]\n- noble-men: Noble men's names — noblemen named for their estate [for: man, noble]\n- noble-women: Noble women's names — noblewomen named for their estate [for: woman, noble]\n- snowy-owl-men: Snowy Owl-folk men — Snowy Owl-folk men, with a feather-name [for: man, snowy owl]\n- snowy-owl-women: Snowy Owl-folk women — Snowy Owl-folk women, with a feather-name [for: woman, snowy owl]\n- eared-owl-men: Eared Owl-folk men — Eared Owl-folk men, with a feather-name [for: man, eared owl]\n- eared-owl-women: Eared Owl-folk women — Eared Owl-folk women, with a feather-name [for: woman, eared owl]\n- groups: Groups — (no description)\n- sovereign: The Gosmar (Tsar) of Zhelvanya — the Gosmar (tsar) of Zhelvanya [for: man, sovereign]",
+ "person": [
+  {
+   "prompt": "the Gosmar's youngest son, a Zhelvan prince of Zhelvanya",
+   "kind": "sovereign",
+   "sex": "man",
+   "b_draft_seconds": 36.5,
+   "b_aka": [
+    "Dmitri Gosmar",
+    "Prince"
+   ],
+   "b_name": "Dmitri Vekhal",
+   "baseline": "men",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.5,
+   "b_pick": "sovereign",
+   "b_ok": true,
+   "a_pick": "snowy-owl-men",
+   "a_ok": false,
+   "a_draft_seconds": 45.3,
+   "a_aka": [
+    "Aldrik",
+    "Tsarévich"
+   ],
+   "a_name": "Tsarévich Aldric Vekhal"
+  },
+  {
+   "prompt": "the heir to the throne of Zhelvanya, eldest daughter of Gosmar Zochar Vekhal",
+   "kind": "sovereign",
+   "sex": "woman",
+   "b_draft_seconds": 36.4,
+   "b_aka": [
+    "Velka",
+    "The Firstborn of Kremyarsk",
+    "Tsarevna"
+   ],
+   "b_name": "Velka Zochar Vekhal",
+   "baseline": "women",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.8,
+   "b_pick": "snowy-owl-women",
+   "b_ok": false,
+   "a_pick": "snowy-owl-women",
+   "a_ok": false,
+   "a_draft_seconds": 45.8,
+   "a_aka": [
+    "Vasylina",
+    "Tsarevna"
+   ],
+   "a_name": "Vasylina Zochar Vekhal"
+  },
+  {
+   "prompt": "a Zhelvan fisherman's daughter from the shores of Lake Vamod",
+   "kind": "common",
+   "sex": "woman",
+   "b_draft_seconds": 36.6,
+   "b_aka": [
+    "Maren"
+   ],
+   "b_name": "Maren Iksova",
+   "baseline": "women",
+   "baseline_ok": true,
+   "b_pick_seconds": 1.4,
+   "b_pick": "women",
+   "b_ok": true,
+   "a_pick": "women",
+   "a_ok": true,
+   "a_draft_seconds": 40.7,
+   "a_aka": [
+    "Marenka",
+    "Voronova Marenka"
+   ],
+   "a_name": "Marenka Yelizaveta Voronova"
+  },
+  {
+   "prompt": "the old smith of Kremyarsk who shoes the court's horses",
+   "kind": "common",
+   "sex": "man",
+   "b_draft_seconds": 29.8,
+   "b_aka": [
+    "Old Aldric",
+    "The Krem Smith"
+   ],
+   "b_name": "Aldric Venn",
+   "baseline": "men",
+   "baseline_ok": true,
+   "b_pick_seconds": 1.6,
+   "b_pick": "Men's names",
+   "b_ok": false,
+   "a_pick": "Men's names — ordinary Zhelvan men",
+   "a_ok": false,
+   "a_draft_seconds": 39.7,
+   "a_aka": [
+    "Old Borys",
+    "The Smith of the Court"
+   ],
+   "a_name": "Borys Koldun"
+  },
+  {
+   "prompt": "a Zhelvan boyar who sits on the Court of Lakes",
+   "kind": "noble",
+   "sex": "man",
+   "b_draft_seconds": 42.5,
+   "b_aka": [
+    "Vladimir Korzhov",
+    "Boyar"
+   ],
+   "b_name": "Vladimir Andreyevich Korzhov",
+   "baseline": "noble-men",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.7,
+   "b_pick": "noble-men",
+   "b_ok": false,
+   "a_pick": "noble-men",
+   "a_ok": false,
+   "a_draft_seconds": 39.4,
+   "a_aka": [
+    "Dmitri the Pale",
+    "Boyar"
+   ],
+   "a_name": "Dmitri Volkov-Snezhny"
+  },
+  {
+   "prompt": "a noblewoman of an old Zhelvan house, lady-in-waiting at Vokha Palace",
+   "kind": "noble",
+   "sex": "woman",
+   "b_draft_seconds": 39.0,
+   "b_aka": [
+    "Yelena Voronova",
+    "Lady"
+   ],
+   "b_name": "Yelena Voronova-Khaskova",
+   "baseline": "noble-women",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.4,
+   "b_pick": "noble-women",
+   "b_ok": false,
+   "a_pick": "noble-women",
+   "a_ok": false,
+   "a_draft_seconds": 36.0,
+   "a_aka": [
+    "Yelena",
+    "Lady"
+   ],
+   "a_name": "Yelena Volkova"
+  },
+  {
+   "prompt": "a Snowy Owl-folk hunter of Zhelvanya who watches the stars",
+   "kind": "owl",
+   "sex": "man",
+   "b_draft_seconds": 36.2,
+   "b_aka": [
+    "Vasili the Starwarden",
+    "Snegovoy Okhotnik",
+    "Lord"
+   ],
+   "b_name": "Vasili Starozhytny",
+   "baseline": "noble-men",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.5,
+   "b_pick": "snowy-owl-men",
+   "b_ok": true,
+   "a_pick": "noble-men",
+   "a_ok": false,
+   "a_draft_seconds": 44.8,
+   "a_aka": [
+    "The Watcher",
+    "Baron"
+   ],
+   "a_name": "Vasily Snegokhod"
+  },
+  {
+   "prompt": "an Eared Owl-folk weaver woman in Kremyarsk",
+   "kind": "owl",
+   "sex": "woman",
+   "b_draft_seconds": 49.1,
+   "b_aka": [
+    "Marzha"
+   ],
+   "b_name": "Marzha Korvyn",
+   "baseline": "women",
+   "baseline_ok": false,
+   "b_pick_seconds": 2.0,
+   "b_pick": "eared-owl-women",
+   "b_ok": true,
+   "a_pick": "eared-owl-women",
+   "a_ok": true,
+   "a_draft_seconds": 47.4,
+   "a_aka": [
+    "Marina"
+   ],
+   "a_name": "Marina Vossolova"
+  },
+  {
+   "prompt": "a Zhelvan tavern keeper in Kremyarsk",
+   "kind": "common",
+   "sex": "any",
+   "b_draft_seconds": 41.4,
+   "b_aka": [
+    "Miroslav"
+   ],
+   "b_name": "Miroslav Kovač",
+   "baseline": "men",
+   "baseline_ok": true,
+   "b_pick_seconds": 1.3,
+   "b_pick": "men",
+   "b_ok": true,
+   "a_pick": "Men's names — ordinary Zhelvan men",
+   "a_ok": false,
+   "a_draft_seconds": 45.2,
+   "a_aka": [
+    "Dmitri the Keeper"
+   ],
+   "a_name": "Dmitri Vasilyevich Korneev"
+  },
+  {
+   "prompt": "the duke of a Zhelvan province, cousin to the Gosmar",
+   "kind": "noble",
+   "sex": "man",
+   "b_draft_seconds": 41.6,
+   "b_aka": [
+    "Aleksei Zhelvanski",
+    "the Wolf Duke",
+    "Duke"
+   ],
+   "b_name": "Aleksei Volkov-Gosmar",
+   "baseline": "noble-men",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.4,
+   "b_pick": "noble-men",
+   "b_ok": false,
+   "a_pick": "noble-men",
+   "a_ok": false,
+   "a_draft_seconds": 32.0,
+   "a_aka": [
+    "Voronov",
+    "Duke"
+   ],
+   "a_name": "Dukh Voronov"
+  },
+  {
+   "prompt": "a Zhelvan serf girl on a noble estate near Lake Vamod",
+   "kind": "common",
+   "sex": "woman",
+   "b_draft_seconds": 39.2,
+   "b_aka": [
+    "Oksana"
+   ],
+   "b_name": "Oksana Voronova",
+   "baseline": "women",
+   "baseline_ok": true,
+   "b_pick_seconds": 1.3,
+   "b_pick": "women",
+   "b_ok": true,
+   "a_pick": "women",
+   "a_ok": true,
+   "a_draft_seconds": 44.3,
+   "a_aka": [
+    "Maren",
+    "Dvorzhanskaya"
+   ],
+   "a_name": "Maren Dvorzhanskaya"
+  },
+  {
+   "prompt": "the Gosmar's nephew, a cavalry commander of Zhelvanya",
+   "kind": "noble",
+   "sex": "man",
+   "b_draft_seconds": 43.9,
+   "b_aka": [
+    "Dima",
+    "Captain"
+   ],
+   "b_name": "Dmitri Volkov",
+   "baseline": "noble-men",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.4,
+   "b_pick": "eared-owl-men",
+   "b_ok": false,
+   "a_pick": "noble-men",
+   "a_ok": false,
+   "a_draft_seconds": 36.9,
+   "a_aka": [
+    "Dmitri",
+    "Captain Vekhal-Osipov",
+    "Captain"
+   ],
+   "a_name": "Dmitri Vekhal-Osipov"
+  },
+  {
+   "prompt": "a young Snowy Owl-folk messenger girl at the Court of Lakes",
+   "kind": "owl",
+   "sex": "woman",
+   "b_draft_seconds": 45.1,
+   "b_aka": [
+    "Anya"
+   ],
+   "b_name": "Anya Vostrikova",
+   "baseline": "noble-women",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.8,
+   "b_pick": "snowy-owl-women",
+   "b_ok": true,
+   "a_pick": "noble-women",
+   "a_ok": false,
+   "a_draft_seconds": 53.0,
+   "a_aka": [
+    "Alina",
+    "Messenger"
+   ],
+   "a_name": "Alina Vostokova"
+  },
+  {
+   "prompt": "a Zhelvan ferryman on Lake Vamod",
+   "kind": "common",
+   "sex": "man",
+   "b_draft_seconds": 36.8,
+   "b_aka": [
+    "Dorvaan",
+    "Ferryman"
+   ],
+   "b_name": "Dorvaan Mirkov",
+   "baseline": "men",
+   "baseline_ok": true,
+   "b_pick_seconds": 1.3,
+   "b_pick": "men",
+   "b_ok": true,
+   "a_pick": "women",
+   "a_ok": false,
+   "a_draft_seconds": 40.4,
+   "a_aka": [
+    "Maren"
+   ],
+   "a_name": "Maren Drosskaya"
+  },
+  {
+   "prompt": "the dowager tsarina of Zhelvanya, the Gosmar's mother",
+   "kind": "sovereign",
+   "sex": "woman",
+   "b_draft_seconds": 43.9,
+   "b_aka": [
+    "Mother Yelena",
+    "The White Matriarch"
+   ],
+   "b_name": "Tsarina Mother Yelena Vekhal",
+   "baseline": "men",
+   "baseline_ok": false,
+   "b_pick_seconds": 1.5,
+   "b_pick": "noble-women",
+   "b_ok": true,
+   "a_pick": "noble-women",
+   "a_ok": true,
+   "a_draft_seconds": 41.0,
+   "a_aka": [
+    "Yelena Vekhal",
+    "The White Mother of Zhelvanya",
+    "Dowager Tsarina"
+   ],
+   "a_name": "Yelena Zochar Vekhal"
+  }
+ ],
+ "score": {
+  "baseline": 5,
+  "a": 4,
+  "b": 9,
+  "of": 15,
+  "a_aka": 29,
+  "b_aka": 28
+ },
+ "rescored": {
+  "baseline": 9,
+  "a": 10,
+  "b": 13
+ }
+}
