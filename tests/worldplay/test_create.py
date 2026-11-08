@@ -3085,6 +3085,8 @@ async def test_the_create_prompt_carries_the_narrator_rule_with_a_language(at_31
     prompt = str(client.prompt_history[0]["prompt"])
     assert "Titles and descriptions stay English" in prompt
     assert "Otsyenyan is a language, not a thing" in prompt
+    # the example names no place a small model could take as real
+    assert "Tsardom of Otsyenya" not in prompt
 
 
 async def test_no_narrator_rule_without_a_language(at_313):
