@@ -187,3 +187,38 @@ def test_rule_chips_show_connection_and_english(app, page):
     chips = rule.get_by_test_id("rule-part")
     expect(chips.nth(1)).to_have_text("di → “of”")
     expect(chips.nth(2)).to_have_text("from father, then mother · house")
+
+
+# --- main rules and pieces (languages 4c, Task 2) ----------------------------
+
+
+def test_pieces_are_folded_below_the_main_rules(app, page):
+    from _people_names_helpers import DRASSONAIS
+
+    thing = _names_chapter(app, page, "Rules pieces", language=DRASSONAIS)
+    rules = thing.get_by_test_id("language-generator")
+    head = thing.get_by_test_id("language-pieces")
+    expect(head).to_contain_text("Pieces (", timeout=TIMEOUT_MS)
+    noble = rules.filter(has_text="noble-women").first
+    piece = rules.filter(has_text="women-given").first
+    expect(noble).to_be_visible()
+    expect(piece).to_be_hidden()
+    head.locator("span").first.click()
+    expect(piece).to_be_visible(timeout=TIMEOUT_MS)
+    expect(piece.get_by_test_id("rule-main")).to_have_text("piece")
+
+
+def test_a_rule_description_is_edited_in_place(app, page):
+    from _people_names_helpers import DRASSONAIS
+
+    thing = _names_chapter(app, page, "Rules description", language=DRASSONAIS)
+    noble = (
+        thing.get_by_test_id("language-generator").filter(has_text="noble-women").first
+    )
+    noble.get_by_test_id("rule-description-edit").click()
+    field = noble.get_by_test_id("rule-description-input").locator("input")
+    field.fill("nobles of a house")
+    field.press("Enter")
+    expect(noble.get_by_test_id("rule-description")).to_contain_text(
+        "nobles of a house", timeout=TIMEOUT_MS
+    )

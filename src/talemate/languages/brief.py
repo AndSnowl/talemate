@@ -226,6 +226,13 @@ def _people_names_rules() -> list[str]:
         "- A pet-name rule must change the name (an ending meaning small or "
         "dear, a clipping), never give it back as it is.",
         f"- A rule's `use` is one of: {', '.join(sorted(GENERATOR_USES))}.",
+        "- A rule is a main rule (a whole name) or a piece other rules are "
+        "made of: a rule used as a part, an ordinary-words rule and a "
+        "pet-name rule are pieces. Set `main` only where that's wrong "
+        "(`true` or `false`). Give every main people rule a `description`: "
+        "one short line in plain English on the kind of person it's for "
+        '("ordinary men of the towns", "the tsar and his heirs"). The app '
+        "picks a person's rule from these descriptions.",
     ]
 
 

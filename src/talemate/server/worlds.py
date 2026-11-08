@@ -559,11 +559,15 @@ from talemate.worldplay.merge import (
     preview_merge,
     repoint_overrides,
 )
+from talemate.languages.rule_pick import pick_person_rule
 from talemate.languages.person_names import (
+    builds_of,
+    rule_title_words,
     choose,
     people_rows,
     pick_rule,
     stored_written,
+    writes_name,
 )
 from talemate.worldplay.people import (
     add_title,
@@ -576,6 +580,10 @@ from talemate.worldplay.people import (
     remove_title,
     set_built_as,
     set_part,
+    set_regnal,
+    store_pick,
+    stored_rule,
+    person_text as people_text,
     set_pet_name,
     stored_parts,
 )
@@ -6371,8 +6379,9 @@ class WorldsPlugin(Plugin):
                     int(data.get("shape") or 0),
                     dict(data.get("built_as") or {}),
                     parts,
+                    str(data.get("regnal") or "").strip(),
                 )
-                if stored_written(world.view(), stored) != " ".join(name.split()):
+                if not writes_name(stored_written(world.view(), stored), name):
                     stored = {**stored, "rule": "", "shape": 0, "parts": []}
                 rev.set_field(thing_id, "name_parts", stored, None)
         self._reply("name_it_rename", self._thing_payload(world, thing_id, None))
@@ -6399,6 +6408,82 @@ class WorldsPlugin(Plugin):
                 thing_id,
                 int(data.get("index", -1)),
                 str(data.get("text") or ""),
+            ),
+        )
+
+    async def handle_name_it_pick(self, data: dict):
+        """The person's rule, picked by the model when Name it opens on them
+        (languages 4c), in the background: `name_it_pick {language_id,
+        thing_id?, draft_key?, rule_id, built_as, why, fallback}`. On a page
+        the pick is kept, and a rule already kept is answered at once; a
+        draft (`draft: {prompt, facts}`) keeps it itself."""
+
+        state = self._language_entry(data.get("language_id"))
+        language = language_of(state)
+        world = self._require_world()
+        thing_id = str(data.get("thing_id") or "") or None
+        draft_key = data.get("draft_key")
+        echo = {"language_id": state.id, "thing_id": thing_id, "draft_key": draft_key}
+        view = world.view()
+        if thing_id:
+            kept_parts = view.thing(thing_id).fields.get("name_parts") or {}
+            # a rule kept in another language isn't this one's (review I3)
+            kept = (
+                stored_rule(view, thing_id)
+                if kept_parts.get("language") == state.id
+                else ""
+            )
+            if kept:
+                rule = next((g for g in language.generators if g.id == kept), None)
+                stored = view.thing(thing_id).fields.get("name_parts") or {}
+                self._reply(
+                    "name_it_pick",
+                    {
+                        **echo,
+                        "rule_id": kept,
+                        "built_as": dict(stored.get("built_as") or {}),
+                        "why": rule.description if rule else "",
+                        "fallback": False,
+                    },
+                )
+                return
+            text = people_text(view, thing_id)
+        else:
+            draft = data.get("draft") or {}
+            text = "\n".join(
+                [str(draft.get("prompt") or "")]
+                + [f"- {f}" for f in draft.get("facts") or []]
+            )
+        client, reply = self._language_reply()
+
+        async def picked():
+            pick = await pick_person_rule(client, language, text, reply=reply)
+            if thing_id:
+                with world.revision(Source.manual(note="the rule picked")) as rev:
+                    store_pick(rev, world, thing_id, state.id, pick)
+            return pick
+
+        self._spawn(
+            picked(),
+            self.create_task_done_callback(
+                "name_it_pick",
+                "name_it_pick_failed",
+                "Error picking the rule",
+                success_data=lambda pick: {**echo, **pick.model_dump()},
+                failure_data=echo,
+            ),
+        )
+
+    async def handle_person_regnal(self, data: dict):
+        """A ruler's number (languages 4c): a Roman numeral, or "" for none;
+        the name follows, everywhere."""
+
+        thing_id = str(data.get("thing_id") or "")
+        self._person_edit(
+            "person_regnal",
+            thing_id,
+            lambda rev, world: set_regnal(
+                rev, world, thing_id, str(data.get("regnal") or "")
             ),
         )
 
@@ -6531,6 +6616,9 @@ class WorldsPlugin(Plugin):
                 "rule_id": rule_id,
                 "shape": shape,
                 "parts": [p.model_dump() for p in parts],
+                # what a whole-name rename drops and replaces (4c)
+                "title_words": rule_title_words(language, rule_id, shape),
+                "builds_of": builds_of(language, rule_id, shape),
             },
         )
 

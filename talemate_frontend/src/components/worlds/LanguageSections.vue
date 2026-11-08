@@ -129,12 +129,49 @@
                         <v-btn size="small" variant="text" @click="ruleForm = null">Cancel</v-btn>
                     </div>
                     <div v-if="!local.generators.length" class="text-body-2 text-muted">This language has no name rules yet.</div>
-                    <div v-for="(gen, g) in local.generators" :key="gen.id" class="rule" data-testid="language-generator">
+                    <!-- main rules first, then the pieces other rules are made of,
+                         folded (languages 4c) -->
+                    <template v-for="row in ruleRows" :key="row.gen.id">
+                    <div v-if="row.firstPiece" class="pieces-head d-flex align-center ga-1 mt-2" data-testid="language-pieces">
+                        <v-btn :icon="piecesOpen ? 'mdi-chevron-down' : 'mdi-chevron-right'" variant="text" size="x-small" density="compact" :aria-label="piecesOpen ? 'Fold the pieces' : 'Show the pieces'" @click="piecesOpen = !piecesOpen"></v-btn>
+                        <span class="text-overline text-muted" style="cursor: pointer" @click="piecesOpen = !piecesOpen">Pieces ({{ pieceCount }})</span>
+                        <span class="text-caption text-muted">rules the main ones are made of</span>
+                    </div>
+                    <div v-for="{ gen, g } in [row]" :key="'r' + row.g" v-show="!row.piece || piecesOpen" class="rule" data-testid="language-generator" :data-main="!row.piece">
                         <div class="d-flex align-center ga-2">
                             <span class="text-body-1">{{ gen.name }}</span>
                             <span class="text-caption text-muted">{{ useLabel(gen.use) }}</span>
                             <span v-if="forPersonLine(gen)" class="text-caption text-muted" data-testid="rule-for-person">{{ forPersonLine(gen) }}</span>
+                            <v-chip
+                                size="x-small"
+                                label
+                                variant="outlined"
+                                :title="row.piece ? 'A piece other rules are made of: click to make it a main rule' : 'A main rule: click to make it a piece'"
+                                data-testid="rule-main"
+                                @click="setMain(g, row.piece)"
+                            >{{ row.piece ? 'piece' : 'main' }}</v-chip>
                             <v-btn icon="mdi-dice-multiple-outline" size="x-small" variant="text" density="comfortable" color="accent" aria-label="Roll" title="Roll new sample names" @click="reroll(null, gen.id)"></v-btn>
+                        </div>
+                        <!-- what it's for (languages 4c): the model picks a person's rule by it -->
+                        <div class="d-flex align-center ga-1" data-testid="rule-description">
+                            <v-text-field
+                                v-if="editingDescription === g"
+                                v-model="local.generators[g].description"
+                                placeholder="what it's for: ordinary men of the towns…"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                autofocus
+                                class="description-field"
+                                data-testid="rule-description-input"
+                                @keydown.enter="saveDescription"
+                                @blur="saveDescription"
+                            ></v-text-field>
+                            <template v-else>
+                                <span v-if="gen.description" class="text-caption">{{ gen.description }}</span>
+                                <span v-else-if="!row.piece" class="text-caption text-muted">no description</span>
+                                <v-btn icon="mdi-pencil" size="x-small" variant="text" density="compact" aria-label="Edit what it's for" data-testid="rule-description-edit" @click="editingDescription = g"></v-btn>
+                            </template>
                         </div>
                         <div class="names" data-testid="language-samples">{{ (samples[gen.id] || []).slice(0, 12).join(', ') || 'Roll to see names.' }}</div>
                         <!-- a composed rule (languages 4b-1): its parts, in order -->
@@ -213,6 +250,7 @@
                             <v-btn v-else variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="newPattern = { g, text: '' }">Pattern</v-btn>
                         </div>
                     </div>
+                    </template>
                 </div>
         </div>
 
@@ -437,7 +475,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import LanguageImport from './LanguageImport.vue';
-import { forPersonLine, newPart, partLabel as rulePartLabel, ruleChipLabel } from './nameParts.js';
+import { forPersonLine, isMainRule, newPart, partLabel as rulePartLabel, ruleChipLabel } from './nameParts.js';
 
 // a composed rule's part kinds and meaning slots (languages 4b-1)
 const PART_KINDS = [
@@ -539,6 +577,10 @@ export default {
         return {
             local: this.fromThing(),
             editing: { sound: false, flavour: false, note: null },
+            // the pieces section (languages 4c), folded; the rule whose
+            // description is being written
+            piecesOpen: false,
+            editingDescription: null,
             importing: false,
             search: '',
             partFilter: null,
@@ -565,6 +607,18 @@ export default {
         };
     },
     computed: {
+        // the rules as listed: main ones first, then the pieces, each
+        // marking where the pieces start (languages 4c)
+        ruleRows() {
+            const gens = this.local.generators;
+            const rows = gens.map((gen, g) => ({ gen, g, piece: !isMainRule(gen, gens) }));
+            const ordered = [...rows.filter((r) => !r.piece), ...rows.filter((r) => r.piece)];
+            const first = ordered.findIndex((r) => r.piece);
+            return ordered.map((r, i) => ({ ...r, firstPiece: i === first }));
+        },
+        pieceCount() {
+            return this.ruleRows.filter((r) => r.piece).length;
+        },
         fields() {
             return this.thing.fields || {};
         },
@@ -713,6 +767,14 @@ export default {
         saveFlavour() {
             this.saveField('flavour', (this.local.flavour || '').trim().toLowerCase());
             this.editing.flavour = false;
+        },
+        setMain(g, isPiece) {
+            this.local.generators[g].main = isPiece;
+            this.saveRules();
+        },
+        saveDescription() {
+            this.editingDescription = null;
+            this.saveRules();
         },
         saveRules() {
             const rules = {
@@ -1012,6 +1074,9 @@ export default {
 }
 .pattern-field {
     flex: 0 1 140px;
+}
+.description-field {
+    max-width: 420px;
 }
 .rule {
     padding: 8px 0 10px;

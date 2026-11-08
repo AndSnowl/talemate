@@ -1,0 +1,21 @@
+{
+ "note": "4c probe labels, written before any call. kind: the kind of rule the person should get (sovereign = the tsar's line; noble; owl = an owl-folk rule; common). sex as expected, or 'any'.",
+ "world": "Test app (Zhelvan, Drassonais)",
+ "person": [
+  {"prompt": "the Gosmar's youngest son, a Zhelvan prince of Zhelvanya", "kind": "sovereign", "sex": "man"},
+  {"prompt": "the heir to the throne of Zhelvanya, eldest daughter of Gosmar Zochar Vekhal", "kind": "sovereign", "sex": "woman"},
+  {"prompt": "a Zhelvan fisherman's daughter from the shores of Lake Vamod", "kind": "common", "sex": "woman"},
+  {"prompt": "the old smith of Kremyarsk who shoes the court's horses", "kind": "common", "sex": "man"},
+  {"prompt": "a Zhelvan boyar who sits on the Court of Lakes", "kind": "noble", "sex": "man"},
+  {"prompt": "a noblewoman of an old Zhelvan house, lady-in-waiting at Vokha Palace", "kind": "noble", "sex": "woman"},
+  {"prompt": "a Snowy Owl-folk hunter of Zhelvanya who watches the stars", "kind": "owl", "sex": "man"},
+  {"prompt": "an Eared Owl-folk weaver woman in Kremyarsk", "kind": "owl", "sex": "woman"},
+  {"prompt": "a Zhelvan tavern keeper in Kremyarsk", "kind": "common", "sex": "any"},
+  {"prompt": "the duke of a Zhelvan province, cousin to the Gosmar", "kind": "noble", "sex": "man"},
+  {"prompt": "a Zhelvan serf girl on a noble estate near Lake Vamod", "kind": "common", "sex": "woman"},
+  {"prompt": "the Gosmar's nephew, a cavalry commander of Zhelvanya", "kind": "noble", "sex": "man"},
+  {"prompt": "a young Snowy Owl-folk messenger girl at the Court of Lakes", "kind": "owl", "sex": "woman"},
+  {"prompt": "a Zhelvan ferryman on Lake Vamod", "kind": "common", "sex": "man"},
+  {"prompt": "the dowager tsarina of Zhelvanya, the Gosmar's mother", "kind": "sovereign", "sex": "woman"}
+ ]
+}

@@ -267,7 +267,9 @@ def test_use_this_name_stores_parts(app, page):
     )
 
 
-def test_draft_marks_the_name_and_name_it_builds_it(app, page, fixed_preview, fixed_clean):
+def test_draft_marks_the_name_and_name_it_builds_it(
+    app, page, fixed_preview, fixed_clean
+):
     from e2e.worlds.test_drafts import _draft
 
     world(app, page, "Person draft")
@@ -351,9 +353,7 @@ def test_a_drafted_person_has_the_name_section_and_keeps_its_titles(
     )
     draft = _draft(page, "character", "a Drassonais noblewoman of the court")
     section = draft.get_by_test_id("person-name")
-    expect(section.get_by_test_id("person-name-none")).to_be_visible(
-        timeout=TIMEOUT_MS
-    )
+    expect(section.get_by_test_id("person-name-none")).to_be_visible(timeout=TIMEOUT_MS)
     expect(
         section.get_by_test_id("person-title").filter(has_text="Lady")
     ).to_have_count(1)
@@ -370,3 +370,187 @@ def test_a_drafted_person_has_the_name_section_and_keeps_its_titles(
     expect(
         accepted.get_by_test_id("person-title").filter(has_text="Warden")
     ).to_have_count(1, timeout=TIMEOUT_MS)
+
+
+def test_name_it_lists_main_rules_before_pieces(app, page):
+    """Languages 4c: main rules first, then "Pieces" in Name it's dropdown."""
+
+    world(app, page, "Person rule menu")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    menu = page.locator(".v-overlay--active .v-list")
+    expect(menu.get_by_text("Pieces")).to_be_visible(timeout=TIMEOUT_MS)
+    items = menu.locator(".v-list-item, .v-list-subheader").all_inner_texts()
+    at = next(i for i, t in enumerate(items) if "Pieces" in t)
+    assert "noble-women" in items[:at] and "women-given" in items[at:]
+
+
+def _tsar_world(app, page, stem):
+    """A sovereign rule that says "Gosmar" (tsar), and Tsar Aleksi III with
+    no name parts (languages 4c)."""
+
+    from talemate.languages.models import GeneratorDef, NamePart, NameShape
+
+    lang = LANGUAGE.model_copy(deep=True)
+    lang.people_names.kept_titles.append({"word": "Gosmar", "meaning": "tsar"})
+    lang.generators.append(
+        GeneratorDef(
+            id="sovereign",
+            name="The sovereign",
+            use="character",
+            description="the tsar and his heirs",
+            shapes=[
+                NameShape(
+                    parts=[
+                        NamePart(kind="word", word="Gosmar", label="title"),
+                        NamePart(kind="rule", rule="men-given", label="given"),
+                    ]
+                )
+            ],
+        )
+    )
+    lang = lang.model_validate(lang.model_dump())
+    name = _world_name(stem)
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Drassonais",
+                "fields": {"name": "Drassonais", **fields_of(lang)},
+            },
+            {
+                "kind": "place",
+                "name": "Duchy of Drassone",
+                "languages": [{"language": "Drassonais", "role": "official"}],
+            },
+            {
+                "kind": "character",
+                "name": "Tsar Aleksi III",
+                "filings": [{"target": "Duchy of Drassone", "role": "sovereign"}],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    _open_thing(page, "Tsar Aleksi III")
+
+
+def test_name_it_on_tsar_aleksi_iii_gives_the_whole_name(app, page):
+    """Languages 4c: the sovereign rule says "Gosmar" (tsar), so "Tsar
+    Aleksi III" becomes "Gosmar <name> III": the English title goes, the
+    number stays."""
+
+    import re
+
+    _tsar_world(app, page, "Person tsar")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    page.locator(".v-overlay--active .v-list-item").filter(
+        has_text="The sovereign"
+    ).first.click()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Gosmar", timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-regnal").locator("input")).to_have_value("III")
+    panel.get_by_test_id("name-it-use").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        re.compile(r"^Gosmar \w+ III$"), timeout=TIMEOUT_MS
+    )
+
+
+def test_name_it_opens_on_the_models_pick(app, page, fixed_language):
+    """Languages 4c: Name it on an unpicked person asks the model, switches
+    to its pick and says why."""
+
+    fixed_language({"rule": "sovereign", "sex": "man", "rank": "sovereign"})
+    _tsar_world(app, page, "Person pick")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel.get_by_test_id("name-it-picked")).to_contain_text(
+        "the tsar and his heirs", timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        "Gosmar", timeout=TIMEOUT_MS
+    )
+
+
+def test_name_it_from_the_page_keeps_the_narrator_words(app, page):
+    """Final review C1: Name it from the page replaces the proper part
+    only; with a rule that says no title, "Tsar" and "III" stay."""
+
+    import re
+
+    _tsar_world(app, page, "Person keeps tsar")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    panel.get_by_test_id("name-it-rule").click()
+    page.locator(".v-overlay--active .v-list-item").filter(
+        has_text="noble-men"
+    ).first.click()
+    expect(panel.get_by_test_id("name-it-built")).to_contain_text(
+        " of ", timeout=TIMEOUT_MS
+    )
+    panel.get_by_test_id("name-it-use").click()
+    expect(page.get_by_test_id("thing-name")).to_have_text(
+        re.compile(r"^Tsar \w+ of \w+ III$"), timeout=TIMEOUT_MS
+    )
+
+
+def test_a_composed_place_rule_shows_no_stale_rolls(app, page):
+    """Final review I4: switching a place's Name it from a plain rule to a
+    composed one shows the builder alone."""
+
+    from talemate.languages.models import GeneratorDef, NamePart, NameShape
+
+    lang = LANGUAGE.model_copy(deep=True)
+    lang.generators.extend(
+        [
+            GeneratorDef(
+                id="towns", name="Towns", use="place", patterns=["[Vesk|Morv]ansk"]
+            ),
+            GeneratorDef(
+                id="lakes",
+                name="Lakes by meaning",
+                use="place",
+                shapes=[NameShape(parts=[NamePart(kind="meaning")])],
+            ),
+        ]
+    )
+    lang = lang.model_validate(lang.model_dump())
+    name = _world_name("Place composed")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {
+                "kind": "language",
+                "name": "Drassonais",
+                "fields": {"name": "Drassonais", **fields_of(lang)},
+            },
+            {
+                "kind": "place",
+                "name": "Lake Vamod",
+                "languages": [{"language": "Drassonais", "role": "official"}],
+            },
+        ],
+    )
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    _open_thing(page, "Lake Vamod")
+    page.get_by_test_id("name-it-thing").click()
+    panel = page.get_by_test_id("name-it")
+    expect(panel.get_by_test_id("name-it-name").first).to_be_visible(timeout=TIMEOUT_MS)
+    panel.get_by_test_id("name-it-rule").click()
+    page.locator(".v-overlay--active .v-list-item").filter(
+        has_text="Lakes by meaning"
+    ).first.click()
+    expect(panel.get_by_test_id("name-builder-part").first).to_be_visible(
+        timeout=TIMEOUT_MS
+    )
+    expect(panel.get_by_test_id("name-it-name")).to_have_count(0)

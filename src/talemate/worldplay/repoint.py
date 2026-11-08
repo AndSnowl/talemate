@@ -1681,13 +1681,13 @@ def clear_stale_parts(rev: Revision, view, thing_id: str, name: str) -> None:
     the parts go, and the page says it's not built from a rule; what
     they're built as stays (final review I7). The text wins."""
 
-    from talemate.languages.person_names import stored_written
+    from talemate.languages.person_names import stored_written, writes_name
 
     state = view.thing(thing_id)
     stored = state.fields.get("name_parts") if state is not None else None
     if not isinstance(stored, dict) or not stored.get("parts"):
         return
-    if stored_written(view, stored) != " ".join(name.split()):
+    if not writes_name(stored_written(view, stored), name):
         rev.set_field(
             thing_id,
             "name_parts",

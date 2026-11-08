@@ -53,6 +53,28 @@
             </div>
         </div>
 
+        <!-- a ruler's number, the narrator's (languages 4c) -->
+        <div v-if="parts.length" class="d-flex align-center flex-wrap ga-1 mt-2" data-testid="person-regnal">
+            <span class="text-caption text-muted">number:</span>
+            <v-text-field
+                v-if="editingRegnal"
+                v-model="regnalTyped"
+                density="compact"
+                variant="outlined"
+                hide-details="auto"
+                autofocus
+                class="regnal-input"
+                :error-messages="regnalError(regnalTyped)"
+                data-testid="person-regnal-input"
+                @keydown.enter="saveRegnal"
+                @keydown.esc="editingRegnal = false"
+            ></v-text-field>
+            <template v-else>
+                <span :class="{ 'text-caption text-muted': !regnal }">{{ regnal || 'none' }}</span>
+                <v-btn icon="mdi-pencil" variant="text" size="x-small" density="compact" aria-label="Change the number" data-testid="person-regnal-edit" @click="startRegnal"></v-btn>
+            </template>
+        </div>
+
         <!-- what the name is built as: changing it doesn't rename -->
         <div v-if="choiceKeys.length && (parts.length || hasStored)" class="d-flex align-center flex-wrap ga-1 mt-2" data-testid="person-built-as">
             <span class="text-caption text-muted">built as:</span>
@@ -172,6 +194,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { draftNameEdit, partSourceLine, pronounOf, titleShownChange } from './personName.js';
+import { regnalError } from './nameParts.js';
 
 // A person's Name section (languages 4b-2, mockup B): their name in
 // labelled parts, each editable (the name follows), inherited parts saying
@@ -190,7 +213,7 @@ export default {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { editing: null, typed: '', editingPet: false, petTyped: '', addingTitle: false, titleText: '' };
+        return { editing: null, typed: '', editingPet: false, petTyped: '', addingTitle: false, titleText: '', editingRegnal: false, regnalTyped: '' };
     },
     computed: {
         view() {
@@ -206,6 +229,10 @@ export default {
         },
         english() {
             return Object.fromEntries((this.view?.parts || []).map((p, i) => [i, p.source === 'word' && p.written !== p.text ? p.written : '']).filter(([, w]) => w));
+        },
+        regnal() {
+            const stored = this.draft ? this.edited?.fields?.name_parts : this.thing.fields?.name_parts;
+            return stored?.regnal || '';
         },
         ownAka() {
             return (this.draft ? this.edited?.aka : this.thing.aka) || [];
@@ -274,6 +301,17 @@ export default {
             parts.push(title.shown ? `shown ${title.shown} the name; click to change` : 'click to show it with the name');
             return parts.join(' · ');
         },
+        regnalError,
+        startRegnal() {
+            this.regnalTyped = this.regnal;
+            this.editingRegnal = true;
+        },
+        saveRegnal() {
+            const value = this.regnalTyped.trim();
+            if (regnalError(value)) return;
+            if (value !== this.regnal) this.act('regnal', value);
+            this.editingRegnal = false;
+        },
         // a change: the page's request, or the draft's own edit
         act(kind, value) {
             if (this.draft) {
@@ -287,6 +325,7 @@ export default {
             else if (kind === 'removeTitle') this.worlds.personTitleRemove(id, value);
             else if (kind === 'pet') this.worlds.personPetName(id, 'set', value);
             else if (kind === 'title') this.worlds.personTitleAdd(id, value);
+            else if (kind === 'regnal') this.worlds.personRegnal(id, value);
         },
         titleFromMeaning() {
             this.addingTitle = false;
@@ -330,6 +369,9 @@ export default {
 .pet {
     color: rgb(var(--v-theme-foreign));
     font-style: italic;
+}
+.regnal-input {
+    max-width: 120px;
 }
 .pet-input,
 .title-input {

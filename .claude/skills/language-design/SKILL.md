@@ -183,6 +183,13 @@ from `talemate.languages.models.LanguageFile`). The shape:
     someone, `{"kind": "family", "roles": ["mother", "brother"], "uses":
     ["pet name"]}`; `uses` names part labels, `"title"` or `"pet name"`;
     one row is `"default": true`, for strangers.
+- **Main rules and pieces.** A rule is a main rule (a whole name: a
+  person's, a place's, an item's) or a piece other rules are made of. A
+  rule another rule uses as a part, an ordinary-words rule and a pet-name
+  rule are pieces; set `"main": true` or `false` only where that's wrong.
+  Give every main people rule a `"description"`: one short line on the
+  kind of person it's for ("ordinary men of the towns", "the tsar and his
+  heirs", "nobles of a house"). The app picks a person's rule from these.
 - `reference/rule-syntax.md` has the full pattern syntax. The weight
   marker is a number (`r*2`), never a literal `*n`; `|` only appears
   inside `[...]`.

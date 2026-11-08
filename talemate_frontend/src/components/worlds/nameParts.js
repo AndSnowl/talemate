@@ -84,3 +84,57 @@ export function forPersonLine(generator) {
     const values = Object.values(generator?.for_person || {});
     return values.length ? `for: ${values.join(' · ')}` : '';
 }
+
+// Name it's rule dropdown (languages 4c): the main rules first, then a
+// "Pieces" header and the rules other rules are made of
+export function ruleMenuItems(rules) {
+    const items = (rules || []).filter((r) => r.main !== false).map((r) => ({ title: r.name, value: r.id }));
+    const pieces = (rules || []).filter((r) => r.main === false).map((r) => ({ title: r.name, value: r.id }));
+    return pieces.length ? [...items, { type: 'subheader', title: 'Pieces' }, ...pieces] : items;
+}
+
+// a main rule (a whole name) or a piece other rules are made of, as the
+// server's `person_names.is_main` says: the file's `main` first; else a
+// rule used as another's part, or one for words or pet names, is a piece
+export function isMainRule(generator, generators = []) {
+    if (generator?.main === true || generator?.main === false) return generator.main;
+    if (['words', 'pet names'].includes(generator?.use)) return false;
+    const used = new Set(
+        generators.flatMap((g) => (g.shapes || []).flatMap((s) => (s.parts || []).filter((p) => ['rule', 'connection'].includes(p.kind) && p.rule).map((p) => p.rule))),
+    );
+    return !used.has(generator?.id);
+}
+
+const ROMAN = /^[IVXLCDM]+$/;
+
+// what's wrong with a regnal number the owner typed, or '' (languages 4c:
+// the narrator's, always a Roman numeral)
+export function regnalError(text) {
+    const value = (text || '').trim();
+    return !value || ROMAN.test(value) ? '' : 'A regnal number is a Roman numeral, such as III.';
+}
+
+// A person's whole name renamed (languages 4c): `properPart` (the words
+// marked) becomes `built`; narrator words stay where they were, except an
+// English title the rule's own word stands for (`titleWords`, "tsar" for
+// "Gosmar"), and, when the rule builds its own "of <house>"
+// (`buildsOf`), an "of <place>" right after the name. The regnal number
+// goes after the built name: `regnal` when given, the name's own when it's
+// '', none when it's null.
+export function personRename(fullName, properPart, built, { titleWords = [], buildsOf = false, regnal = '' } = {}) {
+    const words = (fullName || '').split(/\s+/).filter(Boolean);
+    const proper = (properPart || '').split(/\s+/).filter(Boolean);
+    let at = words.findIndex((_, i) => proper.length && proper.every((p, j) => words[i + j] === p));
+    if (at < 0) at = words.length;
+    const drop = new Set(titleWords.map((t) => t.toLowerCase()));
+    const numeral = words.find((w) => ROMAN.test(w)) || '';
+    const before = words.slice(0, at).filter((w) => !drop.has(w.toLowerCase()) && !ROMAN.test(w));
+    let after = words.slice(at + proper.length).filter((w) => !ROMAN.test(w));
+    if (buildsOf && after[0]?.toLowerCase() === 'of') {
+        let end = 1;
+        while (end < after.length && /^[\p{Lu}]/u.test(after[end])) end += 1;
+        after = after.slice(end);
+    }
+    const number = regnal === null ? '' : regnal || numeral;
+    return [...before, built, ...(number ? [number] : []), ...after].join(' ');
+}

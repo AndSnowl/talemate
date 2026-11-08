@@ -358,3 +358,21 @@ async def test_a_person_only_placed_by_the_model_is_named_in_that_places_languag
     )
     cleaned = await clean_preview(test3, preview, None)
     assert cleaned.fields["name_parts"]["language"] == ids["lang"]
+
+
+async def test_a_drafted_persons_mark_is_the_proper_part_once(test3):
+    """Final review C1/I2: "Tsar Aleksi III" is marked "Aleksi" (narrator
+    words left for Name it to keep), and one mark only."""
+
+    from talemate.languages.cleaning.marks import Mark
+
+    preview = _preview(test3, "a ruler", name="Tsar Aleksi III", person={"sex": "man"})
+    preview = preview.model_copy(
+        update={
+            "marks": [Mark(id="x", name="Aleksi", part="Aleksi", why="a real name")]
+        }
+    )
+    from talemate.worldplay.cleaning import name_person
+
+    out = name_person(test3.view(), preview, test3.ids["lang"])
+    assert [(m.name, m.part) for m in out.marks] == [("Aleksi", "Aleksi")]

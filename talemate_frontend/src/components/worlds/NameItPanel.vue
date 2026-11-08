@@ -42,6 +42,7 @@
                     v-if="!titleMode"
                     v-model="ruleId"
                     :items="ruleItems"
+                    @update:model-value="ownerChose = true"
                     label="Rule"
                     density="compact"
                     variant="outlined"
@@ -50,6 +51,7 @@
                     :disabled="!languageId"
                     data-testid="name-it-rule"
                 ></v-select>
+                <span v-if="worlds.nameItPicking" class="text-caption text-muted" data-testid="name-it-picking">picking the rule…</span>
                 <v-select
                     v-if="!composed && !titleMode"
                     v-model="pattern"
@@ -90,10 +92,28 @@
                 >Suggest meanings from {{ suggestName }}'s facts</v-btn>
             </div>
             <div v-if="!languageId" class="text-body-2 text-muted mt-2">Pick the language to name it in.</div>
+            <!-- why the model picked this rule (languages 4c) -->
+            <div v-if="worlds.nameItPicked && worlds.nameItPicked.rule_id === ruleId && worlds.nameItPicked.why" class="text-caption text-muted mt-1" data-testid="name-it-picked">
+                picked: {{ worlds.nameItPicked.why }}<template v-if="worlds.nameItPicked.fallback"> (by sex and rank)</template>
+            </div>
 
             <!-- a composed rule: the builder, part by part (languages 4b-1) -->
             <NameBuilder v-if="composed" class="mt-3" :language-id="languageId" />
             <NameRolls v-else-if="!titleMode" class="mt-3" :items="worlds.nameItShown" @pick="pick($event.name, $event.meaning)" @pin="worlds.nameItPin($event)" />
+            <!-- a ruler's number, the narrator's (languages 4c) -->
+            <div v-if="request.person && composed" class="d-flex align-center ga-2 mt-2" data-testid="name-it-regnal">
+                <span class="text-caption text-muted">number after the name</span>
+                <v-text-field
+                    v-model="worlds.nameItRegnal"
+                    placeholder="none"
+                    density="compact"
+                    variant="outlined"
+                    hide-details="auto"
+                    class="regnal"
+                    :error-messages="regnalError(worlds.nameItRegnal)"
+                ></v-text-field>
+                <span class="text-caption text-muted">Roman numerals, as the narrator writes them</span>
+            </div>
             <div v-if="meaningShown && !composed && !titleMode" class="text-caption text-muted mt-1" data-testid="name-it-batch-meanings">{{ meaningShown }}</div>
 
             <!-- a plain rule only: the whole name from a meaning (a rule made
@@ -146,7 +166,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import NameBuilder from './NameBuilder.vue';
-import { resultLine } from './nameParts.js';
+import { regnalError, resultLine, ruleMenuItems } from './nameParts.js';
 import NameRolls from './NameRolls.vue';
 
 // which rule a kind starts from, as the server's `generator_for` would
@@ -164,7 +184,7 @@ export default {
     },
     data() {
         // `picked`: the indices of the entry name's words chosen to rename
-        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [], adopting: false };
+        return { languageId: null, ruleId: null, pattern: null, meaning: '', hovered: '', picked: [], adopting: false, ownerChose: false };
     },
     computed: {
         request() {
@@ -183,7 +203,7 @@ export default {
             return (this.worlds.things.language || []).map((t) => ({ title: t.name, value: t.id }));
         },
         ruleItems() {
-            return this.worlds.nameItRules.map((r) => ({ title: r.name, value: r.id }));
+            return ruleMenuItems(this.worlds.nameItRules);
         },
         // a composed rule's forms, with "any" first
         shapeItems() {
@@ -242,6 +262,7 @@ export default {
                 if (before && request.target === before.target) return;
                 if (!this.worlds.things.language) this.worlds.listThings('language');
                 this.picked = this.indicesOf(request.words || '');
+                this.ownerChose = false;
                 this.meaning = '';
                 this.ruleId = null;
                 this.pattern = null;
@@ -262,7 +283,11 @@ export default {
             if (this.request?.person) {
                 // a person's (languages 4b-2): theirs, or the server's pick
                 this.ruleId = this.request.ruleId || '';
-                if (this.ruleId === '') this.roll();
+                if (this.ruleId === '') {
+                    // today's matching shows while the model picks (4c)
+                    this.roll();
+                    this.worlds.nameItPick(this.languageId);
+                }
                 return;
             }
             const kind = this.request?.kind || 'place';
@@ -288,6 +313,13 @@ export default {
             const person = this.request?.person;
             if (person?.prefill && this.ruleId === this.request.ruleId) this.worlds.nameItPartPinned = { ...person.prefill };
             this.roll();
+        },
+        // the model's pick arrived: the panel switches to it (4c)
+        'worlds.nameItPicked'(picked) {
+            // a rule the owner chose first is kept
+            if (picked && this.request?.person && !this.ownerChose && picked.rule_id && picked.rule_id !== this.ruleId) {
+                this.ruleId = picked.rule_id;
+            }
         },
         // the rule the server picked for a person, shown as the panel's
         'worlds.nameItParts'(parts) {
@@ -349,6 +381,7 @@ export default {
             const coined = (candidate.built_from || []).filter((part) => part.new);
             this.worlds.pickNameIt(this.worlds.nameItMeaning.languageId || this.languageId, candidate.name, this.meaningOf(candidate), coined);
         },
+        regnalError,
         pick(name, meaning) {
             this.worlds.pickNameIt(this.languageId, name, meaning || '');
         },
@@ -373,6 +406,9 @@ export default {
 }
 .meaning {
     flex: 0 1 260px;
+}
+.regnal {
+    flex: 0 0 110px;
 }
 .name,
 .foreign {

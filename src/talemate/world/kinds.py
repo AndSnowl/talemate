@@ -436,6 +436,8 @@ AKA_KEYS: tuple[str, ...] = (
     "shown",
 )
 AKA_KINDS: tuple[str, ...] = ("pet", "title", "own")
+# a ruler's number, as the narrator writes it (languages 4c)
+_ROMAN_RE = re.compile(r"^[IVXLCDM]+$")
 # where a name part's text came from (languages 4b-2)
 NAME_PART_SOURCES: tuple[str, ...] = ("rolled", "typed", "meaning", "inherited", "word")
 
@@ -518,6 +520,11 @@ def _validate_name_parts(field: str, value: object) -> None:
     ):
         raise ValueError(
             f"{field!r} must be {{language, rule, shape, built_as, parts: [...]}}"
+        )
+    regnal = value.get("regnal", "")
+    if not isinstance(regnal, str) or (regnal and not _ROMAN_RE.match(regnal)):
+        raise ValueError(
+            f"{field!r}: a regnal number is a Roman numeral (III), never words"
         )
     for part in value["parts"]:
         if (

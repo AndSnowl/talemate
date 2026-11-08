@@ -139,3 +139,17 @@ def test_a_merge_keeps_what_others_call_her_and_carries_no_parts(world, drassona
     kinds = {a["name"]: a.get("kind") for a in state.fields.get("aka") or []}
     assert kinds["Lady of the Lake"] == "title" and kinds["Lisette"] == "pet"
     assert "name_parts" not in state.fields
+
+
+def test_regnal_must_be_a_roman_numeral():
+    validate_field(CHARACTER, "name_parts", {**GOOD_PARTS, "regnal": "III"})
+    validate_field(CHARACTER, "name_parts", {**GOOD_PARTS, "regnal": ""})
+    with pytest.raises(ValueError):
+        validate_field(CHARACTER, "name_parts", {**GOOD_PARTS, "regnal": "the Third"})
+
+
+def test_the_written_name_ends_with_its_regnal_number(world, drassonais_id):
+    from talemate.languages.person_names import stored_written
+
+    stored = {**GOOD_PARTS, "language": drassonais_id, "regnal": "II"}
+    assert stored_written(world.view(), stored) == "Maëlis of Drassone II"

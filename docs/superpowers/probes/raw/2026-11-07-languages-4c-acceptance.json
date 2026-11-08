@@ -1,0 +1,64 @@
+{
+ "fill_seconds": 123,
+ "rules": [
+  "Men's names\ncharacters\nfor: man\nmain\nordinary men of the towns and villages\nKrochyan Shasrol Shokalov, Gaslar Chyabal Povurov, Shadel Tirzhel Risvev, Tyekher Kevvel Drodivin, Zheskol Tochen Kosnov, Litan Gryazon Vivvin, Lyevol Dapel Vyatevov, Pidin Kolkar Molgin, Chelkin Sedyer Zhoverov, Mavad Vevnar Reryavov, Kelsar Krutsel Gelsev, Dviban Votad Parrev\nParts\ngiven\nfrom father · given · forms by sex\nfrom father, then mother · family\nPART",
+  "Women's names\ncharacters\nfor: woman\nmain\nordinary women of the towns and villages\nZepina Vaser Chalrin, Khevyela Barnel Trokanin, Bedera Manod Karkhin, Tsoshala Tebid Lorivov, Vyavava Sheban Zhakhyarov, Evana Laldar Chakorov, Viselya Krochel Mollov, Kotsora Driror Motsyenov, Avuna Khovtar Tsarmin, Yaryelya Vestel Kelkhov, Gotelya Zhovmin Drilanin, Nyemona Lershin Khesnin\nParts\ngiven\nfrom father · given · forms by sex\nfrom father, then mother · family · forms by sex\nPART",
+  "Noble men's names\ncharacters\nfor: man · noble\nmain\nnoblemen of an estate\nVovkol Venad Givkev dov Lichel, Syastsel Dvikhar Mavyerov dov Kvokyaya, Vadyed Mozal Barkin dov Kivovsk, Zovbel Doven Slyedovin dov Ryekovsk, Nodan Slyavyel Sibyavov dov Svevoya, Zvasar Nirshin Monovov dov Lodask, Sabed Marvol Zhosbin dov Zhyezhya, Tistsin Choson Slupanin dov Nyashel, Nyavir Zashud Poperov dov Zveshisk, Tsonod Myevol Grelavin dov Norevsk, Vurlol Mokol Sanarov dov Valovsk, Chevshol Ryatan Zvyekovin dov Sogask\nParts\nname\ndov → “of”\nfrom father, then mother · estate\nPART",
+  "Noble women's names\ncharacters\nfor: woman · noble\nmain\nnoblewomen of an estate\nZheshoya Khestol Tsokonov dov Gidyask, Lalyeya Gyedel Teryavov dov Suvesk, Latora Negel Maranov dov Syanosk, Tsakuya Mitsir Nisonov dov Zvudusk, Kutava Taltol Tamulov dov Rokyavsk, Pazhera Tsotsen Bupalov dov Slodyaya, Vabona Tuchyal Vlevavin dov Lichal, Tamona Zhichir Myemarov dov Zizhovsk, Zhavava Sevul Gragavin dov Tosol, Gugina Kosbel Shorsin dov Khepavsk, Erolya Zhyabod Lyeturov dov Deril, Uvolya Tyerir Svikevin dov Krudyesk\nParts\nname\ndov → “of”\nfrom father, then mother · estate\nPART",
+  "Snowy Owl-folk men\ncharacters\nfor: man · snowy owl\nmain\nSnowy Owl-folk men since the Light\nSogyed Nanin Zhirchov Khul Stupel, Soshol Tsernin Tserrin Khul Ryvna, Khezhyed Setan Milshin Khul Stupel, Dimyen Rolil Vuzhonov Khul Kryvel, Zhiskol Vlyagen Movsov Khul Vyetrel, Kyavkhol Drazun Zhubirov Khul Chervyl, Dardin Navud Bramovin Khul Klyunel, Shizhur Vamar Mekhevov Khul Lyst, Dvipar Setod Syacharov Khul Bratel, Divil Tsokud Sarnin Khul Lyodel, Drosan Ronar Mosherov Khul Dravka, Zvaven Nuvpar Nastsev Khul Kneshar\nParts\nname\nKhul → “Owl”\nfeather\nPART",
+  "Snowy Owl-folk women\ncharacters\nfor: woman · snowy owl\nmain\nSnowy Owl-folk women since the Light\nKonyera Chyavod Povlov Khul Nolch, Kyarila Nakur Reparov Khul Vlena, Vopoya Slakol Vishanov Khul Khulyar, Valyeya Zhasyal Nodovov Khul Gorch, Limyaya Rozhin Zadolov Khul Myasel, Pavava Chaskhin Kovzin Khul Myasel, Tsebila Dosbin Kevlov Khul Kneshar, Soziya Tsened Potsinov Khul Nokhtel, Miselya Ladod Sashyelov Khul Glavor, Vetsava Lolyal Vyenonov Khul Druvel, Zholara Chemal Kyeskin Khul Kremyar, Manena Zvavin Vuvlev Khul Nokhtel\nParts\nname\nKhul → “Owl”\nfeather\nPART",
+  "Eared Owl-folk men\ncharacters\nfor: man · eared owl\nmain\nEared Owl-folk men since the Light\nZvyadon Byasmin Kovkhin Khul Pechvar, Borzhol Dorkar Tsovzhev Khul Nozhar, Bitsin Tromyel Vakolov Khul Lyesna, Vormol Chyechal Kvetovin Khul Syerdel, Lalod Rolad Varlin Khul Palch, Lasar Motan Khetsanov Khul Zhelvanin, Kevnel Brodir Gragovin Khul Khul, Brezhel Mazhyed Zvotonin Khul Gorch, Bruker Lyeltar Tsolvev Khul Kolch, Gosan Denud Dvyezanin Khul Zmyar, Tallar Vlesyar Butsorov Khul Vlena, Grachel Givkhin Drokinin Khul Ustel\nParts\nname\nKhul → “Owl”\nfeather\nPART",
+  "Eared Owl-folk women\ncharacters\nfor: woman · eared owl\nmain\nEared Owl-folk women since the Light\nYevina Movdin Vitilov Khul Vervel, Bevelya Khuzhyed Pakovov Khul Ozyel, Zhanava Khidal Karenov Khul Solv, Zhikyara Shivkar Togunov Khul Morvel, Nyelola Tasmol Zavmov Khul Mozhel, Oralya Toden Polzhev Khul Tsvyel, Kagora Vivkar Vevvin Khul Slyvkhul, Nyepona Rasrol Valtev Khul Dymel, Vokelya Ripod Krimanin Khul Gosmar, Kovelya Sazhad Tsetsovov Khul Lyesna, Pobava Kyaron Zozhinov Khul Glavor, Uvena Zhotol Vusrev Khul Zhelvanka\nParts\nname\nKhul → “Owl”\nfeather\nPART",
+  "Places named for a thing\nplaces\nmain\nno description\nKhrebelsk, Dyervsk, Tsvyelsk, Syestrelsk, Zhivelsk, Palchsk, Korvelsk, Chelyarsk, Plodelsk, Nolchsk, Dravkask, Yazelsk\nParts\na meaning · town of\nPART",
+  "Items\nitems\nmain\nno description\nNiloka, Sorel, Kyatsel, Zhovoka, Kavanya, Tikonya, Nanel, Syatets, Dyakets, Vavel, Nigets, Deteka\nPatterns\nKNKN[ts|ka|nya]\nKNK[el|ets]\nPATTERN",
+  "Items by look\nitems\nmain\nno description\nDyervot, Pyerkat, Dyenarot, Knesharyat, Yarnotot, Lyeshot, Pepvelot, Khulyarot, Ozyelot, Trovnat, Dubrelot, Dorvelot\nParts\na meaning · the\nPART",
+  "Groups\npeople\nmain\nno description\nBratel Dov Ozyel, Bratel Dov Kremyar, Bratel Dov Gosmar, Bratel Dov Zhirel, Bratel Dov Kryezh, Bratel Dov Chelyar, Bratel Dov Vlena, Bratel Dov Slyv, Bratel Dov Yaros, Bratel Dov Klyunel, Bratel Dov Pyerka, Bratel Dov Zhelvanin\nParts\nBratel → “Brotherhood”\na meaning · of · the\nPART",
+  "People of a place\npeoples\nmain\nno description\nZidanka, Kyasolin, Titalin, Sezhorin, Dezonin, Tizalka, Romilka, Valulka, Vekhonka, Povyalka, Likyanka, Besolin\nPatterns\nKNKN[l|n|r]in\nKNKN[n|l]ka\nPATTERN",
+  "The Gosmar (Tsar) of Zhelvanya\ncharacters\nfor: man · sovereign\nmain\nthe Gosmar (tsar) of Zhelvanya\nGosmar Vashel Khovzar dov Zhelvanya, Gosmar Zvason Drupyen dov Zhelvanya, Gosmar Khervol Lodan dov Zhelvanya, Gosmar Khakyal Chivdol dov Zhelvanya, Gosmar Duvil Lyavan dov Zhelvanya, Gosmar Tselshol Chosan dov Zhelvanya, Gosmar Tyerrel Lekar dov Zhelvanya, Gosmar Khezan Marad dov Zhelvanya, Gosmar Vlyanon Nulzhar dov Zhelvanya, Gosmar Vovdin Slishin dov Zhelvanya, Gosmar Korvol Zhokul dov Zhelvanya, Gosmar Lokhon Vovod dov Zhelvanya\nParts\nGosmar → “Gosmar”\ngiven\nfrom father · given · forms by sex\ndov → “of”\nZhelvanya → “Zhelvanya”\nPART"
+ ],
+ "page_name_it": {
+  "picked": "picked: the Gosmar (tsar) of Zhelvanya",
+  "pick_seconds": 1.9,
+  "built": "Gosmar Nashen Zvoralesh of Zhelvanya",
+  "regnal": "",
+  "rule": "The Gosmar (Tsar) of Zhelvanya\nRule"
+ },
+ "prince": {
+  "draft_seconds": 47,
+  "flag": "Aldric Gosmar\nflagged: Name it can build it from Zhelvan's rules for people\nNAME IT…\nKEEP IT",
+  "name_it": {
+   "picked": "picked: noblemen of an estate",
+   "pick_seconds": 1.8,
+   "built": "Tiker Kivtol Gudyelov of Keduvsk",
+   "regnal": "",
+   "rule": "Noble men's names\nRule"
+  },
+  "after_use": "Tiker Kivtol Gudyelov of Keduvsk",
+  "accepted": "Tiker Kivtol Gudyelov of Keduvsk",
+  "name_section": "NAME\nZhelvan · Noble men's names\nNAME IT…\nname\nTiker Kivtol Gudyelov\nrolled\nof\nof\nfixed word\nestate\nKeduvsk\nrolled\nnumber:\nnone\nbuilt as:\nman\ncommon\nhuman\npet name:\nnone\ntitles:\nPrince\n· before\nTITLE"
+ },
+ "add_facts": {
+  "draft_seconds": 28,
+  "facts": [
+   "Zochar's younger brother, Vekhal Drossyn Zochar, serves as commander of the Tsardom's Northern Vanguard, a cavalry regiment based in the tundra provinces where both brothers were born, and he has earned a reputation for leading charges that seem reckless until their tactical genius becomes apparent in the aftermath.\nrelationship\nalways",
+   "Zochar's sister, Zochar Veyla Nyessa, took holy orders after the Transformation and now serves as Abbess of the Convent of Still Waters on the shores of Lake Drenyova, where she oversees a community of nuns who tend to the spiritual needs of the owl-folk women who were most unsettled by the overnight metamorphosis of 996.\nrelationship\nalways",
+   "All three siblings — Zochar, Drossyn, and Veyla — are full-blooded Zhelvanyan owl-folk of unbroken white plumage, a rarity even in the northern provinces, and their mother was said to have wept with pride at their collective purity of lineage, which she believed marked them for greatness.\nbackground\nalways"
+  ],
+  "flags": [
+   "Northern Vanguard",
+   "Convent of Still Waters"
+  ],
+  "name_it": {
+   "picked": "(none: TimeoutError)",
+   "pick_seconds": 120.0,
+   "built": "Chobil Brozhil Rosdov",
+   "regnal": null,
+   "rule": "Men's names\nRule"
+  },
+  "facts_after": [
+   "Zochar's younger brother, Vekhal Drossyn Zochar, serves as commander of the Tsardom's Chobil Brozhil Rosdov, a cavalry regiment based in the tundra provinces where both brothers were born, and he has earned a reputation for leading charges that seem reckless until their tactical genius becomes apparent in the aftermath.\nrelationship\nalways",
+   "Zochar's sister, Zochar Veyla Nyessa, took holy orders after the Transformation and now serves as Abbess of the Convent of Still Waters on the shores of Lake Drenyova, where she oversees a community of nuns who tend to the spiritual needs of the owl-folk women who were most unsettled by the overnight metamorphosis of 996.\nrelationship\nalways",
+   "All three siblings — Zochar, Drossyn, and Veyla — are full-blooded Zhelvanyan owl-folk of unbroken white plumage, a rarity even in the northern provinces, and their mother was said to have wept with pride at their collective purity of lineage, which she believed marked them for greatness.\nbackground\nalways"
+  ]
+ }
+}

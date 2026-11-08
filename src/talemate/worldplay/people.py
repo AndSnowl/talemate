@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import random
 
+from talemate.languages.cleaning.find import proper_part
 from talemate.languages.entry import language_of
 from talemate.languages.lookup import default_language, languages_for
 from talemate.languages.person_names import (
@@ -15,7 +16,6 @@ from talemate.languages.person_names import (
     connections_of,
     kept_title,
     roll_pet_name,
-    written,
 )
 from talemate.world.filing import filings_of
 from talemate.world.store import Revision, World
@@ -33,6 +33,9 @@ __all__ = [
     "remove_title",
     "set_built_as",
     "set_part",
+    "store_pick",
+    "stored_rule",
+    "set_regnal",
     "set_pet_name",
     "stored_parts",
 ]
@@ -130,9 +133,10 @@ def stored_parts(
     shape: int,
     built_as: dict[str, str],
     parts: list[dict],
+    regnal: str = "",
 ) -> dict:
     """`name_parts` as the store keeps them: each part's known keys, empty
-    `from_` keys left out."""
+    `from_` keys left out; a regnal number when there is one."""
 
     kept = []
     for part in parts:
@@ -146,6 +150,7 @@ def stored_parts(
         "shape": int(shape),
         "built_as": {str(k): str(v) for k, v in built_as.items()},
         "parts": kept,
+        **({"regnal": regnal} if regnal else {}),
     }
 
 
@@ -170,12 +175,95 @@ def set_part(rev: Revision, world: World, thing_id: str, index: int, text: str) 
     if not 0 <= index < len(parts):
         raise ValueError("there's no such name part")
     parts[index] = {"label": parts[index]["label"], "text": text, "source": "typed"}
-    language = language_of(view.thing(stored["language"]))
-    name = written(
-        language, stored["rule"], stored["shape"], [p["text"] for p in parts]
-    )
+    _rewrite(rev, world, thing_id, stored, {**stored, "parts": parts})
+
+
+def set_regnal(rev: Revision, world: World, thing_id: str, regnal: str) -> None:
+    """A ruler's number, the narrator's (languages 4c): a Roman numeral, or
+    "" for none; the name is written again and renamed everywhere."""
+
+    view = world.view()
+    stored = _stored(view, thing_id)
+    regnal = regnal.strip()
+    _rewrite(rev, world, thing_id, stored, {**stored, "regnal": regnal})
+
+
+def _rewrite(
+    rev: Revision, world: World, thing_id: str, stored: dict, new: dict
+) -> None:
+    """The person renamed from `stored` to `new` name parts, the narrator
+    words around the written name kept (languages 4c)."""
+
+    from talemate.languages.person_names import rewritten_name, stored_written
+
+    view = world.view()
+    old_name = view.name_of(thing_id) or ""
+    new_written = stored_written(view, new) or ""
+    name = rewritten_name(old_name, stored_written(view, stored), new_written)
     rename_everywhere(rev, world, thing_id, name)
-    rev.set_field(thing_id, "name_parts", {**stored, "parts": parts}, None)
+    rev.set_field(thing_id, "name_parts", new, None)
+
+
+def stored_rule(view, thing_id: str) -> str:
+    """The rule a person's name is kept with: picked, or used; "" none."""
+
+    state = view.thing(thing_id)
+    stored = state.fields.get("name_parts") if state is not None else None
+    return str(stored.get("rule") or "") if isinstance(stored, dict) else ""
+
+
+def store_pick(
+    rev: Revision, world: World, thing_id: str, language_id: str, pick
+) -> None:
+    """The model's pick kept with the person (languages 4c): its rule and
+    built-as, in their name details (made with no parts when they have
+    none); a rule already kept is never overwritten."""
+
+    view = world.view()
+    state = view.thing(thing_id)
+    if state is None:
+        raise KeyError(f"no such thing: {thing_id}")
+    stored = state.fields.get("name_parts")
+    if (
+        isinstance(stored, dict)
+        and stored.get("rule")
+        and stored.get("language") == language_id
+    ):
+        return
+    # parts built in another language aren't overwritten (final review I3)
+    if (
+        isinstance(stored, dict)
+        and stored.get("language") not in (None, "", language_id)
+        and stored.get("parts")
+    ):
+        return
+    base = (
+        stored
+        if isinstance(stored, dict)
+        else {"language": language_id, "shape": 0, "parts": []}
+    )
+    rev.set_field(
+        thing_id,
+        "name_parts",
+        {
+            **base,
+            "language": language_id,
+            "rule": pick.rule_id,
+            "built_as": dict(pick.built_as),
+        },
+        None,
+    )
+
+
+def person_text(view, thing_id: str) -> str:
+    """Who a person is, for the model: their name and facts."""
+
+    state = view.thing(thing_id)
+    if state is None:
+        return ""
+    lines = [view.name_of(thing_id) or ""]
+    lines += [f"- {f.text}" for f in state.facts]
+    return "\n".join(lines)
 
 
 def set_built_as(rev: Revision, world: World, thing_id: str, built_as: dict) -> None:
@@ -354,7 +442,10 @@ def name_view(view, state) -> dict | None:
     if state.kind != "character":
         return None
     return _name_view(
-        view, person_language(view, state.id), state.fields.get("name_parts")
+        view,
+        person_language(view, state.id),
+        state.fields.get("name_parts"),
+        view.name_of(state.id) or "",
     )
 
 
@@ -369,10 +460,10 @@ def draft_name_view(view, preview) -> dict | None:
     state = view.thing(str(stored.get("language") or ""))
     if state is None or state.kind != "language":
         return None
-    return _name_view(view, state, stored)
+    return _name_view(view, state, stored, preview.name)
 
 
-def _name_view(view, language_state, stored) -> dict | None:
+def _name_view(view, language_state, stored, name: str = "") -> dict | None:
     from talemate.languages.composed import _generator
 
     if language_state is None:
@@ -381,6 +472,9 @@ def _name_view(view, language_state, stored) -> dict | None:
     people = language.people_names
     out: dict = {
         "language": {"id": language_state.id, "name": language.name},
+        # the words Name it replaces: the name without its narrator words
+        # (final review C1)
+        "proper": proper_part(name) or name,
         "rule": None,
         "rule_name": None,
         "built_as": {},

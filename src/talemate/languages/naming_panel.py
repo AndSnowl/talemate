@@ -36,12 +36,19 @@ class RuleInfo(BaseModel):
     parts: list[str] = []
     # each of its forms, its parts joined by "+" ("Men + Ul + a meaning")
     shapes: list[str] = []
+    # a main rule or a piece (languages 4c), and what it's for
+    main: bool = True
+    description: str = ""
 
 
 def rules_of(language: Language) -> list[RuleInfo]:
-    """The language's rules, each with its patterns (weights left off)."""
+    """The language's rules, each with its patterns (weights left off):
+    the main rules first, then the pieces, each in the file's order
+    (languages 4c)."""
 
-    return [
+    from talemate.languages.person_names import is_main
+
+    infos = [
         RuleInfo(
             id=g.id,
             name=g.name,
@@ -58,9 +65,12 @@ def rules_of(language: Language) -> list[RuleInfo]:
                 )
                 for form in g.shapes
             ],
+            main=is_main(language, g),
+            description=g.description,
         )
         for g in language.generators
     ]
+    return [i for i in infos if i.main] + [i for i in infos if not i.main]
 
 
 def meaning_of(language: Language, name: str) -> str:

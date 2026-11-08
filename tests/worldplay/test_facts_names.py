@@ -297,3 +297,5 @@ async def test_add_facts_prompt_carries_it_too(realm):
     prompt = str(client.prompt_history[-1]["prompt"])
     assert "Titles and descriptions stay English" in prompt
     assert "Otsyenyan is a language, not a thing" in prompt
+    # the example names no place a small model could take as real
+    assert "Tsardom of Otsyenya" not in prompt

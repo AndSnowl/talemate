@@ -103,6 +103,22 @@ def _person_of(full: str, texts: list[str], own: bool) -> str:
     return ""
 
 
+def proper_part(full: str) -> str:
+    """A person's name without its narrator words (languages 4c): its
+    words up to the first stop word ("the", "of"…), less title words and
+    Roman numerals. "Tsar Aleksi Romanov III" → "Aleksi Romanov"; "Zochar
+    the White" → "Zochar" (an epithet stays the narrator's)."""
+
+    kept = []
+    for word in _WORD.findall(_strip_possessive(full)):
+        if word.lower() in NAME_STOPS:
+            break
+        if word.lower() in TITLE_WORDS or _NUMERAL.match(word):
+            continue
+        kept.append(word)
+    return " ".join(kept)
+
+
 def _parts(full: str, kind: str) -> list[tuple[str, str]]:
     """The parts of a name to judge, with which part each is."""
 
@@ -182,7 +198,12 @@ def spots(
     def add(full: str, kind: str, own: bool, listed_name: bool = False) -> None:
         for name, part in _parts(full, kind):
             key = name.lower()
-            if key in protected or full.lower() in protected:
+            # a person's whole proper part kept counts too (final review C2)
+            if (
+                key in protected
+                or full.lower() in protected
+                or (kind in PERSON_KINDS and proper_part(full).lower() in protected)
+            ):
                 continue
             if named_languages(view, name):
                 continue

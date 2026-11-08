@@ -1,0 +1,20 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+You pick the naming rule for a character in {{ language }}, an invented language, the way a careful author would: from who the character is.
+
+The language's naming rules for people:
+{% for line in rules -%}
+- {{ line }}
+{% endfor %}
+The character:
+{{ character }}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"rule": "<one rule id from the list>", "sex": "man", "rank": "<one word for their standing>"}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

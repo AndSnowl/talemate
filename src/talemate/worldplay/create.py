@@ -4044,13 +4044,13 @@ def _live_parts(
     """`fields` without a person's `name_parts` that no longer write the
     draft's name (the owner renamed it): the text wins (languages 4b-2)."""
 
-    from talemate.languages.person_names import stored_written
+    from talemate.languages.person_names import stored_written, writes_name
 
     stored = fields.get("name_parts")
     if (
         stored is None
         or not stored.get("parts")
-        or stored_written(view, stored) == preview.name
+        or writes_name(stored_written(view, stored), preview.name)
     ):
         return fields
     return {k: v for k, v in fields.items() if k != "name_parts"}

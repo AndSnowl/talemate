@@ -186,6 +186,12 @@ class GeneratorDef(BaseModel):
     # who a people rule is for (languages 4b-2): {"sex": "woman", "rank":
     # "noble"}; empty for anyone
     for_person: dict[str, str] = Field(default_factory=dict)
+    # a main rule or a piece other rules are made of (languages 4c); None:
+    # `person_names.is_main` decides
+    main: bool | None = None
+    # one line on what the rule is for ("ordinary men of the towns"), which
+    # the model picks a person's rule by
+    description: str = ""
     capitalize: bool = True
     min_length: int = 2
     max_length: int = 24

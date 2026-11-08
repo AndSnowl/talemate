@@ -385,7 +385,7 @@ async def test_parts_that_dont_write_the_name_arent_stored(plugin):
         plugin,
         "name_it_rename",
         thing_id=w.maelis,
-        name="Lady Maëlis of Drassone",
+        name="Ysolde of Sauvaire",
         language_id=w.lang,
         rule_id="noble-women",
         shape=0,
@@ -456,8 +456,194 @@ def test_a_drafted_persons_name_view_is_the_pages():
         fields={"name": "Drassonais", **fields_of(DRASSONAIS)},
     )
     view = View({lang.id: lang})
-    preview = NS(kind="character", fields={"name_parts": _parts(lang.id)})
+    preview = NS(
+        kind="character",
+        name="Maëlis of Drassone",
+        fields={"name_parts": _parts(lang.id)},
+    )
     shown = draft_name_view(view, preview)
     assert shown["language"]["name"] == "Drassonais"
     assert [p["written"] for p in shown["parts"]] == ["Maëlis", "of", "Drassone"]
-    assert draft_name_view(view, NS(kind="character", fields={})) is None
+    assert draft_name_view(view, NS(kind="character", name="X", fields={})) is None
+
+
+async def test_name_it_parts_says_the_rules_title_words(plugin):
+    """Languages 4c: a rule whose own title word stands for an English one
+    ("Gosmar" for tsar) says so, and whether it builds "of <house>"."""
+
+    from talemate.languages.models import GeneratorDef, NamePart, NameShape
+
+    w = await _world(plugin)
+    lang = DRASSONAIS.model_copy(deep=True)
+    lang.people_names.kept_titles.append({"word": "Gosmar", "meaning": "tsar"})
+    lang.generators.append(
+        GeneratorDef(
+            id="sovereign",
+            name="The sovereign",
+            use="character",
+            for_person={"sex": "man", "rank": "noble"},
+            shapes=[
+                NameShape(
+                    parts=[
+                        NamePart(kind="word", word="Gosmar", label="title"),
+                        NamePart(kind="rule", rule="men-given", label="given"),
+                    ]
+                )
+            ],
+        )
+    )
+    lang = lang.model_validate(lang.model_dump())
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.set_field(w.lang, "rules", fields_of(lang)["rules"], None)
+    await _act(plugin, "name_it_parts", language_id=w.lang, rule_id="sovereign")
+    data = _last(plugin, "name_it_parts")["data"]
+    assert data["title_words"] == ["tsar"] and data["builds_of"] is False
+    await _act(plugin, "name_it_parts", language_id=w.lang, rule_id="noble-women")
+    data = _last(plugin, "name_it_parts")["data"]
+    assert data["title_words"] == [] and data["builds_of"] is True
+
+
+async def test_use_this_name_stores_the_regnal_number(plugin):
+    w = await _world(plugin)
+    parts = _parts(w.lang, house_from=w.eilhaud)["parts"]
+    await _act(
+        plugin,
+        "name_it_rename",
+        thing_id=w.maelis,
+        name="Maëlis of Drassone II",
+        language_id=w.lang,
+        rule_id="noble-women",
+        shape=0,
+        built_as={"sex": "woman", "rank": "noble"},
+        parts=parts,
+        regnal="II",
+    )
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert stored["regnal"] == "II" and len(stored["parts"]) == 3
+
+
+async def test_the_name_sections_number_renames_everywhere(plugin):
+    w = await _world(plugin)
+    await _act(plugin, "person_regnal", thing_id=w.maelis, regnal="III")
+    state = _thing(plugin, w.maelis)
+    assert state.fields["name"] == "Maëlis of Drassone III"
+    assert state.fields["name_parts"]["regnal"] == "III"
+    await _act(plugin, "person_regnal", thing_id=w.maelis, regnal="")
+    assert _thing(plugin, w.maelis).fields["name"] == "Maëlis of Drassone"
+
+
+async def test_narrator_words_around_the_parts_keep_them(plugin):
+    """Languages 4c: "Lady Maëlis of Drassone the Fair" is still written by
+    its parts, and editing a part keeps "Lady" and "the Fair"."""
+
+    w = await _world(plugin)
+    parts = _parts(w.lang, house_from=w.eilhaud)["parts"]
+    await _act(
+        plugin,
+        "name_it_rename",
+        thing_id=w.maelis,
+        name="Lady Maëlis of Drassone the Fair",
+        language_id=w.lang,
+        rule_id="noble-women",
+        shape=0,
+        built_as={"sex": "woman", "rank": "noble"},
+        parts=parts,
+    )
+    assert len(_thing(plugin, w.maelis).fields["name_parts"]["parts"]) == 3
+    await _act(plugin, "person_name_part", thing_id=w.maelis, index=0, text="Ysolde")
+    assert _thing(plugin, w.maelis).fields["name"] == "Lady Ysolde of Drassone the Fair"
+
+
+# --- the rule picked when Name it opens (languages 4c, Task 4) ---------------
+
+
+async def test_a_page_pick_is_stored_once(plugin, monkeypatch):
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.remove_field_value(w.maelis, "name_parts", None)
+    replies = iter(
+        [
+            '{"rule": "noble-women", "sex": "woman", "rank": "noble"}',
+            '{"rule": "common-women", "sex": "woman", "rank": "common"}',
+        ]
+    )
+    monkeypatch.setattr(
+        WorldsPlugin, "_language_reply", lambda self: (None, next(replies))
+    )
+    await _act(plugin, "name_it_pick", language_id=w.lang, thing_id=w.maelis)
+    data = _last(plugin, "name_it_pick")["data"]
+    assert (data["rule_id"], data["fallback"], data["thing_id"]) == (
+        "noble-women",
+        False,
+        w.maelis,
+    )
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert stored["rule"] == "noble-women" and stored["built_as"]["rank"] == "noble"
+    assert stored["parts"] == []
+    await _act(plugin, "name_it_pick", language_id=w.lang, thing_id=w.maelis)
+    assert _last(plugin, "name_it_pick")["data"]["rule_id"] == "noble-women"
+    assert _thing(plugin, w.maelis).fields["name_parts"]["rule"] == "noble-women"
+
+
+async def test_a_draft_pick_is_answered_not_stored(plugin, monkeypatch):
+    w = await _world(plugin)
+    monkeypatch.setattr(
+        WorldsPlugin,
+        "_language_reply",
+        lambda self: (None, '{"rule": "noble-men", "sex": "man", "rank": "noble"}'),
+    )
+    await _act(
+        plugin,
+        "name_it_pick",
+        language_id=w.lang,
+        draft={"prompt": "a young lord", "facts": ["He hunts."]},
+        draft_key="d1",
+    )
+    data = _last(plugin, "name_it_pick")["data"]
+    assert (data["rule_id"], data["draft_key"], data["built_as"]["sex"]) == (
+        "noble-men",
+        "d1",
+        "man",
+    )
+
+
+async def test_the_name_view_says_the_proper_part(plugin):
+    """Final review C1: Name it from the page replaces the proper part,
+    narrator words kept."""
+
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.set_field(w.maelis, "name", "Lady Maëlis of Drassone the Fair", None)
+    await _act(plugin, "get_thing", id=w.maelis)
+    assert _last(plugin, "get_thing")["data"]["name_view"]["proper"] == "Maëlis"
+
+
+async def test_a_pick_in_another_language_is_answered_for_it(plugin, monkeypatch):
+    """Final review I3: a rule kept in one language isn't answered for
+    another, and a pick in another language doesn't overwrite the parts."""
+
+    w = await _world(plugin)
+    with plugin.world.revision(Source.manual()) as rev:
+        other = rev.create_thing(
+            "language",
+            {
+                "name": "Other",
+                **fields_of(DRASSONAIS.model_copy(update={"name": "Other"})),
+            },
+        )
+    monkeypatch.setattr(
+        WorldsPlugin,
+        "_language_reply",
+        lambda self: (
+            None,
+            '{"rule": "common-women", "sex": "woman", "rank": "common"}',
+        ),
+    )
+    await _act(plugin, "name_it_pick", language_id=other, thing_id=w.maelis)
+    assert _last(plugin, "name_it_pick")["data"]["rule_id"] == "common-women"
+    stored = _thing(plugin, w.maelis).fields["name_parts"]
+    assert (
+        stored["language"] == w.lang
+        and stored["rule"] == "noble-women"
+        and len(stored["parts"]) == 3
+    )

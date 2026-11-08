@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import uuid
 
-from talemate.languages.cleaning import model as clean_model
 from talemate.languages.cleaning.languages import language_rows, named_languages
 from talemate.languages.cleaning.lists import effective
 from talemate.languages.cleaning.marks import Mark
@@ -24,6 +23,7 @@ from talemate.worldplay.groups import GroupAddDraft
 __all__ = [
     "clean_fact_draft",
     "clean_group_draft",
+    "clean_draft",
     "clean_preview",
     "inherited_rows",
     "name_person",
@@ -53,12 +53,6 @@ def _texts(preview: CreatePreview) -> list[str]:
     )
 
 
-def _off(client) -> bool:
-    """No model and no fixed replies: nothing can be asked."""
-
-    return client is None and clean_model.fixed_replies is None
-
-
 def _with_named(view, prompt: str, rows: list) -> list:
     """`rows`, with languages the owner's words name first (as spoken)."""
 
@@ -66,6 +60,38 @@ def _with_named(view, prompt: str, rows: list) -> list:
         {"language": lid, "role": "spoken"} for lid in named_languages(view, prompt)
     ]
     return named + list(rows) if named else list(rows)
+
+
+async def clean_draft(
+    world: World,
+    client,
+    *,
+    texts: list[str],
+    listed: list[tuple[str, str]],
+    prompt: str,
+    rows: list,
+    keep: set[str] = frozenset(),
+    person: CreatePreview | None = None,
+    person_language: str | None = None,
+) -> tuple[list[Mark], CreatePreview | None]:
+    """The one cleaning every draft goes through (languages 4c): its
+    flagged names marked (the lists always, the model's check when there's
+    a model), and a drafted `person` marked for Name it in
+    `person_language`. The text is never changed. A world with no
+    languages: nothing."""
+
+    view = world.view()
+    if not all_languages(view):
+        return [], person
+    marks = await mark_texts(
+        client, view, texts, listed, prompt, rows, effective(world), keep
+    )
+    if person is not None and person_language:
+        person = name_person(
+            view, person.model_copy(update={"marks": marks}), person_language
+        )
+        marks = list(person.marks)
+    return marks, person
 
 
 async def clean_preview(
@@ -92,36 +118,34 @@ async def clean_preview(
     listed = [(preview.name, preview.kind)] + [
         (n.name, n.kind) for n in preview.new_names
     ]
-    marks = await mark_texts(
+    language_id = _main_language(used)
+    if preview.kind == "character" and not language_id:
+        # a person: their parents' language, from the model's parent rows
+        # (unticked, ruling F7) when nothing else gives one (4b-2)
+        language_id = _main_language(_parent_languages(view, preview))
+    marks, person = await clean_draft(
+        world,
         client,
-        view,
-        _texts(preview),
-        listed,
-        preview.prompt,
-        used,
-        effective(world),
-        keep,
+        texts=_texts(preview),
+        listed=listed,
+        prompt=preview.prompt,
+        rows=used,
+        keep=keep,
+        person=preview if preview.kind == "character" else None,
+        person_language=language_id,
     )
     shown = (
         [{**dict(r), "from_words": True} for r in rows]
         if from_words
         else [dict(r) for r in rows]
     )
-    cleaned = preview.model_copy(
+    return (person or preview).model_copy(
         update={
             "marks": marks,
             "languages": shown,
             "inherited_languages": _shown_inherited(view, inherited),
         }
     )
-    language_id = _main_language(used)
-    if preview.kind == "character" and not language_id:
-        # a person: their parents' language, from the model's parent rows
-        # (unticked, ruling F7) when nothing else gives one (4b-2)
-        language_id = _main_language(_parent_languages(view, preview))
-    if preview.kind == "character" and language_id:
-        cleaned = name_person(view, cleaned, language_id)
-    return cleaned
 
 
 def _parent_languages(view, preview: CreatePreview) -> list:
@@ -191,7 +215,7 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
     language without people rules leaves it as it is."""
 
     from talemate.languages.entry import language_of
-    from talemate.languages.person_names import choose, stored_written
+    from talemate.languages.person_names import choose, stored_written, writes_name
 
     state = view.thing(language_id)
     if state is None or state.kind != "language":
@@ -205,7 +229,9 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
     stored = preview.fields.get("name_parts")
     if stored is not None:
         # marked already (no parts yet), or built and still so: as it is
-        if not stored.get("parts") or stored_written(view, stored) == preview.name:
+        if not stored.get("parts") or writes_name(
+            stored_written(view, stored), preview.name
+        ):
             return preview
         # built once, then renamed by the owner: their name stands, the
         # parts go (final review C2)
@@ -238,12 +264,17 @@ def name_person(view, preview: CreatePreview, language_id: str) -> CreatePreview
                 "shown": "before",
             }
         )
-    marks = [m for m in preview.marks if m.name != preview.name]
+    # one mark, on the name's proper part: Name it keeps the narrator words
+    # around it (final review C1/I2)
+    from talemate.languages.cleaning.find import proper_part
+
+    proper = proper_part(preview.name) or preview.name
+    marks = [m for m in preview.marks if m.name not in (preview.name, proper)]
     marks.append(
         Mark(
             id=uuid.uuid4().hex[:12],
-            name=preview.name,
-            part=preview.name,
+            name=proper,
+            part=proper,
             why=f"Name it can build it from {language.name}'s rules for people",
             language_id=language_id,
             entry_kind="character",
@@ -298,22 +329,18 @@ async def clean_fact_draft(
     """A "+ Add facts" or "+ Add event" draft with its flagged names
     marked. `rows` are the languages to use (a page draft's, for its
     nested draft); else the entry's own or inherited ones. Languages the
-    owner's words name come first. A world with no languages, or no model
-    and no fixed replies, leaves it alone."""
+    owner's words name come first. Through `clean_draft`, as every draft."""
 
     view = world.view()
-    if not all_languages(view) or _off(client):
-        return draft
     if rows is None:
         rows = languages_for(view, draft.thing_id) if draft.thing_id else []
-    marks = await mark_texts(
+    marks, _ = await clean_draft(
+        world,
         client,
-        view,
-        [f.text for f in draft.facts],
-        [(n.name, n.kind) for n in draft.new_names],
-        draft.prompt,
-        _with_named(view, draft.prompt, rows),
-        effective(world),
+        texts=[f.text for f in draft.facts],
+        listed=[(n.name, n.kind) for n in draft.new_names],
+        prompt=draft.prompt,
+        rows=_with_named(view, draft.prompt, rows),
     )
     return draft.model_copy(update={"marks": marks})
 
@@ -322,19 +349,16 @@ async def clean_group_draft(
     world: World, draft: GroupAddDraft, client
 ) -> GroupAddDraft:
     """A group's "+ Add" draft with each row's flagged names marked, in
-    the page's languages (or ones the owner's words name). Left alone as
-    `clean_fact_draft` leaves a draft alone."""
+    the page's languages (or ones the owner's words name). Through
+    `clean_draft`, as every draft."""
 
     view = world.view()
-    if not all_languages(view) or _off(client):
-        return draft
-    marks = await mark_texts(
+    marks, _ = await clean_draft(
+        world,
         client,
-        view,
-        [t for row in draft.rows for t in (row.name, row.line)],
-        [(row.name, row.kind) for row in draft.rows],
-        draft.prompt,
-        _with_named(view, draft.prompt, languages_for(view, draft.thing_id)),
-        effective(world),
+        texts=[t for row in draft.rows for t in (row.name, row.line)],
+        listed=[(row.name, row.kind) for row in draft.rows],
+        prompt=draft.prompt,
+        rows=_with_named(view, draft.prompt, languages_for(view, draft.thing_id)),
     )
     return draft.model_copy(update={"marks": marks})
