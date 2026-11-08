@@ -1,6 +1,6 @@
 # Fantasymate: the vision, and a fresh start
 
-Date: 2026-11-07. Status: design, awaiting the owner's approval.
+Date: 2026-11-07. Status: approved by the owner (2026-11-08).
 
 This document does two things. It records the owner's vision for fantasymate as it stands after the
 languages work, and it describes the first two projects that follow from it: consolidating the
@@ -104,9 +104,21 @@ as written.
 
 Systems the owner has named so far: languages (built), tech as a graph rather than a tree (multiple
 routes, disconnected parts; research invested over time; things lost, rediscovered, rare
-breakthroughs decided by a roll and then explained), magic (one underlying system interpreted
-differently by each culture, combinable by the learned), governments and orders and cults,
+breakthroughs decided by a roll and then explained), magic, governments and orders and cults,
 species, biomes and palettes, deities acting through small favours, resources and trade.
+
+**Magic is whatever the world's prompt says it is** (owner, 2026-11-08). "One underlying system,
+interpreted differently by each culture, combinable by the learned" was only one example prompt.
+Others are just as valid:
+- "The gods live on the sun and make it brilliant. All magic starts as sunlight, passed through
+  lenses and baked into things, and a rare few can bend the light to their will."
+- "A magic system that fits this world, mostly standard with some twists."
+- "Only species X can wield magic, which comes from …"
+
+So the magic generator's schema has to hold very different systems, not one fixed design. The
+owner's leaning, not decided: magic is probably close to technology, perhaps sharing a general
+**discovery graph**. A creative-model moment might have a character combine two things on that graph
+and open something new from it.
 
 ## Goals, non-goals, anti-goals (the whole vision)
 
@@ -203,7 +215,8 @@ Create `~/Projects/fantasymate/docs` as a git repo.
   - `languages.org`: rewritten as what languages *are* now (the built system), plus what's still
     open (the part 4 spec's filed-for-later items).
 - New idea stubs for the systems named in the vision that have no doc yet: knowledge and rumour,
-  tech graph, magic, governance, apocalypse and reboot. Each records what the owner has said, no
+  tech graph, magic (with the owner's prompts and the discovery-graph leaning above), governance,
+  apocalypse and reboot. Each records what the owner has said, no
   more. *(My call: stubs, not designs.)*
 - A pointer file listing where the history lives: the archive's `docs/superpowers/` (specs, plans,
   probes, mockups), `feedback/`, `.superpowers/` ledgers, and `docs/ideas/upstream-pr-279-review.md`.
